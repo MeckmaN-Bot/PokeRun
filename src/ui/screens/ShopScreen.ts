@@ -4,7 +4,8 @@ import { renderTypeBadges } from '../components/TypeBadge';
 import { renderHPBar } from '../components/HPBar';
 import { purchaseShopItem, rerollShop, REROLL_COST, canAfford } from '../../systems/shop';
 import { fadeIn, animateCoinGain, showToast } from '../animations';
-import { toBattlePokemon } from '../../systems/battle';
+import { toBattlePokemon, xpForLevel } from '../../systems/battle';
+import { fetchPokemon } from '../../api/pokeapi';
 
 export class ShopScreen {
   private container: HTMLElement;
@@ -29,6 +30,38 @@ export class ShopScreen {
     this.container.style.display = '';
     fadeIn(this.container);
     this.attachEvents();
+    // Process any level-up evolutions that were queued during battle
+    this.processPendingEvolutions();
+  }
+
+  /** Auto-evolve any team member that levelled up to their evolution threshold. */
+  private async processPendingEvolutions(): Promise<void> {
+    for (let i = 0; i < this.state.team.length; i++) {
+      const mon = this.state.team[i];
+      if (!mon.pendingEvolution || !mon.nextEvolutionId) continue;
+
+      showToast(`${mon.displayName} is evolving…`, 'info');
+      try {
+        const evolved = await fetchPokemon(mon.nextEvolutionId, mon.level);
+        const evolvedBattle = toBattlePokemon(
+          { ...evolved, heldItem: mon.heldItem },
+          this.state.activePerks,
+        );
+        // Preserve battle-relevant state
+        evolvedBattle.battleHp = Math.min(evolvedBattle.maxBattleHp, mon.battleHp);
+        evolvedBattle.battleStatus = mon.battleStatus;
+        evolvedBattle.xp = mon.xp;
+        evolvedBattle.xpToNextLevel = xpForLevel(evolved.level);
+        evolvedBattle.pendingEvolution = false;
+
+        this.state.team[i] = evolvedBattle;
+        showToast(`${mon.displayName} evolved into ${evolved.displayName}! ✨`, 'success');
+      } catch {
+        mon.pendingEvolution = false;
+        showToast(`Evolution failed for ${mon.displayName}.`, 'error');
+      }
+    }
+    this.refreshTeamList();
   }
 
   private renderHTML(): string {
@@ -117,14 +150,19 @@ export class ShopScreen {
   }
 
   private renderTeamList(): string {
+    const last = this.state.team.length - 1;
     return this.state.team.map((mon, i) => `
       <div
         class="shop-pokemon-row ${i === this.selectedTeamIndex ? 'selected' : ''} ${mon.battleHp <= 0 ? 'fainted' : ''}"
         data-team-index="${i}"
       >
+        <div class="reorder-btns">
+          <button class="btn-reorder ${i === 0 ? 'invisible' : ''}" data-action="move-up" data-team-index="${i}">▲</button>
+          <button class="btn-reorder ${i === last ? 'invisible' : ''}" data-action="move-down" data-team-index="${i}">▼</button>
+        </div>
         <img class="shop-pokemon-sprite" src="${mon.sprite}" alt="${mon.displayName}" />
         <div class="shop-pokemon-info">
-          <div class="shop-pokemon-name">${mon.displayName} <span class="lv">Lv.${mon.level}</span></div>
+          <div class="shop-pokemon-name">${mon.displayName} <span class="lv">Lv.${mon.level}</span><span class="xp-label" style="font-size:0.65rem;color:var(--text-muted);margin-left:4px">${mon.xp ?? 0}/${mon.xpToNextLevel ?? '?'} XP</span></div>
           ${renderTypeBadges(mon.types)}
           ${renderHPBar(mon.battleHp, mon.maxBattleHp, `shop-hp-${i}`, true)}
           ${mon.battleStatus ? `<span class="status-badge status-${mon.battleStatus}">${mon.battleStatus.toUpperCase()}</span>` : ''}
@@ -189,6 +227,26 @@ export class ShopScreen {
       if (target.dataset['action'] === 'use-item') {
         const invIdx = parseInt(target.dataset['invIndex'] ?? '0');
         this.openUseModal(invIdx);
+        return;
+      }
+
+      // Reorder team
+      if (target.dataset['action'] === 'move-up') {
+        const idx = parseInt(target.dataset['teamIndex'] ?? '0');
+        if (idx > 0) {
+          [this.state.team[idx - 1], this.state.team[idx]] =
+            [this.state.team[idx], this.state.team[idx - 1]];
+          this.refreshTeamList();
+        }
+        return;
+      }
+      if (target.dataset['action'] === 'move-down') {
+        const idx = parseInt(target.dataset['teamIndex'] ?? '0');
+        if (idx < this.state.team.length - 1) {
+          [this.state.team[idx], this.state.team[idx + 1]] =
+            [this.state.team[idx + 1], this.state.team[idx]];
+          this.refreshTeamList();
+        }
         return;
       }
 
@@ -355,10 +413,27 @@ export class ShopScreen {
     this.refreshInventory();
   }
 
+  /** Items that apply to the whole team and don't need a Pokémon target. */
+  private static readonly GLOBAL_ITEMS = new Set([
+    'star_piece', 'big_nugget', 'sacred_ash', 'max_elixir', 'team_vitals',
+  ]);
+
   private openUseModal(invIdx: number): void {
     const inv = this.state.inventory[invIdx];
     if (!inv || inv.item.itemType !== 'consumable') return;
     this.selectedInventoryIndex = invIdx;
+
+    // Global items are applied immediately, no target selection needed
+    if (ShopScreen.GLOBAL_ITEMS.has(inv.item.id)) {
+      this.useGlobalConsumable();
+      return;
+    }
+
+    // Evolution Stone: open modal filtered to non-fully-evolved Pokémon
+    if (inv.item.id === 'evolution_stone') {
+      this.openEvolutionStoneModal(invIdx);
+      return;
+    }
 
     const modal = this.container.querySelector('#use-modal')!;
     const titleEl = modal.querySelector('#use-modal-title')!;
@@ -366,8 +441,10 @@ export class ShopScreen {
 
     titleEl.textContent = `Use "${inv.item.name}" on:`;
 
-    const isRevive = inv.item.id === 'revive' || inv.item.id === 'max_revive' || inv.item.id === 'sacred_ash';
-    const team = isRevive ? this.state.team.filter(m => m.battleHp <= 0) : this.state.team.filter(m => m.battleHp > 0);
+    const isRevive = inv.item.id === 'revive' || inv.item.id === 'max_revive';
+    const team = isRevive
+      ? this.state.team.filter(m => m.battleHp <= 0)
+      : this.state.team.filter(m => m.battleHp > 0);
 
     listEl.innerHTML = team.map((mon) => {
       const realIdx = this.state.team.indexOf(mon);
@@ -386,6 +463,73 @@ export class ShopScreen {
     modal.classList.remove('hidden');
   }
 
+  /** Apply a global consumable immediately without Pokémon target. */
+  private useGlobalConsumable(): void {
+    const inv = this.state.inventory[this.selectedInventoryIndex];
+    if (!inv) return;
+    const { item } = inv;
+
+    if (item.id === 'star_piece') {
+      const old = this.state.coins;
+      this.state.coins += 50;
+      const el = this.container.querySelector<HTMLElement>('#shop-coin-display');
+      if (el) animateCoinGain(el, old, this.state.coins);
+      showToast('+50 coins from Star Piece!', 'success');
+    } else if (item.id === 'big_nugget') {
+      const old = this.state.coins;
+      this.state.coins += 150;
+      const el = this.container.querySelector<HTMLElement>('#shop-coin-display');
+      if (el) animateCoinGain(el, old, this.state.coins);
+      showToast('+150 coins from Big Nugget!', 'success');
+    } else if (item.id === 'sacred_ash') {
+      this.state.team.forEach(m => {
+        m.battleHp = m.maxBattleHp;
+        m.battleStatus = null;
+      });
+      showToast('Sacred Ash revived your entire team to full HP!', 'success');
+    } else if (item.id === 'max_elixir') {
+      this.state.team.forEach(m => m.moves.forEach(mv => { mv.pp = mv.maxPp; }));
+      showToast('Max Elixir fully restored all PP for your team!', 'success');
+    } else if (item.id === 'team_vitals') {
+      this.state.team.forEach(m => {
+        if (m.battleHp > 0) {
+          m.battleHp = Math.min(m.maxBattleHp, m.battleHp + Math.floor(m.maxBattleHp * 0.5));
+        }
+      });
+      showToast('Team Vitals healed 50% HP for your entire team!', 'success');
+    }
+
+    this.consumeInventoryItem();
+    this.refreshTeamList();
+    this.refreshInventory();
+  }
+
+  private openEvolutionStoneModal(invIdx: number): void {
+    const modal = this.container.querySelector('#use-modal')!;
+    const titleEl = modal.querySelector('#use-modal-title')!;
+    const listEl = modal.querySelector('#use-team-list')!;
+
+    titleEl.textContent = 'Evolve which Pokémon?';
+
+    const candidates = this.state.team.filter(m => !m.isFullyEvolved && m.nextEvolutionId !== null);
+
+    listEl.innerHTML = candidates.map((mon) => {
+      const realIdx = this.state.team.indexOf(mon);
+      return `
+        <div class="assign-row" data-use-index="${realIdx}">
+          <img src="${mon.sprite}" class="assign-sprite" alt="${mon.displayName}" />
+          <div class="assign-info">
+            <span class="assign-name">${mon.displayName} Lv.${mon.level}</span>
+            <span class="assign-current-item">${mon.isFullyEvolved ? 'Fully evolved' : 'Can evolve'}</span>
+          </div>
+          <button class="btn btn-sm btn-primary">Evolve</button>
+        </div>
+      `;
+    }).join('') || '<p style="padding:1rem;color:var(--text-muted)">No Pokémon can evolve right now.</p>';
+
+    modal.classList.remove('hidden');
+  }
+
   private useConsumable(teamIdx: number): void {
     const inv = this.state.inventory[this.selectedInventoryIndex];
     if (!inv) return;
@@ -395,14 +539,15 @@ export class ShopScreen {
     const item = inv.item;
     const effect = item.effect;
 
-    // Sacred Ash: heal entire team
-    if (item.id === 'sacred_ash') {
-      this.state.team.forEach(m => {
-        m.battleHp = m.maxBattleHp;
-        m.battleStatus = null;
-      });
-      showToast('Sacred Ash revived your entire team!', 'success');
-    } else if (effect.healPercent) {
+    // Evolution Stone — async, handled separately
+    if (item.id === 'evolution_stone') {
+      this.container.querySelector('#use-modal')?.classList.add('hidden');
+      this.evolveWithStone(teamIdx);
+      return;
+    }
+
+    // Single-target heals
+    if (effect.healPercent && item.id !== 'team_vitals') {
       const heal = Math.floor(mon.maxBattleHp * effect.healPercent);
       mon.battleHp = Math.min(mon.maxBattleHp, mon.battleHp + heal);
       showToast(`${mon.displayName} restored ${heal} HP!`, 'success');
@@ -418,31 +563,36 @@ export class ShopScreen {
       }
     }
 
-    // Coin-granting consumables
-    if (item.id === 'star_piece') {
-      const oldCoins = this.state.coins;
-      this.state.coins += 50;
-      const coinEl = this.container.querySelector<HTMLElement>('#shop-coin-display');
-      if (coinEl) animateCoinGain(coinEl, oldCoins, this.state.coins);
-      showToast('+50 coins!', 'success');
-    } else if (item.id === 'big_nugget') {
-      const oldCoins = this.state.coins;
-      this.state.coins += 150;
-      const coinEl = this.container.querySelector<HTMLElement>('#shop-coin-display');
-      if (coinEl) animateCoinGain(coinEl, oldCoins, this.state.coins);
-      showToast('+150 coins!', 'success');
-    }
-
-    // Rare Candy: level up
+    // Rare Candy: level up + stat recalc + evolution check
     if (item.id === 'rare_candy') {
-      mon.level = Math.min(100, mon.level + 1);
-      const leveled = toBattlePokemon({ ...mon, level: mon.level }, this.state.activePerks);
-      leveled.battleHp = Math.min(mon.battleHp + 10, leveled.maxBattleHp);
+      const newLevel = Math.min(100, mon.level + 1);
+      const leveled = toBattlePokemon({ ...mon, level: newLevel }, this.state.activePerks);
+      const hpGain = Math.max(0, leveled.maxBattleHp - mon.maxBattleHp);
+      leveled.battleHp = Math.min(leveled.maxBattleHp, mon.battleHp + hpGain);
+      leveled.battleStatus = mon.battleStatus;
       this.state.team[teamIdx] = leveled;
-      showToast(`${mon.displayName} leveled up to Lv.${mon.level}!`, 'success');
+      showToast(`${mon.displayName} leveled up to Lv.${newLevel}!`, 'success');
+
+      // Check evolution
+      if (
+        !leveled.isFullyEvolved &&
+        leveled.nextEvolutionId !== null &&
+        leveled.evolutionLevel !== null &&
+        newLevel >= leveled.evolutionLevel
+      ) {
+        leveled.pendingEvolution = true;
+        showToast(`${leveled.displayName} is ready to evolve! Check the team section.`, 'info');
+        // Auto-evolve immediately via stone logic
+        this.consumeInventoryItem();
+        this.container.querySelector('#use-modal')?.classList.add('hidden');
+        this.processPendingEvolutions();
+        this.refreshTeamList();
+        this.refreshInventory();
+        return;
+      }
     }
 
-    // X items: stat boosts (persist in stages)
+    // X items: stat stage boosts
     const statBoostMap: Record<string, keyof typeof mon.statStages> = {
       'x_attack': 'attack', 'x_sp_atk': 'spAtk', 'x_speed': 'speed',
     };
@@ -452,14 +602,52 @@ export class ShopScreen {
       showToast(`${mon.displayName}'s ${boostKey} rose sharply!`, 'success');
     }
 
-    // Remove from inventory
+    this.consumeInventoryItem();
+    this.container.querySelector('#use-modal')?.classList.add('hidden');
+    this.refreshTeamList();
+    this.refreshInventory();
+  }
+
+  /** Consume one unit of the currently selected inventory item. */
+  private consumeInventoryItem(): void {
+    const inv = this.state.inventory[this.selectedInventoryIndex];
+    if (!inv) return;
     inv.quantity--;
     if (inv.quantity <= 0) {
       this.state.inventory.splice(this.selectedInventoryIndex, 1);
     }
     this.selectedInventoryIndex = -1;
+  }
 
-    this.container.querySelector('#use-modal')?.classList.add('hidden');
+  /** Async: fetch the evolved form and replace the Pokémon in the team. */
+  private async evolveWithStone(teamIdx: number): Promise<void> {
+    const mon = this.state.team[teamIdx];
+    if (!mon || mon.isFullyEvolved || !mon.nextEvolutionId) {
+      showToast('This Pokémon cannot evolve!', 'error');
+      return;
+    }
+
+    showToast(`Evolving ${mon.displayName}…`, 'info');
+    try {
+      const evolved = await fetchPokemon(mon.nextEvolutionId, mon.level);
+      const evolvedBattle = toBattlePokemon(
+        { ...evolved, heldItem: mon.heldItem },
+        this.state.activePerks,
+      );
+      evolvedBattle.battleHp = Math.min(evolvedBattle.maxBattleHp, mon.battleHp);
+      evolvedBattle.battleStatus = mon.battleStatus;
+      evolvedBattle.xp = mon.xp;
+      evolvedBattle.xpToNextLevel = xpForLevel(evolved.level);
+      evolvedBattle.pendingEvolution = false;
+
+      this.state.team[teamIdx] = evolvedBattle;
+
+      this.consumeInventoryItem();
+      showToast(`${mon.displayName} evolved into ${evolved.displayName}! ✨`, 'success');
+    } catch {
+      showToast('Evolution failed — try again.', 'error');
+    }
+
     this.refreshTeamList();
     this.refreshInventory();
   }

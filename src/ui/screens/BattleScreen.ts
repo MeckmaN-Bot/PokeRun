@@ -4,15 +4,19 @@ import type {
 import {
   calculateDamage, checkMoveHits, applyDamage, applyEndOfTurnStatus,
   applyEndOfTurnItems, aiSelectMove, determineTurnOrder, canMove,
-  toBattlePokemon, healPokemon,
+  toBattlePokemon, healPokemon, grantXP, xpFromKO,
 } from '../../systems/battle';
 import { getEffectivenessLabel } from '../../data/typeChart';
-import { renderBattleSprite, renderPokemonPortrait, renderTeamBar } from '../components/PokemonCard';
+import {
+  renderBattleInfoCard, renderBattleSpriteImg,
+  renderPokemonPortrait, renderTeamBar,
+} from '../components/PokemonCard';
 import { renderBattleLog, appendLogEntry } from '../components/BattleLog';
 import { renderTypeBadges } from '../components/TypeBadge';
 import {
   fadeIn, attackAnimation, hitAnimation, faintAnimation, enterAnimation,
   showDamageNumber, animateHPBar, shakeElement, showToast, pulseElement,
+  showTypeAttackEffect,
 } from '../animations';
 
 export class BattleScreen {
@@ -62,32 +66,34 @@ export class BattleScreen {
 
         <!-- Battle Field -->
         <div class="battle-field">
-          <!-- Enemy Side -->
-          <div class="battle-side enemy-side">
-            <div id="enemy-team-bar"></div>
-            <div id="enemy-battle-area">
-              ${renderBattleSprite(enemyMon, 'enemy', 'enemy-active')}
+          <!-- Enemy: info LEFT, sprite RIGHT -->
+          <div class="battle-combatant enemy-combatant" id="enemy-combatant">
+            ${renderBattleInfoCard(enemyMon, 'enemy-active', 'enemy')}
+            <div class="battle-sprite-slot enemy-sprite-slot" id="enemy-battle-area">
+              ${renderBattleSpriteImg(enemyMon, 'enemy-active')}
             </div>
           </div>
 
-          <!-- Player Side -->
-          <div class="battle-side player-side">
-            <div id="player-battle-area">
-              ${renderBattleSprite(playerMon, 'player', 'player-active')}
+          <!-- Player: sprite LEFT, info RIGHT (row-reverse) -->
+          <div class="battle-combatant player-combatant" id="player-combatant">
+            ${renderBattleInfoCard(playerMon, 'player-active', 'player')}
+            <div class="battle-sprite-slot player-sprite-slot" id="player-battle-area">
+              ${renderBattleSpriteImg(playerMon, 'player-active')}
             </div>
-            <div id="player-team-bar"></div>
           </div>
         </div>
 
         <!-- Battle Controls -->
         <div class="battle-controls">
-          <!-- Move Buttons -->
-          <div class="move-grid" id="move-grid">
-            <!-- Rendered dynamically -->
-          </div>
+          <div class="battle-controls-main">
+            <!-- Move Buttons -->
+            <div class="move-grid" id="move-grid">
+              <!-- Rendered dynamically -->
+            </div>
 
-          <!-- Battle Log -->
-          ${renderBattleLog(bs.log)}
+            <!-- Battle Log -->
+            ${renderBattleLog(bs.log)}
+          </div>
 
           <!-- Control Bar -->
           <div class="battle-control-bar">
@@ -161,12 +167,13 @@ export class BattleScreen {
   private renderTeamPortraits(): void {
     const bs = this.state.battleState!;
 
-    const enemyBar = this.container.querySelector('#enemy-team-bar');
+    // Team bars live inside the info cards
+    const enemyBar = this.container.querySelector('#enemy-active-team-bar');
     if (enemyBar) {
       enemyBar.innerHTML = renderTeamBar(bs.enemyTeam, bs.activeEnemyIndex, 'enemy');
     }
 
-    const playerBar = this.container.querySelector('#player-team-bar');
+    const playerBar = this.container.querySelector('#player-active-team-bar');
     if (playerBar) {
       playerBar.innerHTML = renderTeamBar(bs.playerTeam, bs.activePlayerIndex, 'player');
     }
@@ -381,6 +388,10 @@ export class BattleScreen {
 
     // Update UI
     if (defenderSpriteEl) {
+      // Type-specific particle effect
+      if (attackerSpriteEl) {
+        await showTypeAttackEffect(move.type, attackerSpriteEl, defenderSpriteEl);
+      }
       await hitAnimation(defenderSpriteEl);
       const dmgType = result.isCritical ? 'critical'
         : result.effectiveness > 1 ? 'super_effective'
@@ -618,6 +629,42 @@ export class BattleScreen {
         chainPerk.effect.chainKOBonus = (chainPerk.effect.chainKOBonus ?? 0) + 0.01;
       }
 
+      // ── XP gain ──────────────────────────────────────────────
+      const faintedEnemy = bs.enemyTeam[bs.activeEnemyIndex];
+      const attackerIdx = bs.activePlayerIndex;
+      const attacker = bs.playerTeam[attackerIdx];
+      if (attacker && attacker.battleHp > 0) {
+        const xpGain = xpFromKO(faintedEnemy.level);
+        const { leveledUp, newLevel } = grantXP(attacker, xpGain, this.state.activePerks);
+        this.addLog(logEl, {
+          text: `${attacker.displayName} gained ${xpGain} XP!`,
+          type: 'system',
+        });
+        if (leveledUp) {
+          this.addLog(logEl, {
+            text: `⬆ ${attacker.displayName} grew to Lv.${newLevel}!`,
+            type: 'system',
+          });
+          this.updateHPDisplay(attacker, bs);
+          this.renderTeamPortraits();
+
+          // Check for level-based evolution
+          if (
+            !attacker.isFullyEvolved &&
+            attacker.nextEvolutionId !== null &&
+            attacker.evolutionLevel !== null &&
+            newLevel >= attacker.evolutionLevel
+          ) {
+            attacker.pendingEvolution = true;
+            this.addLog(logEl, {
+              text: `✨ ${attacker.displayName} is ready to evolve!`,
+              type: 'system',
+            });
+          }
+        }
+      }
+      // ─────────────────────────────────────────────────────────
+
       bs.activeEnemyIndex++;
       if (bs.activeEnemyIndex >= bs.enemyTeam.length ||
           bs.enemyTeam.slice(bs.activeEnemyIndex).every(p => p.battleHp <= 0)) {
@@ -642,11 +689,21 @@ export class BattleScreen {
     const playerMon = bs.playerTeam[bs.activePlayerIndex];
     const enemyMon = bs.enemyTeam[bs.activeEnemyIndex];
 
-    const playerArea = this.container.querySelector('#player-battle-area');
-    const enemyArea = this.container.querySelector('#enemy-battle-area');
+    // Re-render the full combatant (info card + sprite slot) so the new
+    // Pokémon's data and sprite are both reflected.
+    const playerCombatant = this.container.querySelector<HTMLElement>('#player-combatant');
+    const enemyCombatant = this.container.querySelector<HTMLElement>('#enemy-combatant');
 
-    if (playerArea) playerArea.innerHTML = renderBattleSprite(playerMon, 'player', 'player-active');
-    if (enemyArea) enemyArea.innerHTML = renderBattleSprite(enemyMon, 'enemy', 'enemy-active');
+    if (playerCombatant) {
+      playerCombatant.innerHTML =
+        renderBattleInfoCard(playerMon, 'player-active', 'player') +
+        `<div class="battle-sprite-slot player-sprite-slot" id="player-battle-area">${renderBattleSpriteImg(playerMon, 'player-active')}</div>`;
+    }
+    if (enemyCombatant) {
+      enemyCombatant.innerHTML =
+        renderBattleInfoCard(enemyMon, 'enemy-active', 'enemy') +
+        `<div class="battle-sprite-slot enemy-sprite-slot" id="enemy-battle-area">${renderBattleSpriteImg(enemyMon, 'enemy-active')}</div>`;
+    }
 
     this.renderMoveButtons();
   }
@@ -671,6 +728,21 @@ export class BattleScreen {
 
     if (playerWon) {
       this.state.runStats.wavesCleared = this.state.wave;
+    }
+
+    // Sync XP, level, and pending-evolution flags from the battle copies back to
+    // the canonical team so the shop / reward screen reflects level-ups.
+    const bs = this.state.battleState!;
+    for (let i = 0; i < this.state.team.length; i++) {
+      const battleMon = bs.playerTeam[i];
+      if (!battleMon) continue;
+      this.state.team[i].level = battleMon.level;
+      this.state.team[i].xp = battleMon.xp;
+      this.state.team[i].xpToNextLevel = battleMon.xpToNextLevel;
+      this.state.team[i].pendingEvolution = battleMon.pendingEvolution;
+      this.state.team[i].battleHp = battleMon.battleHp;
+      this.state.team[i].maxBattleHp = battleMon.maxBattleHp;
+      this.state.team[i].effectiveStats = battleMon.effectiveStats;
     }
 
     this.onBattleEnd(this.state);

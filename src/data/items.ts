@@ -402,14 +402,37 @@ export const ALL_ITEMS: Item[] = [
   {
     id: 'star_piece', name: 'Star Piece', rarity: 'epic', itemType: 'consumable',
     icon: '⭐',
-    description: 'Grants +50 coins immediately.',
+    description: 'Grants +50 coins immediately. (Reward only)',
     effect: { trigger: 'manual', coinMultiplier: 50 },
+    rewardOnly: true,
   },
   {
     id: 'big_nugget', name: 'Big Nugget', rarity: 'epic', itemType: 'consumable',
     icon: '💎',
-    description: 'Grants +150 coins immediately.',
+    description: 'Grants +150 coins immediately. (Reward only)',
     effect: { trigger: 'manual', coinMultiplier: 150 },
+    rewardOnly: true,
+  },
+  // ===================== NEW ITEMS =====================
+  {
+    id: 'evolution_stone', name: 'Evolution Stone', rarity: 'epic', itemType: 'consumable',
+    icon: '🪨',
+    description: 'Immediately evolves a Pokémon into its next form.',
+    effect: { trigger: 'manual' },
+  },
+  {
+    id: 'max_elixir', name: 'Max Elixir', rarity: 'rare', itemType: 'consumable',
+    icon: '💦',
+    description: 'Fully restores PP of every move for your entire team. (Reward only)',
+    effect: { trigger: 'manual' },
+    rewardOnly: true,
+  },
+  {
+    id: 'team_vitals', name: 'Team Vitals', rarity: 'rare', itemType: 'consumable',
+    icon: '💚',
+    description: 'Heals 50% of max HP for every Pokémon in your team. (Reward only)',
+    effect: { trigger: 'manual', healPercent: 0.5 },
+    rewardOnly: true,
   },
   {
     id: 'evolution_stone', name: 'Evolution Stone', rarity: 'epic', itemType: 'consumable',

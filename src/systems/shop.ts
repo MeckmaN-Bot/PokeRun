@@ -46,7 +46,7 @@ export function generateShop(wave: number, existingItemIds: string[] = []): Shop
 
   for (const rarity of shuffledRarities) {
     const pool = ALL_ITEMS.filter(
-      i => i.rarity === rarity && !usedIds.has(i.id)
+      i => i.rarity === rarity && !usedIds.has(i.id) && !i.rewardOnly
     );
 
     if (pool.length === 0) continue;

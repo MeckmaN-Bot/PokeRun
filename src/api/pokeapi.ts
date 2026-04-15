@@ -187,47 +187,74 @@ async function selectMoves(apiMoves: PokeAPIResponse['moves'], types: PokemonTyp
   return selected.slice(0, 4);
 }
 
-// Check if a pokemon is fully evolved using evolution chain
-const evolutionCache = new Map<number, boolean>();
+// ============================================================
+// Evolution info cache
+// ============================================================
 
-async function isFullyEvolved(pokemonId: number, speciesUrl: string): Promise<boolean> {
-  if (evolutionCache.has(pokemonId)) return evolutionCache.get(pokemonId)!;
+interface EvolutionInfo {
+  nextEvolutionId: number | null;
+  evolutionLevel: number | null;
+  isFullyEvolved: boolean;
+}
+
+const evolutionInfoCache = new Map<string, EvolutionInfo>();
+
+async function fetchEvolutionInfo(pokemonName: string): Promise<EvolutionInfo> {
+  if (evolutionInfoCache.has(pokemonName)) return evolutionInfoCache.get(pokemonName)!;
+
+  const fallback: EvolutionInfo = { nextEvolutionId: null, evolutionLevel: null, isFullyEvolved: true };
 
   try {
-    const speciesData = await apiFetch<{ evolution_chain: { url: string }; evolves_from_species: { name: string } | null }>(speciesUrl);
-    const chainData = await apiFetch<{
-      chain: { species: { name: string }; evolves_to: unknown[] };
-    }>(speciesData.evolution_chain.url);
+    type EvolutionDetail = { min_level: number | null; trigger: { name: string } };
+    type ChainNode = {
+      species: { name: string; url: string };
+      evolves_to: ChainNode[];
+      evolution_details: EvolutionDetail[];
+    };
 
-    // Walk chain to see if this pokemon has further evolutions
-    type ChainNode = { species: { name: string }; evolves_to: ChainNode[] };
-    function findNode(node: ChainNode, targetName: string): { found: boolean; hasEvolutions: boolean } {
-      if (node.species.name === targetName) {
-        return { found: true, hasEvolutions: node.evolves_to.length > 0 };
+    const speciesData = await apiFetch<{ evolution_chain: { url: string } }>(
+      `${API_BASE}/pokemon-species/${pokemonName}`
+    );
+    const chainData = await apiFetch<{ chain: ChainNode }>(speciesData.evolution_chain.url);
+
+    function findInfo(node: ChainNode, target: string): EvolutionInfo | null {
+      if (node.species.name === target) {
+        if (node.evolves_to.length === 0) {
+          return { nextEvolutionId: null, evolutionLevel: null, isFullyEvolved: true };
+        }
+        const nextNode = node.evolves_to[0];
+        const detail = nextNode.evolution_details[0] as EvolutionDetail | undefined;
+        const urlParts = nextNode.species.url.replace(/\/$/, '').split('/');
+        const speciesId = parseInt(urlParts[urlParts.length - 1]);
+        return {
+          nextEvolutionId: isNaN(speciesId) ? null : speciesId,
+          evolutionLevel: detail?.min_level ?? null,
+          isFullyEvolved: false,
+        };
       }
       for (const child of node.evolves_to) {
-        const result = findNode(child, targetName);
-        if (result.found) return result;
+        const result = findInfo(child, target);
+        if (result !== null) return result;
       }
-      return { found: false, hasEvolutions: false };
+      return null;
     }
 
-    // We need the pokemon name to check
-    const pokemonData = cacheGet<PokeAPIResponse>(`_pokemon_${pokemonId}`);
-    const name = pokemonData?.name ?? '';
-
-    if (!name) {
-      evolutionCache.set(pokemonId, true);
-      return true;
-    }
-
-    const result = findNode(chainData.chain as ChainNode, name);
-    const fullyEvolved = !result.hasEvolutions;
-    evolutionCache.set(pokemonId, fullyEvolved);
-    return fullyEvolved;
+    const info = findInfo(chainData.chain, pokemonName) ?? fallback;
+    evolutionInfoCache.set(pokemonName, info);
+    return info;
   } catch {
-    evolutionCache.set(pokemonId, true);
-    return true;
+    evolutionInfoCache.set(pokemonName, fallback);
+    return fallback;
+  }
+}
+
+/** Fetch the next evolution of a Pokémon at the same level, preserving the held item. */
+export async function fetchNextEvolution(pokemon: import('../types').Pokemon): Promise<import('../types').Pokemon | null> {
+  if (!pokemon.nextEvolutionId) return null;
+  try {
+    return await fetchPokemon(pokemon.nextEvolutionId, pokemon.level);
+  } catch {
+    return null;
   }
 }
 
@@ -267,9 +294,8 @@ export async function fetchPokemon(idOrName: number | string, level: number): Pr
     ? getAnimatedSprite(data.id)
     : sprite;
 
-  // Fully evolved check (simplified: check if any moves have level > 40 learned)
-  // We use a simpler heuristic: BST > 400 or id patterns
-  const fullyEvolved = bst >= 400;
+  // Fetch evolution info (cached after first call)
+  const evoInfo = await fetchEvolutionInfo(data.name);
 
   const displayName = data.name
     .split('-')
@@ -287,10 +313,12 @@ export async function fetchPokemon(idOrName: number | string, level: number): Pr
     heldItem: null,
     sprite,
     animatedSprite,
-    isFullyEvolved: fullyEvolved,
+    isFullyEvolved: evoInfo.isFullyEvolved,
     bst,
     abilities: data.abilities.map(a => a.ability.name),
     evolutionChainId: data.id,
+    nextEvolutionId: evoInfo.nextEvolutionId,
+    evolutionLevel: evoInfo.evolutionLevel,
   };
 
   cacheSet(cacheKey, pokemon);

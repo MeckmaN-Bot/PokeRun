@@ -261,6 +261,90 @@ export function waveIntroAnimation(el: HTMLElement): Promise<void> {
 }
 
 // ============================================================
+// Type-specific Attack Particle Effect
+// ============================================================
+
+const TYPE_COLORS: Record<string, [string, string]> = {
+  fire:     ['#f97316', '#ef4444'],
+  water:    ['#38bdf8', '#3b82f6'],
+  grass:    ['#4ade80', '#22c55e'],
+  electric: ['#fde047', '#f59e0b'],
+  ice:      ['#bae6fd', '#7dd3fc'],
+  psychic:  ['#f472b6', '#ec4899'],
+  ghost:    ['#a78bfa', '#7c3aed'],
+  dragon:   ['#818cf8', '#6366f1'],
+  dark:     ['#94a3b8', '#475569'],
+  fighting: ['#f87171', '#dc2626'],
+  poison:   ['#c084fc', '#a855f7'],
+  rock:     ['#d6d3d1', '#a8a29e'],
+  ground:   ['#fbbf24', '#d97706'],
+  steel:    ['#e2e8f0', '#94a3b8'],
+  fairy:    ['#f9a8d4', '#f472b6'],
+  bug:      ['#a3e635', '#84cc16'],
+  flying:   ['#93c5fd', '#60a5fa'],
+  normal:   ['#e2e8f0', '#94a3b8'],
+};
+
+export function showTypeAttackEffect(
+  type: string,
+  attackerEl: HTMLElement,
+  defenderEl: HTMLElement,
+): Promise<void> {
+  const [color1, color2] = TYPE_COLORS[type] ?? ['#e2e8f0', '#94a3b8'];
+
+  const aRect = attackerEl.getBoundingClientRect();
+  const dRect = defenderEl.getBoundingClientRect();
+
+  const startX = aRect.left + aRect.width / 2;
+  const startY = aRect.top + aRect.height / 2;
+  const endX   = dRect.left + dRect.width / 2;
+  const endY   = dRect.top  + dRect.height / 2;
+
+  const PARTICLE_COUNT = 7;
+  const particles: HTMLElement[] = [];
+
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const el = document.createElement('div');
+    el.className = 'type-particle';
+    const size = 7 + Math.random() * 9;
+    el.style.width  = `${size}px`;
+    el.style.height = `${size}px`;
+    el.style.background  = i % 2 === 0 ? color1 : color2;
+    el.style.boxShadow   = `0 0 ${size + 4}px ${color1}`;
+    el.style.left = `${startX}px`;
+    el.style.top  = `${startY}px`;
+    document.body.appendChild(el);
+    particles.push(el);
+  }
+
+  return new Promise(resolve => {
+    let completed = 0;
+    particles.forEach((el, i) => {
+      const spread = 28;
+      const offsetX = (Math.random() - 0.5) * spread;
+      const offsetY = (Math.random() - 0.5) * spread;
+      gsap.fromTo(el,
+        { x: 0, y: 0, opacity: 1, scale: 1 },
+        {
+          x: endX - startX + offsetX,
+          y: endY - startY + offsetY,
+          opacity: 0,
+          scale: 0.25,
+          duration: 0.3 + i * 0.04,
+          delay: i * 0.035,
+          ease: 'power2.in',
+          onComplete: () => {
+            el.remove();
+            completed++;
+            if (completed === PARTICLE_COUNT) resolve();
+          },
+        }
+      );
+    });
+  });
+}
+
+// ============================================================
 // Toast Notification
 // ============================================================
 

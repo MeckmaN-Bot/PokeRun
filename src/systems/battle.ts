@@ -3,6 +3,7 @@ import type {
   StatusEffect, StatStages, BaseStats, PokemonType,
 } from '../types';
 import { getTypeEffectiveness } from '../data/typeChart';
+import { calcStat } from '../api/pokeapi';
 
 // ============================================================
 // Stat Stage Multiplier
@@ -557,6 +558,9 @@ export function toBattlePokemon(pokemon: import('../types').Pokemon, perks: Perk
 
   const maxHp = effectiveStats.hp;
 
+  // Preserve XP/level-up state when rebuilding an existing BattlePokemon
+  const existingBattle = pokemon as Partial<BattlePokemon>;
+
   return {
     ...pokemon,
     battleHp: maxHp,
@@ -575,6 +579,9 @@ export function toBattlePokemon(pokemon: import('../types').Pokemon, perks: Perk
     twoTurnMove: null,
     sleepTurns: 0,
     moves: pokemon.moves.map(m => ({ ...m })), // Fresh copy with PP
+    xp: existingBattle.xp ?? 0,
+    xpToNextLevel: xpForLevel(pokemon.level),
+    pendingEvolution: existingBattle.pendingEvolution ?? false,
   };
 }
 
@@ -614,4 +621,63 @@ export function healPokemon(pokemon: BattlePokemon, amount: number): number {
   const before = pokemon.battleHp;
   pokemon.battleHp = Math.min(pokemon.maxBattleHp, pokemon.battleHp + amount);
   return pokemon.battleHp - before;
+}
+
+// ============================================================
+// XP / Leveling System
+// ============================================================
+
+/** XP required to reach the NEXT level from `level`. */
+export function xpForLevel(level: number): number {
+  return Math.floor(Math.pow(level, 1.5) * 10);
+}
+
+/** XP awarded for defeating an enemy at the given level. */
+export function xpFromKO(enemyLevel: number): number {
+  return Math.floor(enemyLevel * 15);
+}
+
+/**
+ * Grant XP to a Pokémon. Handles multi-level-ups in one call.
+ * Mutates the Pokémon in place.
+ * Returns whether at least one level-up occurred.
+ */
+export function grantXP(
+  pokemon: BattlePokemon,
+  amount: number,
+  perks: Perk[],
+): { leveledUp: boolean; newLevel: number } {
+  pokemon.xp += amount;
+  let leveledUp = false;
+
+  while (pokemon.xp >= pokemon.xpToNextLevel && pokemon.level < 100) {
+    pokemon.xp -= pokemon.xpToNextLevel;
+    pokemon.level++;
+    pokemon.xpToNextLevel = xpForLevel(pokemon.level);
+    leveledUp = true;
+
+    // Recalculate effective stats for the new level
+    const base = pokemon.baseStats;
+    const allStatsMult = perks.reduce((acc, p) =>
+      p.effect.allStatsMultiplier ? acc * p.effect.allStatsMultiplier : acc, 1);
+
+    const newStats = {
+      hp:      Math.floor(calcStat(base.hp,      pokemon.level, true)  * allStatsMult),
+      attack:  Math.floor(calcStat(base.attack,  pokemon.level, false) * allStatsMult),
+      defense: Math.floor(calcStat(base.defense, pokemon.level, false) * allStatsMult),
+      spAtk:   Math.floor(calcStat(base.spAtk,   pokemon.level, false) * allStatsMult),
+      spDef:   Math.floor(calcStat(base.spDef,   pokemon.level, false) * allStatsMult),
+      speed:   Math.floor(calcStat(base.speed,   pokemon.level, false) * allStatsMult),
+    };
+
+    const oldMaxHp = pokemon.maxBattleHp;
+    const hpGain = Math.max(0, newStats.hp - oldMaxHp);
+
+    pokemon.effectiveStats = newStats;
+    pokemon.maxBattleHp = newStats.hp;
+    // Current HP gains the same amount the max HP grew (Pokémon-style level-up heal)
+    pokemon.battleHp = Math.min(pokemon.maxBattleHp, pokemon.battleHp + hpGain);
+  }
+
+  return { leveledUp, newLevel: pokemon.level };
 }

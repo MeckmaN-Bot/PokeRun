@@ -2,6 +2,57 @@ import type { BattlePokemon } from '../../types';
 import { renderTypeBadges } from './TypeBadge';
 import { renderHPBar } from './HPBar';
 
+// ============================================================
+// New split battle layout — info card and sprite separately
+// ============================================================
+
+/** Renders the info card (name, HP, XP bar for player, stage indicators, team bar slot). */
+export function renderBattleInfoCard(
+  pokemon: BattlePokemon,
+  id: string,
+  side: 'player' | 'enemy',
+): string {
+  const statusHtml = pokemon.battleStatus
+    ? `<div class="battle-status-badge status-${pokemon.battleStatus}">${getStatusEmoji(pokemon.battleStatus)} ${pokemon.battleStatus.toUpperCase()}</div>`
+    : '';
+
+  const stageIndicators = getStageIndicators(pokemon);
+
+  const xpPct = side === 'player'
+    ? Math.min(100, ((pokemon.xp ?? 0) / Math.max(1, pokemon.xpToNextLevel ?? 1)) * 100)
+    : 0;
+  const xpBarHtml = side === 'player'
+    ? `<div class="battle-xp-bar"><div class="battle-xp-fill" id="${id}-xp-fill" style="width:${xpPct}%"></div></div>`
+    : '';
+
+  return `
+    <div class="battle-info-card ${side}-info" id="${id}-info-card">
+      <div class="battle-name-row">
+        <span class="battle-pokemon-name">${pokemon.displayName}</span>
+        <span class="battle-pokemon-level">Lv.${pokemon.level}</span>
+        ${statusHtml}
+      </div>
+      ${renderHPBar(pokemon.battleHp, pokemon.maxBattleHp, `${id}-hp`, true)}
+      ${xpBarHtml}
+      ${stageIndicators}
+      <div class="battle-info-teambar" id="${id}-team-bar"></div>
+    </div>
+  `;
+}
+
+/** Renders just the sprite <img> tag. */
+export function renderBattleSpriteImg(pokemon: BattlePokemon, id: string): string {
+  return `
+    <img
+      id="${id}-sprite"
+      class="battle-sprite"
+      src="${pokemon.animatedSprite}"
+      alt="${pokemon.displayName}"
+      onerror="this.src='${pokemon.sprite}'"
+    />
+  `;
+}
+
 export function renderPokemonPortrait(pokemon: BattlePokemon, id: string, isActive = false): string {
   const hpPct = pokemon.battleHp / pokemon.maxBattleHp;
   const isFainted = pokemon.battleHp <= 0;
