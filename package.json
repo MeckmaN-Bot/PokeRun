@@ -1,0 +1,20 @@
+{
+  "name": "pokemon-gauntlet",
+  "version": "1.0.0",
+  "description": "A roguelite wave-survival Pokémon browser game",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && gh-pages -d dist"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "gsap": "^3.12.5"
+  },
+  "devDependencies": {
+    "gh-pages": "^6.1.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.11"
+  }
+}

@@ -1,0 +1,531 @@
+/* ============================================================
+   Battle Screen
+   ============================================================ */
+
+.battle-screen {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  background:
+    radial-gradient(ellipse 80% 60% at 30% 40%, rgba(99,102,241,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 70% 60%, rgba(236,72,153,0.06) 0%, transparent 60%),
+    var(--bg);
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+/* ============================================================
+   Wave Banner
+   ============================================================ */
+.wave-banner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1.5rem;
+  background: rgba(10,10,15,0.9);
+  border-bottom: 1px solid var(--border-glow);
+  z-index: 10;
+}
+
+.wave-banner.boss-wave {
+  background: rgba(20,10,0,0.95);
+  border-bottom-color: var(--warning);
+  animation: boss-banner-glow 1s ease infinite alternate;
+}
+
+@keyframes boss-banner-glow {
+  from { box-shadow: 0 2px 8px rgba(245,158,11,0.2); }
+  to   { box-shadow: 0 2px 20px rgba(245,158,11,0.5); }
+}
+
+.wave-text {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.wave-banner.boss-wave .wave-text {
+  color: var(--warning);
+  text-shadow: 0 0 16px var(--warning);
+}
+
+.wave-progress-bar {
+  flex: 1;
+  height: 5px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.wave-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--pink));
+  border-radius: 999px;
+  transition: width 0.6s ease;
+}
+
+/* ============================================================
+   Battle Field
+   ============================================================ */
+.battle-field {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.battle-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  position: relative;
+}
+
+.enemy-side {
+  align-items: flex-end;
+}
+
+.player-side {
+  align-items: flex-start;
+}
+
+/* ============================================================
+   Battle Pokemon Wrapper
+   ============================================================ */
+.battle-pokemon-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 300px;
+  background: rgba(18,18,26,0.8);
+  border: 1px solid var(--border-glow);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem;
+  backdrop-filter: blur(4px);
+  transition: all 0.3s ease;
+}
+
+.battle-pokemon-wrapper.player {
+  border-color: rgba(99,102,241,0.4);
+}
+
+.battle-pokemon-wrapper.enemy {
+  border-color: rgba(239,68,68,0.3);
+}
+
+.battle-pokemon-wrapper.fainted {
+  opacity: 0.4;
+  border-color: var(--border);
+}
+
+.battle-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
+.battle-pokemon-name {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.battle-pokemon-level {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.battle-status-badge {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  letter-spacing: 0.06em;
+}
+
+.battle-status-badge.status-burn     { background: #f97316; color: #fff; }
+.battle-status-badge.status-poison   { background: #a855f7; color: #fff; }
+.battle-status-badge.status-badPoison{ background: #7e22ce; color: #fff; }
+.battle-status-badge.status-paralysis{ background: #eab308; color: #000; }
+.battle-status-badge.status-sleep    { background: #475569; color: #fff; }
+.battle-status-badge.status-freeze   { background: #38bdf8; color: #000; }
+
+.battle-pokemon-wrapper .hp-bar-track {
+  height: 10px;
+}
+
+/* Stage indicators */
+.stage-indicators {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 0.3rem;
+}
+
+.stage-up {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--success);
+  background: rgba(34,197,94,0.12);
+  border-radius: 3px;
+  padding: 0.1rem 0.3rem;
+}
+
+.stage-down {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--danger);
+  background: rgba(239,68,68,0.12);
+  border-radius: 3px;
+  padding: 0.1rem 0.3rem;
+}
+
+/* ============================================================
+   Battle Sprites
+   ============================================================ */
+.battle-sprite-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  padding: 0.5rem 0;
+  min-height: 80px;
+}
+
+.battle-sprite {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 4px 12px rgba(99,102,241,0.3));
+  transition: filter 0.2s ease;
+}
+
+.enemy .battle-sprite {
+  filter: drop-shadow(0 4px 12px rgba(239,68,68,0.25));
+}
+
+/* ============================================================
+   Team Bar (ball indicators)
+   ============================================================ */
+.team-bar {
+  display: flex;
+  gap: 5px;
+  padding: 0.3rem 0;
+}
+
+.team-ball {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--border-glow);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.team-ball.fainted {
+  background: var(--surface-2);
+  border-color: var(--border);
+  opacity: 0.4;
+}
+
+.team-ball.active {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  transform: scale(1.2);
+}
+
+.team-bar.enemy .team-ball {
+  background: var(--danger);
+}
+.team-bar.enemy .team-ball.active {
+  box-shadow: 0 0 8px var(--danger);
+}
+
+/* ============================================================
+   Move Grid
+   ============================================================ */
+.move-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+.move-btn {
+  background: var(--surface);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  cursor: pointer;
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+  transition: all 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.move-btn::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3px;
+  height: 100%;
+  background: var(--move-type-color, var(--accent));
+  opacity: 0.8;
+}
+
+.move-btn:hover:not(:disabled) {
+  border-color: var(--move-type-color, var(--accent));
+  background: rgba(255,255,255,0.04);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.move-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.move-btn.move-empty {
+  opacity: 0.35;
+}
+
+.move-btn.move-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.move-btn-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.move-name {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.move-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.move-type-badge {
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+
+.move-category {
+  font-size: 0.7rem;
+}
+
+.move-power, .move-pp {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.move-pp.pp-low {
+  color: var(--danger);
+  animation: hp-pulse 0.8s ease infinite alternate;
+}
+
+/* ============================================================
+   Battle Log
+   ============================================================ */
+.battle-log {
+  background: rgba(10,10,15,0.9);
+  border: 1px solid var(--border-glow);
+  border-radius: var(--radius-md);
+  padding: 0.5rem 0.75rem;
+  height: 90px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-glow) transparent;
+}
+
+.log-entry {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  padding: 1px 0;
+}
+
+.log-entry.latest {
+  color: var(--text);
+}
+
+.log-entry.log-damage        { color: #fca5a5; }
+.log-entry.log-super_effective { color: var(--warning); font-weight: 600; }
+.log-entry.log-not_effective { color: var(--text-muted); }
+.log-entry.log-critical      { color: var(--pink); font-weight: 600; }
+.log-entry.log-immune        { color: var(--text-muted); font-style: italic; }
+.log-entry.log-heal          { color: #86efac; }
+.log-entry.log-status        { color: #c084fc; }
+.log-entry.log-system        { color: var(--accent); font-style: italic; }
+.log-entry.log-weather       { color: #7dd3fc; }
+
+/* ============================================================
+   Battle Controls
+   ============================================================ */
+.battle-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(10,10,15,0.95);
+  border-top: 1px solid var(--border-glow);
+}
+
+.battle-control-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.battle-coins {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--warning);
+  font-weight: 600;
+}
+
+/* ============================================================
+   Team Overview (bottom strip)
+   ============================================================ */
+.team-overview {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.4rem 1rem;
+  overflow-x: auto;
+  background: rgba(8,8,12,0.98);
+  border-top: 1px solid var(--border-glow);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-glow) transparent;
+}
+
+/* ============================================================
+   Pokemon Portrait (team overview card)
+   ============================================================ */
+.pokemon-portrait {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 72px;
+  background: var(--surface);
+  border: 1px solid var(--border-glow);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem;
+  position: relative;
+  flex-shrink: 0;
+  transition: border-color 0.2s;
+}
+
+.pokemon-portrait.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.pokemon-portrait.fainted {
+  opacity: 0.35;
+  border-color: var(--border);
+}
+
+.portrait-sprite {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.portrait-info {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.portrait-name {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.portrait-level {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+}
+
+.portrait-hp .hp-bar-track {
+  height: 4px;
+  width: 60px;
+}
+
+.held-item-icon {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 0.65rem;
+  line-height: 1;
+}
+
+/* ============================================================
+   Responsive Battle
+   ============================================================ */
+@media (max-width: 640px) {
+  .battle-field {
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+  .battle-sprite { width: 72px; height: 72px; }
+  .move-grid { grid-template-columns: 1fr 1fr; gap: 0.3rem; }
+  .battle-log { height: 70px; }
+  .battle-controls { padding: 0.4rem 0.6rem; }
+  .team-overview { padding: 0.3rem 0.6rem; }
+  .pokemon-portrait { min-width: 60px; }
+  .portrait-sprite { width: 36px; height: 36px; }
+}
+
+@media (max-width: 400px) {
+  .battle-screen {
+    grid-template-rows: auto 1fr auto auto;
+  }
+  .move-btn .move-meta { display: none; }
+  .move-name { font-size: 0.8rem; }
+}
