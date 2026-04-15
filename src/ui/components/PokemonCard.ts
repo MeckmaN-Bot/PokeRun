@@ -56,6 +56,7 @@ export function renderBattleSprite(
           ${statusHtml}
         </div>
         ${renderHPBar(pokemon.battleHp, pokemon.maxBattleHp, `${id}-hp`, true)}
+        ${side === 'player' ? `<div class="xp-bar-track"><div class="xp-bar-fill" style="width:${Math.min(100, pokemon.xpToNextLevel > 0 ? Math.floor((pokemon.xp / pokemon.xpToNextLevel) * 100) : 0)}%"></div></div>` : ''}
         ${stageIndicators}
       </div>
       <div class="battle-sprite-container" id="${id}-sprite-container">

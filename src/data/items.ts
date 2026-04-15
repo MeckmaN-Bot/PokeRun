@@ -411,6 +411,12 @@ export const ALL_ITEMS: Item[] = [
     description: 'Grants +150 coins immediately.',
     effect: { trigger: 'manual', coinMultiplier: 150 },
   },
+  {
+    id: 'evolution_stone', name: 'Evolution Stone', rarity: 'epic', itemType: 'consumable',
+    icon: '🪨',
+    description: 'Evolves the chosen Pokémon into its next form — even for stone-only evolutions.',
+    effect: { trigger: 'manual' },
+  },
 ];
 
 export function getItemById(id: string): Item | undefined {
