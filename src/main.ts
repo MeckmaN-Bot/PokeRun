@@ -100,6 +100,14 @@ function hideLoadingScreen(): void {
 // Screen Management
 // ============================================================
 
+function createMountDiv(id: string): HTMLDivElement {
+  const div = document.createElement('div');
+  div.id = id;
+  div.style.position = 'absolute';
+  div.style.inset = '0';
+  return div;
+}
+
 function clearScreen(): void {
   startScreen?.unmount();
   battleScreen?.unmount();
@@ -124,8 +132,7 @@ function clearScreen(): void {
 
 function showStartScreen(): void {
   clearScreen();
-  const div = document.createElement('div');
-  div.id = 'start-screen-mount';
+  const div = createMountDiv('start-screen-mount');
   screenContainer.appendChild(div);
 
   startScreen = new StartScreen(div, (state) => {
@@ -250,8 +257,7 @@ function showBattleScreen(): void {
   if (!gameState) return;
   clearScreen();
 
-  const div = document.createElement('div');
-  div.id = 'battle-screen-mount';
+  const div = createMountDiv('battle-screen-mount');
   screenContainer.appendChild(div);
 
   battleScreen = new BattleScreen(div, gameState, (state) => {
@@ -296,8 +302,7 @@ function showRewardScreen(): void {
   }
 
   clearScreen();
-  const div = document.createElement('div');
-  div.id = 'reward-screen-mount';
+  const div = createMountDiv('reward-screen-mount');
   screenContainer.appendChild(div);
 
   rewardScreen = new RewardScreen(div, gameState, (state) => {
@@ -320,8 +325,7 @@ function showShopScreen(): void {
   }
 
   clearScreen();
-  const div = document.createElement('div');
-  div.id = 'shop-screen-mount';
+  const div = createMountDiv('shop-screen-mount');
   screenContainer.appendChild(div);
 
   shopScreen = new ShopScreen(div, gameState, (state) => {
@@ -355,8 +359,7 @@ function showGameOver(): void {
   if (!gameState) return;
   clearScreen();
 
-  const div = document.createElement('div');
-  div.id = 'gameover-screen-mount';
+  const div = createMountDiv('gameover-screen-mount');
   screenContainer.appendChild(div);
 
   gameOverScreen = new GameOverScreen(
@@ -384,8 +387,7 @@ function showGameOver(): void {
 
 function showLeaderboard(onBack: () => void, playerScore?: number): void {
   clearScreen();
-  const div = document.createElement('div');
-  div.id = 'lb-screen-mount';
+  const div = createMountDiv('lb-screen-mount');
   screenContainer.appendChild(div);
 
   leaderboardScreen = new LeaderboardScreen(div, onBack, playerScore);
