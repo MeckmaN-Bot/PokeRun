@@ -110,6 +110,8 @@ export interface Item {
   itemType: 'held' | 'consumable';
   effect: ItemEffect;
   icon: string;
+  /** If true, this item only appears in post-wave card rewards, never in the shop. */
+  rewardOnly?: boolean;
 }
 
 // ============================================================
@@ -181,6 +183,10 @@ export interface Pokemon {
   bst: number;
   abilities: string[];
   evolutionChainId: number;
+  /** Pokédex ID of the next evolution form, or null if fully evolved / evolves by other means. */
+  nextEvolutionId: number | null;
+  /** Minimum level at which this Pokémon evolves, or null if not level-based. */
+  evolutionLevel: number | null;
 }
 
 export interface BattlePokemon extends Pokemon {
@@ -199,6 +205,12 @@ export interface BattlePokemon extends Pokemon {
   hasAirBalloon: boolean;
   twoTurnMove: Move | null;
   sleepTurns: number;
+  /** Current XP towards the next level. */
+  xp: number;
+  /** XP required to reach the next level. */
+  xpToNextLevel: number;
+  /** True when a level-up triggered an evolution that hasn't happened yet. */
+  pendingEvolution: boolean;
 }
 
 // ============================================================

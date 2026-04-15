@@ -4,7 +4,7 @@ import type {
 import {
   calculateDamage, checkMoveHits, applyDamage, applyEndOfTurnStatus,
   applyEndOfTurnItems, aiSelectMove, determineTurnOrder, canMove,
-  toBattlePokemon, healPokemon,
+  toBattlePokemon, healPokemon, grantXP, xpFromKO,
 } from '../../systems/battle';
 import { getEffectivenessLabel } from '../../data/typeChart';
 import { renderBattleSprite, renderPokemonPortrait, renderTeamBar } from '../components/PokemonCard';
@@ -618,6 +618,42 @@ export class BattleScreen {
         chainPerk.effect.chainKOBonus = (chainPerk.effect.chainKOBonus ?? 0) + 0.01;
       }
 
+      // ── XP gain ──────────────────────────────────────────────
+      const faintedEnemy = bs.enemyTeam[bs.activeEnemyIndex];
+      const attackerIdx = bs.activePlayerIndex;
+      const attacker = bs.playerTeam[attackerIdx];
+      if (attacker && attacker.battleHp > 0) {
+        const xpGain = xpFromKO(faintedEnemy.level);
+        const { leveledUp, newLevel } = grantXP(attacker, xpGain, this.state.activePerks);
+        this.addLog(logEl, {
+          text: `${attacker.displayName} gained ${xpGain} XP!`,
+          type: 'system',
+        });
+        if (leveledUp) {
+          this.addLog(logEl, {
+            text: `⬆ ${attacker.displayName} grew to Lv.${newLevel}!`,
+            type: 'system',
+          });
+          this.updateHPDisplay(attacker, bs);
+          this.renderTeamPortraits();
+
+          // Check for level-based evolution
+          if (
+            !attacker.isFullyEvolved &&
+            attacker.nextEvolutionId !== null &&
+            attacker.evolutionLevel !== null &&
+            newLevel >= attacker.evolutionLevel
+          ) {
+            attacker.pendingEvolution = true;
+            this.addLog(logEl, {
+              text: `✨ ${attacker.displayName} is ready to evolve!`,
+              type: 'system',
+            });
+          }
+        }
+      }
+      // ─────────────────────────────────────────────────────────
+
       bs.activeEnemyIndex++;
       if (bs.activeEnemyIndex >= bs.enemyTeam.length ||
           bs.enemyTeam.slice(bs.activeEnemyIndex).every(p => p.battleHp <= 0)) {
@@ -671,6 +707,21 @@ export class BattleScreen {
 
     if (playerWon) {
       this.state.runStats.wavesCleared = this.state.wave;
+    }
+
+    // Sync XP, level, and pending-evolution flags from the battle copies back to
+    // the canonical team so the shop / reward screen reflects level-ups.
+    const bs = this.state.battleState!;
+    for (let i = 0; i < this.state.team.length; i++) {
+      const battleMon = bs.playerTeam[i];
+      if (!battleMon) continue;
+      this.state.team[i].level = battleMon.level;
+      this.state.team[i].xp = battleMon.xp;
+      this.state.team[i].xpToNextLevel = battleMon.xpToNextLevel;
+      this.state.team[i].pendingEvolution = battleMon.pendingEvolution;
+      this.state.team[i].battleHp = battleMon.battleHp;
+      this.state.team[i].maxBattleHp = battleMon.maxBattleHp;
+      this.state.team[i].effectiveStats = battleMon.effectiveStats;
     }
 
     this.onBattleEnd(this.state);
