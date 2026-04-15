@@ -3,8 +3,10 @@ import { STARTERS } from '../../data/enemyPools';
 import { fetchPokemon } from '../../api/pokeapi';
 import { getStaticSprite } from '../../api/sprites';
 import { renderTypeBadges } from '../components/TypeBadge';
-import { fadeIn } from '../animations';
+import { fadeIn, showToast } from '../animations';
 import { toBattlePokemon } from '../../systems/battle';
+
+const STORAGE_KEY = 'pokerun_player_name';
 
 interface StarterDisplay {
   id: number;
@@ -33,6 +35,8 @@ export class StartScreen {
   }
 
   async mount(): Promise<void> {
+    // Restore saved name before rendering so the input can be pre-filled
+    this.playerName = localStorage.getItem(STORAGE_KEY) ?? '';
     this.container.innerHTML = this.renderHTML();
     this.container.style.display = '';
     fadeIn(this.container);
@@ -92,6 +96,7 @@ export class StartScreen {
                 placeholder="Enter your name..."
                 maxlength="20"
                 autocomplete="off"
+                value="${this.playerName}"
               />
             </div>
 
@@ -114,7 +119,7 @@ export class StartScreen {
               </div>
             </div>
 
-            <button class="btn btn-primary btn-start" id="start-btn" disabled>
+            <button class="btn btn-primary btn-start" id="start-btn" ${this.playerName.length > 0 ? '' : 'disabled'}>
               START GAUNTLET
             </button>
           </div>
@@ -122,6 +127,23 @@ export class StartScreen {
           <div class="start-footer">
             <button class="btn btn-ghost" id="leaderboard-btn">🏆 LEADERBOARD</button>
             <button class="btn btn-ghost" id="howtoplay-btn">❓ HOW TO PLAY</button>
+            <button class="btn btn-ghost" id="settings-btn">⚙️ SETTINGS</button>
+          </div>
+        </div>
+
+        <!-- Settings Modal -->
+        <div class="modal-overlay hidden" id="settings-modal">
+          <div class="modal">
+            <button class="modal-close" id="close-settings">✕</button>
+            <h2 class="modal-title">⚙️ SETTINGS</h2>
+            <div style="padding: 0.5rem 0 1rem;">
+              <p style="color: var(--text-muted); margin-bottom: 1rem; font-size: 0.9rem;">
+                Saved trainer: <strong style="color: var(--text)">${this.playerName || '—'}</strong>
+              </p>
+              <button class="btn btn-secondary btn-sm" id="clear-name-btn">
+                🚪 Clear Saved Name
+              </button>
+            </div>
           </div>
         </div>
 
@@ -172,6 +194,10 @@ export class StartScreen {
     const howtoplayBtn = this.container.querySelector('#howtoplay-btn')!;
     const howtoplayModal = this.container.querySelector('#howtoplay-modal')!;
     const closeHowtoplay = this.container.querySelector('#close-howtoplay')!;
+    const settingsBtn = this.container.querySelector('#settings-btn')!;
+    const settingsModal = this.container.querySelector('#settings-modal')!;
+    const closeSettings = this.container.querySelector('#close-settings')!;
+    const clearNameBtn = this.container.querySelector('#clear-name-btn')!;
 
     nameInput.addEventListener('input', () => {
       this.playerName = nameInput.value.trim();
@@ -208,6 +234,21 @@ export class StartScreen {
     howtoplayModal.addEventListener('click', e => {
       if (e.target === howtoplayModal) howtoplayModal.classList.add('hidden');
     });
+
+    // Settings
+    settingsBtn.addEventListener('click', () => settingsModal.classList.remove('hidden'));
+    closeSettings.addEventListener('click', () => settingsModal.classList.add('hidden'));
+    settingsModal.addEventListener('click', e => {
+      if (e.target === settingsModal) settingsModal.classList.add('hidden');
+    });
+    clearNameBtn.addEventListener('click', () => {
+      localStorage.removeItem(STORAGE_KEY);
+      this.playerName = '';
+      nameInput.value = '';
+      startBtn.disabled = true;
+      settingsModal.classList.add('hidden');
+      showToast('Saved name cleared.', 'info');
+    });
   }
 
   private async handleStart(): Promise<void> {
@@ -215,6 +256,9 @@ export class StartScreen {
     const startBtn = this.container.querySelector<HTMLButtonElement>('#start-btn')!;
     startBtn.disabled = true;
     startBtn.textContent = 'Loading...';
+
+    // Persist the trainer name so it survives page reloads / run resets
+    localStorage.setItem(STORAGE_KEY, this.playerName);
 
     try {
       const pokemon = await fetchPokemon(starter.id, 5);

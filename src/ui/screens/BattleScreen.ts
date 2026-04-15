@@ -7,12 +7,16 @@ import {
   toBattlePokemon, healPokemon, grantXP, xpFromKO,
 } from '../../systems/battle';
 import { getEffectivenessLabel } from '../../data/typeChart';
-import { renderBattleSprite, renderPokemonPortrait, renderTeamBar } from '../components/PokemonCard';
+import {
+  renderBattleInfoCard, renderBattleSpriteImg,
+  renderPokemonPortrait, renderTeamBar,
+} from '../components/PokemonCard';
 import { renderBattleLog, appendLogEntry } from '../components/BattleLog';
 import { renderTypeBadges } from '../components/TypeBadge';
 import {
   fadeIn, attackAnimation, hitAnimation, faintAnimation, enterAnimation,
   showDamageNumber, animateHPBar, shakeElement, showToast, pulseElement,
+  showTypeAttackEffect,
 } from '../animations';
 
 export class BattleScreen {
@@ -62,32 +66,34 @@ export class BattleScreen {
 
         <!-- Battle Field -->
         <div class="battle-field">
-          <!-- Enemy Side -->
-          <div class="battle-side enemy-side">
-            <div id="enemy-team-bar"></div>
-            <div id="enemy-battle-area">
-              ${renderBattleSprite(enemyMon, 'enemy', 'enemy-active')}
+          <!-- Enemy: info LEFT, sprite RIGHT -->
+          <div class="battle-combatant enemy-combatant" id="enemy-combatant">
+            ${renderBattleInfoCard(enemyMon, 'enemy-active', 'enemy')}
+            <div class="battle-sprite-slot enemy-sprite-slot" id="enemy-battle-area">
+              ${renderBattleSpriteImg(enemyMon, 'enemy-active')}
             </div>
           </div>
 
-          <!-- Player Side -->
-          <div class="battle-side player-side">
-            <div id="player-battle-area">
-              ${renderBattleSprite(playerMon, 'player', 'player-active')}
+          <!-- Player: sprite LEFT, info RIGHT (row-reverse) -->
+          <div class="battle-combatant player-combatant" id="player-combatant">
+            ${renderBattleInfoCard(playerMon, 'player-active', 'player')}
+            <div class="battle-sprite-slot player-sprite-slot" id="player-battle-area">
+              ${renderBattleSpriteImg(playerMon, 'player-active')}
             </div>
-            <div id="player-team-bar"></div>
           </div>
         </div>
 
         <!-- Battle Controls -->
         <div class="battle-controls">
-          <!-- Move Buttons -->
-          <div class="move-grid" id="move-grid">
-            <!-- Rendered dynamically -->
-          </div>
+          <div class="battle-controls-main">
+            <!-- Move Buttons -->
+            <div class="move-grid" id="move-grid">
+              <!-- Rendered dynamically -->
+            </div>
 
-          <!-- Battle Log -->
-          ${renderBattleLog(bs.log)}
+            <!-- Battle Log -->
+            ${renderBattleLog(bs.log)}
+          </div>
 
           <!-- Control Bar -->
           <div class="battle-control-bar">
@@ -161,12 +167,13 @@ export class BattleScreen {
   private renderTeamPortraits(): void {
     const bs = this.state.battleState!;
 
-    const enemyBar = this.container.querySelector('#enemy-team-bar');
+    // Team bars live inside the info cards
+    const enemyBar = this.container.querySelector('#enemy-active-team-bar');
     if (enemyBar) {
       enemyBar.innerHTML = renderTeamBar(bs.enemyTeam, bs.activeEnemyIndex, 'enemy');
     }
 
-    const playerBar = this.container.querySelector('#player-team-bar');
+    const playerBar = this.container.querySelector('#player-active-team-bar');
     if (playerBar) {
       playerBar.innerHTML = renderTeamBar(bs.playerTeam, bs.activePlayerIndex, 'player');
     }
@@ -381,6 +388,10 @@ export class BattleScreen {
 
     // Update UI
     if (defenderSpriteEl) {
+      // Type-specific particle effect
+      if (attackerSpriteEl) {
+        await showTypeAttackEffect(move.type, attackerSpriteEl, defenderSpriteEl);
+      }
       await hitAnimation(defenderSpriteEl);
       const dmgType = result.isCritical ? 'critical'
         : result.effectiveness > 1 ? 'super_effective'
@@ -678,11 +689,21 @@ export class BattleScreen {
     const playerMon = bs.playerTeam[bs.activePlayerIndex];
     const enemyMon = bs.enemyTeam[bs.activeEnemyIndex];
 
-    const playerArea = this.container.querySelector('#player-battle-area');
-    const enemyArea = this.container.querySelector('#enemy-battle-area');
+    // Re-render the full combatant (info card + sprite slot) so the new
+    // Pokémon's data and sprite are both reflected.
+    const playerCombatant = this.container.querySelector<HTMLElement>('#player-combatant');
+    const enemyCombatant = this.container.querySelector<HTMLElement>('#enemy-combatant');
 
-    if (playerArea) playerArea.innerHTML = renderBattleSprite(playerMon, 'player', 'player-active');
-    if (enemyArea) enemyArea.innerHTML = renderBattleSprite(enemyMon, 'enemy', 'enemy-active');
+    if (playerCombatant) {
+      playerCombatant.innerHTML =
+        renderBattleInfoCard(playerMon, 'player-active', 'player') +
+        `<div class="battle-sprite-slot player-sprite-slot" id="player-battle-area">${renderBattleSpriteImg(playerMon, 'player-active')}</div>`;
+    }
+    if (enemyCombatant) {
+      enemyCombatant.innerHTML =
+        renderBattleInfoCard(enemyMon, 'enemy-active', 'enemy') +
+        `<div class="battle-sprite-slot enemy-sprite-slot" id="enemy-battle-area">${renderBattleSpriteImg(enemyMon, 'enemy-active')}</div>`;
+    }
 
     this.renderMoveButtons();
   }

@@ -150,11 +150,16 @@ export class ShopScreen {
   }
 
   private renderTeamList(): string {
+    const last = this.state.team.length - 1;
     return this.state.team.map((mon, i) => `
       <div
         class="shop-pokemon-row ${i === this.selectedTeamIndex ? 'selected' : ''} ${mon.battleHp <= 0 ? 'fainted' : ''}"
         data-team-index="${i}"
       >
+        <div class="reorder-btns">
+          <button class="btn-reorder ${i === 0 ? 'invisible' : ''}" data-action="move-up" data-team-index="${i}">▲</button>
+          <button class="btn-reorder ${i === last ? 'invisible' : ''}" data-action="move-down" data-team-index="${i}">▼</button>
+        </div>
         <img class="shop-pokemon-sprite" src="${mon.sprite}" alt="${mon.displayName}" />
         <div class="shop-pokemon-info">
           <div class="shop-pokemon-name">${mon.displayName} <span class="lv">Lv.${mon.level}</span><span class="xp-label" style="font-size:0.65rem;color:var(--text-muted);margin-left:4px">${mon.xp ?? 0}/${mon.xpToNextLevel ?? '?'} XP</span></div>
@@ -222,6 +227,26 @@ export class ShopScreen {
       if (target.dataset['action'] === 'use-item') {
         const invIdx = parseInt(target.dataset['invIndex'] ?? '0');
         this.openUseModal(invIdx);
+        return;
+      }
+
+      // Reorder team
+      if (target.dataset['action'] === 'move-up') {
+        const idx = parseInt(target.dataset['teamIndex'] ?? '0');
+        if (idx > 0) {
+          [this.state.team[idx - 1], this.state.team[idx]] =
+            [this.state.team[idx], this.state.team[idx - 1]];
+          this.refreshTeamList();
+        }
+        return;
+      }
+      if (target.dataset['action'] === 'move-down') {
+        const idx = parseInt(target.dataset['teamIndex'] ?? '0');
+        if (idx < this.state.team.length - 1) {
+          [this.state.team[idx], this.state.team[idx + 1]] =
+            [this.state.team[idx + 1], this.state.team[idx]];
+          this.refreshTeamList();
+        }
         return;
       }
 
