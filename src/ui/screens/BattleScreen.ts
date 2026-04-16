@@ -4,7 +4,7 @@ import type {
 import {
   calculateDamage, checkMoveHits, applyDamage, applyEndOfTurnStatus,
   applyEndOfTurnItems, aiSelectMove, determineTurnOrder, canMove,
-  toBattlePokemon, healPokemon, grantXP, xpFromKO,
+  toBattlePokemon, healPokemon, grantXP, xpFromKO, monHasItem,
 } from '../../systems/battle';
 import { getEffectivenessLabel } from '../../data/typeChart';
 import {
@@ -263,10 +263,11 @@ export class BattleScreen {
     const enemyMove = aiSelectMove(enemyMon, playerMon, []);
 
     // Set choice lock if applicable
-    if (playerMon.heldItem && ['choice_band', 'choice_specs', 'choice_scarf'].includes(playerMon.heldItem.id)) {
-      if (!playerMon.choiceLockedMove) {
-        playerMon.choiceLockedMove = playerMove;
-      }
+    if (
+      (monHasItem(playerMon, 'choice_band') || monHasItem(playerMon, 'choice_specs') || monHasItem(playerMon, 'choice_scarf')) &&
+      !playerMon.choiceLockedMove
+    ) {
+      playerMon.choiceLockedMove = playerMove;
     }
 
     // Determine turn order
@@ -417,9 +418,9 @@ export class BattleScreen {
     // Log damage messages
     dmgLog.forEach(e => this.addLog(logEl, e));
 
-    // Life Orb recoil
-    if (attacker.heldItem?.id === 'life_orb') {
-      const recoil = Math.max(1, Math.floor(attacker.maxBattleHp * 0.1));
+    // Life Orb recoil (v2: 8% current HP, no damage below 20% max HP)
+    if (monHasItem(attacker, 'life_orb') && attacker.battleHp / attacker.maxBattleHp >= 0.2) {
+      const recoil = Math.max(1, Math.floor(attacker.battleHp * 0.08));
       attacker.battleHp = Math.max(0, attacker.battleHp - recoil);
       const attackerHpFill = this.container.querySelector<HTMLElement>(
         `#${side}-active-hp-fill`
@@ -432,9 +433,9 @@ export class BattleScreen {
       }
     }
 
-    // Shell Bell heal
-    if (attacker.heldItem?.id === 'shell_bell' && actualDamage > 0) {
-      const heal = Math.max(1, Math.floor(actualDamage / 8));
+    // Shell Bell heal (v2: 1/6 dealt, min 5 HP)
+    if (monHasItem(attacker, 'shell_bell') && actualDamage > 0) {
+      const heal = Math.max(5, Math.floor(actualDamage / 6));
       healPokemon(attacker, heal);
       const attackerHpFill = this.container.querySelector<HTMLElement>(`#${side}-active-hp-fill`);
       const attackerHpLabel = this.container.querySelector<HTMLElement>(`#${side}-active-hp-label`);
@@ -444,11 +445,15 @@ export class BattleScreen {
       if (attackerSpriteEl) showDamageNumber(attackerSpriteEl, heal, 'heal');
     }
 
-    // Rocky Helmet
-    if (defender.heldItem?.id === 'rocky_helmet' && move.isContact && attacker.battleHp > 0) {
+    // Rocky Helmet (v2: recoil + 15% paralyze chance on contact)
+    if (monHasItem(defender, 'rocky_helmet') && move.isContact && attacker.battleHp > 0) {
       const rfDamage = Math.max(1, Math.floor(defender.maxBattleHp / 6));
       attacker.battleHp = Math.max(0, attacker.battleHp - rfDamage);
       this.addLog(logEl, { text: `${attacker.displayName} was hurt by ${defender.displayName}'s Rocky Helmet!`, type: 'damage' });
+      if (!attacker.battleStatus && Math.random() < 0.15) {
+        attacker.battleStatus = 'paralysis';
+        this.addLog(logEl, { text: `${attacker.displayName} was paralyzed by the Rocky Helmet!`, type: 'status' });
+      }
     }
 
     // Move effects (status infliction)
@@ -556,6 +561,22 @@ export class BattleScreen {
       } else if (heal < 0) {
         mon.battleHp = Math.max(0, mon.battleHp + heal); // heal is negative
         this.updateHPDisplay(mon, bs);
+      }
+
+      // Leech Seed: drain 8% enemy HP per turn
+      if (mon.leechSeedActive && mon.battleHp > 0) {
+        const isPlayer = bs.playerTeam.includes(mon);
+        const opponent = isPlayer
+          ? bs.enemyTeam[bs.activeEnemyIndex]
+          : bs.playerTeam[bs.activePlayerIndex];
+        if (opponent && opponent.battleHp > 0) {
+          const drain = Math.max(1, Math.floor(opponent.maxBattleHp * 0.08));
+          opponent.battleHp = Math.max(0, opponent.battleHp - drain);
+          healPokemon(mon, drain);
+          this.updateHPDisplay(mon, bs);
+          this.updateHPDisplay(opponent, bs);
+          this.addLog(logEl, { text: `${opponent.displayName} was drained by Leech Seed! (−${drain} HP)`, type: 'damage' });
+        }
       }
 
       // Grassy Carpet perk

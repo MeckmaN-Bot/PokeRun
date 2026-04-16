@@ -9,7 +9,7 @@ import { prefetchStarters, fetchPokemon, fetchPokemonBatch } from './api/pokeapi
 import { getWaveConfig, getEnemyLevel, selectEnemyIds, getWaveCoins } from './systems/scaling';
 import { generateRewards } from './systems/rewards';
 import { generateShop } from './systems/shop';
-import { toBattlePokemon } from './systems/battle';
+import { toBattlePokemon, monHasItem } from './systems/battle';
 
 import { StartScreen } from './ui/screens/StartScreen';
 import { BattleScreen } from './ui/screens/BattleScreen';
@@ -269,8 +269,8 @@ function showBattleScreen(): void {
       const config = getWaveConfig(state.wave);
       const coinEarned = getWaveCoins(state.wave, state.activePerks);
 
-      // Amulet coin bonus from held items
-      const amuletBonus = state.team.filter(m => m.heldItem?.id === 'amulet_coin').length * 0.2;
+      // Amulet coin bonus from held items (check all slots)
+      const amuletBonus = state.team.filter(m => monHasItem(m, 'amulet_coin')).length * 0.2;
       const totalCoins = Math.floor(coinEarned * (1 + amuletBonus));
 
       const oldCoins = state.coins;

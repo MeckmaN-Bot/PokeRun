@@ -5,14 +5,14 @@ export const ALL_ITEMS: Item[] = [
   {
     id: 'oran_berry', name: 'Oran Berry', rarity: 'common', itemType: 'held',
     icon: '🫐',
-    description: 'Restores 10 HP when the holder\'s HP drops below 50%.',
-    effect: { trigger: 'on_hit_taken', hpThreshold: 0.5, healAmount: 10 },
+    description: 'Restores 15% max HP when HP drops below 40%. Recharges after each wave.',
+    effect: { trigger: 'on_hit_taken', hpThreshold: 0.4, healPercent: 0.15, rechargesEveryWave: true },
   },
   {
     id: 'sitrus_berry', name: 'Sitrus Berry', rarity: 'common', itemType: 'held',
     icon: '🍋',
-    description: 'Restores 25% max HP when the holder\'s HP drops below 50%.',
-    effect: { trigger: 'on_hit_taken', hpThreshold: 0.5, healPercent: 0.25 },
+    description: 'Restores 25% max HP when HP drops below 50%. Recharges every 3 waves.',
+    effect: { trigger: 'on_hit_taken', hpThreshold: 0.5, healPercent: 0.25, rechargesAfterWaves: 3 },
   },
   {
     id: 'pecha_berry', name: 'Pecha Berry', rarity: 'common', itemType: 'held',
@@ -78,8 +78,8 @@ export const ALL_ITEMS: Item[] = [
   {
     id: 'life_orb', name: 'Life Orb', rarity: 'rare', itemType: 'held',
     icon: '🔮',
-    description: '+30% damage on all moves. Costs 10% of max HP per attack.',
-    effect: { trigger: 'on_attack', damageMultiplier: 1.3, costHpPercent: 0.1 },
+    description: '+30% damage on all moves. Costs 8% of current HP per attack. No self-damage below 20% HP.',
+    effect: { trigger: 'on_attack', damageMultiplier: 1.3, currentHpCostPercent: 0.08, noSelfDamageBelowHpPct: 0.2 },
   },
   {
     id: 'leftovers', name: 'Leftovers', rarity: 'rare', itemType: 'held',
@@ -90,14 +90,14 @@ export const ALL_ITEMS: Item[] = [
   {
     id: 'shell_bell', name: 'Shell Bell', rarity: 'rare', itemType: 'held',
     icon: '🐚',
-    description: 'Restores HP equal to 1/8 of damage dealt.',
-    effect: { trigger: 'on_attack', healAmount: 0.125 },
+    description: 'Restores HP equal to 1/6 of damage dealt (min 5 HP).',
+    effect: { trigger: 'on_attack', healAmount: 0.1667, minHealAmount: 5 },
   },
   {
     id: 'rocky_helmet', name: 'Rocky Helmet', rarity: 'rare', itemType: 'held',
     icon: '⛑️',
-    description: 'Deals 1/6 of max HP damage back to contact attackers.',
-    effect: { trigger: 'on_hit_taken', damageReflectPercent: 0.1667 },
+    description: 'Deals 1/6 max HP to contact attackers. 15% chance to paralyze them.',
+    effect: { trigger: 'on_hit_taken', damageReflectPercent: 0.1667, paralysisOnContact: 0.15 },
   },
   {
     id: 'eviolite', name: 'Eviolite', rarity: 'rare', itemType: 'held',
@@ -114,8 +114,8 @@ export const ALL_ITEMS: Item[] = [
   {
     id: 'focus_sash', name: 'Focus Sash', rarity: 'rare', itemType: 'held',
     icon: '🎀',
-    description: 'Survive one hit from full HP that would KO (1 use per battle).',
-    effect: { trigger: 'on_hit_taken', surviveKO: true },
+    description: 'Survive one KO-hit from full HP with 1 HP. Destroyed at end of wave.',
+    effect: { trigger: 'on_hit_taken', surviveKO: true, waveEndDestroy: true },
   },
   {
     id: 'air_balloon', name: 'Air Balloon', rarity: 'rare', itemType: 'held',
@@ -294,6 +294,45 @@ export const ALL_ITEMS: Item[] = [
     description: 'Doubles Atk and Sp. Atk (Pikachu only).',
     effect: { trigger: 'passive', statBoost: { attack: 2, spAtk: 2 } },
   },
+  // ===================== RARE HELD ITEMS — NEW =====================
+  {
+    id: 'poke_bandage', name: 'Poké Bandage', rarity: 'rare', itemType: 'held',
+    icon: '🩹',
+    description: 'Restores 15% max HP after each completed wave. Only guaranteed passive healing.',
+    effect: { trigger: 'passive', waveRegen: 0.15 },
+  },
+  {
+    id: 'leech_seed', name: 'Leech Seed', rarity: 'rare', itemType: 'held',
+    icon: '🌱',
+    description: 'Drains 8% of the enemy\'s max HP each turn; heals the holder by the same amount.',
+    effect: { trigger: 'end_of_turn', drainPercent: 0.08 },
+  },
+  {
+    id: 'binding_band', name: 'Binding Band', rarity: 'rare', itemType: 'held',
+    icon: '🔗',
+    description: 'Trapping moves (Wrap, Bind) deal 1/6 of target HP per turn instead of 1/8.',
+    effect: { trigger: 'passive' },
+  },
+  // ===================== EPIC HELD ITEMS — NEW =====================
+  {
+    id: 'flame_orb', name: 'Flame Orb', rarity: 'epic', itemType: 'held',
+    icon: '🔥',
+    description: 'Burns the holder at battle start. Activates Guts: +50% Atk while statused.',
+    effect: { trigger: 'passive', selfInflictStatus: 'burn', gutsEffect: true },
+  },
+  {
+    id: 'toxic_orb', name: 'Toxic Orb', rarity: 'epic', itemType: 'held',
+    icon: '💜',
+    description: 'Badly poisons the holder at battle start. Activates Poison Heal: +12% max HP per turn instead of damage.',
+    effect: { trigger: 'end_of_turn', selfInflictStatus: 'badPoison', poisonHealEffect: true },
+  },
+  // ===================== LEGENDARY HELD ITEMS — NEW =====================
+  {
+    id: 'revive_heart', name: 'Revive Heart', rarity: 'legendary', itemType: 'held',
+    icon: '💗',
+    description: 'Once per run: automatically revives the holder at 30% HP when KO\'d. Destroyed after use.',
+    effect: { trigger: 'on_hit_taken', reviveOncePercent: 0.3 },
+  },
   // ===================== COMMON CONSUMABLES =====================
   {
     id: 'potion', name: 'Potion', rarity: 'common', itemType: 'consumable',
@@ -386,6 +425,24 @@ export const ALL_ITEMS: Item[] = [
     description: 'Skip the current wave (no reward, no coins).',
     effect: { trigger: 'manual' },
   },
+  {
+    id: 'pokemon_food', name: 'Pokémon Food', rarity: 'common', itemType: 'consumable',
+    icon: '🍖',
+    description: 'Restores 30 HP to one Pokémon.',
+    effect: { trigger: 'manual', healAmount: 30 },
+  },
+  {
+    id: 'ether', name: 'Ether', rarity: 'rare', itemType: 'consumable',
+    icon: '🔵',
+    description: 'Fully restores the PP of one chosen move.',
+    effect: { trigger: 'manual' },
+  },
+  {
+    id: 'reroll_token', name: 'Reroll Token', rarity: 'rare', itemType: 'consumable',
+    icon: '🎲',
+    description: 'Gives one free shop reroll (no coin cost).',
+    effect: { trigger: 'manual' },
+  },
   // ===================== EPIC CONSUMABLES =====================
   {
     id: 'full_restore', name: 'Full Restore', rarity: 'epic', itemType: 'consumable',
@@ -413,7 +470,40 @@ export const ALL_ITEMS: Item[] = [
     effect: { trigger: 'manual', coinMultiplier: 150 },
     rewardOnly: true,
   },
-  // ===================== NEW ITEMS =====================
+  {
+    id: 'protein', name: 'Protein', rarity: 'epic', itemType: 'consumable',
+    icon: '💪',
+    description: 'Permanently grants +10% Attack to one Pokémon.',
+    effect: { trigger: 'manual', permanentStatBoost: { attack: 0.1 } },
+  },
+  {
+    id: 'iron', name: 'Iron', rarity: 'epic', itemType: 'consumable',
+    icon: '🛡️',
+    description: 'Permanently grants +10% Defense to one Pokémon.',
+    effect: { trigger: 'manual', permanentStatBoost: { defense: 0.1 } },
+  },
+  {
+    id: 'carbos', name: 'Carbos', rarity: 'epic', itemType: 'consumable',
+    icon: '💨',
+    description: 'Permanently grants +10% Speed to one Pokémon.',
+    effect: { trigger: 'manual', permanentStatBoost: { speed: 0.1 } },
+  },
+  // ===================== REWARD-ONLY NEW ITEMS =====================
+  {
+    id: 'item_pouch', name: 'Item Pouch', rarity: 'epic', itemType: 'consumable',
+    icon: '👜',
+    description: 'Instantly unlocks Slot 2 for a Pokémon of your choice, regardless of level. (Reward only)',
+    effect: { trigger: 'manual' },
+    rewardOnly: true,
+  },
+  {
+    id: 'ace_trainers_gift', name: "Ace Trainer's Gift", rarity: 'legendary', itemType: 'consumable',
+    icon: '🎖️',
+    description: 'The Pokémon with the highest level gains 2× XP for the next 5 waves. (Reward only)',
+    effect: { trigger: 'manual' },
+    rewardOnly: true,
+  },
+  // ===================== EXISTING REWARD-ONLY ITEMS =====================
   {
     id: 'evolution_stone', name: 'Evolution Stone', rarity: 'epic', itemType: 'consumable',
     icon: '🪨',

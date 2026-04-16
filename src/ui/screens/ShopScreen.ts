@@ -1,10 +1,11 @@
-import type { GameState, BattlePokemon, Item, InventoryItem } from '../../types';
+import type { GameState, BattlePokemon, Item } from '../../types';
+import { SLOT_UNLOCK_COSTS } from '../../types';
 import { renderItemCard } from '../components/ItemCard';
 import { renderTypeBadges } from '../components/TypeBadge';
 import { renderHPBar } from '../components/HPBar';
 import { purchaseShopItem, rerollShop, REROLL_COST, canAfford } from '../../systems/shop';
 import { fadeIn, animateCoinGain, showToast } from '../animations';
-import { toBattlePokemon, xpForLevel } from '../../systems/battle';
+import { toBattlePokemon, xpForLevel, monHasItem } from '../../systems/battle';
 import { fetchPokemon } from '../../api/pokeapi';
 
 export class ShopScreen {
@@ -15,11 +16,7 @@ export class ShopScreen {
   private selectedInventoryIndex = -1;
   private assigningItem: Item | null = null;
 
-  constructor(
-    container: HTMLElement,
-    state: GameState,
-    onShopDone: (state: GameState) => void
-  ) {
+  constructor(container: HTMLElement, state: GameState, onShopDone: (state: GameState) => void) {
     this.container = container;
     this.state = state;
     this.onShopDone = onShopDone;
@@ -30,35 +27,30 @@ export class ShopScreen {
     this.container.style.display = '';
     fadeIn(this.container);
     this.attachEvents();
-    // Process any level-up evolutions that were queued during battle
     this.processPendingEvolutions();
   }
 
-  /** Auto-evolve any team member that levelled up to their evolution threshold. */
   private async processPendingEvolutions(): Promise<void> {
     for (let i = 0; i < this.state.team.length; i++) {
       const mon = this.state.team[i];
       if (!mon.pendingEvolution || !mon.nextEvolutionId) continue;
-
-      showToast(`${mon.displayName} is evolving…`, 'info');
+      showToast(`${mon.displayName} entwickelt sich…`, 'info');
       try {
         const evolved = await fetchPokemon(mon.nextEvolutionId, mon.level);
         const evolvedBattle = toBattlePokemon(
-          { ...evolved, heldItem: mon.heldItem },
+          { ...evolved, itemSlots: mon.itemSlots, heldItem: mon.heldItem },
           this.state.activePerks,
         );
-        // Preserve battle-relevant state
         evolvedBattle.battleHp = Math.min(evolvedBattle.maxBattleHp, mon.battleHp);
         evolvedBattle.battleStatus = mon.battleStatus;
         evolvedBattle.xp = mon.xp;
         evolvedBattle.xpToNextLevel = xpForLevel(evolved.level);
         evolvedBattle.pendingEvolution = false;
-
         this.state.team[i] = evolvedBattle;
-        showToast(`${mon.displayName} evolved into ${evolved.displayName}! ✨`, 'success');
+        showToast(`${mon.displayName} hat sich zu ${evolved.displayName} entwickelt! ✨`, 'success');
       } catch {
         mon.pendingEvolution = false;
-        showToast(`Evolution failed for ${mon.displayName}.`, 'error');
+        showToast(`Entwicklung von ${mon.displayName} fehlgeschlagen.`, 'error');
       }
     }
     this.refreshTeamList();
@@ -76,7 +68,6 @@ export class ShopScreen {
         </div>
 
         <div class="shop-layout">
-          <!-- Left: Shop Items -->
           <div class="shop-items-panel">
             <div class="shop-panel-header">
               <h3>SHOP</h3>
@@ -89,21 +80,25 @@ export class ShopScreen {
             </div>
           </div>
 
-          <!-- Right: Team + Inventory -->
           <div class="shop-right-panel">
-            <!-- Team -->
             <div class="shop-team-panel">
-              <h3 class="shop-panel-title">YOUR TEAM</h3>
+              <h3 class="shop-panel-title">DEIN TEAM</h3>
               <div class="shop-team-list" id="shop-team-list">
                 ${this.renderTeamList()}
               </div>
             </div>
 
-            <!-- Inventory -->
             <div class="shop-inventory-panel">
-              <h3 class="shop-panel-title">INVENTORY</h3>
+              <h3 class="shop-panel-title">INVENTAR</h3>
               <div class="shop-inventory-list" id="shop-inventory">
                 ${this.renderInventory()}
+              </div>
+            </div>
+
+            <div class="shop-team-rewards-panel">
+              <h3 class="shop-panel-title">TEAM REWARDS</h3>
+              <div id="shop-team-rewards">
+                ${this.renderTeamRewards()}
               </div>
             </div>
           </div>
@@ -111,24 +106,22 @@ export class ShopScreen {
 
         <div class="shop-footer">
           <button class="btn btn-primary btn-lg" id="continue-btn">
-            ➡ Continue to Wave ${this.state.wave + 1}
+            ➡ Weiter zu Wave ${this.state.wave + 1}
           </button>
         </div>
 
-        <!-- Item Assign Modal -->
         <div class="modal-overlay hidden" id="assign-modal">
           <div class="modal">
             <button class="modal-close" id="close-assign">✕</button>
-            <h3 class="modal-title" id="assign-modal-title">Assign to which Pokémon?</h3>
+            <h3 class="modal-title" id="assign-modal-title">Item zuweisen</h3>
             <div class="assign-team-list" id="assign-team-list"></div>
           </div>
         </div>
 
-        <!-- Use Consumable Modal -->
         <div class="modal-overlay hidden" id="use-modal">
           <div class="modal">
             <button class="modal-close" id="close-use">✕</button>
-            <h3 class="modal-title" id="use-modal-title">Use on which Pokémon?</h3>
+            <h3 class="modal-title" id="use-modal-title">Verwenden auf:</h3>
             <div class="use-team-list" id="use-team-list"></div>
           </div>
         </div>
@@ -138,24 +131,31 @@ export class ShopScreen {
 
   private renderShopItems(): string {
     if (this.state.shopItems.length === 0) {
-      return '<div class="shop-empty">No items available</div>';
+      return '<div class="shop-empty">Keine Items verfügbar</div>';
     }
     return this.state.shopItems.map((si, i) =>
-      renderItemCard(si.item, {
-        showPrice: si.price,
-        sold: si.sold,
-        onClick: 'buy-item',
-      }).replace('data-item-id=', `data-shop-index="${i}" data-item-id=`)
+      renderItemCard(si.item, { showPrice: si.price, sold: si.sold, onClick: 'buy-item' })
+        .replace('data-item-id=', `data-shop-index="${i}" data-item-id=`)
     ).join('');
+  }
+
+  private renderItemSlots(mon: BattlePokemon): string {
+    const slots = mon.itemSlots ?? [];
+    return `<div class="item-slots-row">${slots.map((slot, si) => {
+      if (slot.unlocked && slot.item) {
+        return `<div class="item-slot filled" title="${slot.item.name}: ${slot.item.description}">${slot.item.icon}</div>`;
+      } else if (slot.unlocked) {
+        return `<div class="item-slot empty" title="Slot ${si + 1} (leer)">·</div>`;
+      } else {
+        return `<div class="item-slot locked" title="Freischalten: ${SLOT_UNLOCK_COSTS[si]}🪙">🔒</div>`;
+      }
+    }).join('')}</div>`;
   }
 
   private renderTeamList(): string {
     const last = this.state.team.length - 1;
     return this.state.team.map((mon, i) => `
-      <div
-        class="shop-pokemon-row ${i === this.selectedTeamIndex ? 'selected' : ''} ${mon.battleHp <= 0 ? 'fainted' : ''}"
-        data-team-index="${i}"
-      >
+      <div class="shop-pokemon-row ${i === this.selectedTeamIndex ? 'selected' : ''} ${mon.battleHp <= 0 ? 'fainted' : ''}" data-team-index="${i}">
         <div class="reorder-btns">
           <button class="btn-reorder ${i === 0 ? 'invisible' : ''}" data-action="move-up" data-team-index="${i}">▲</button>
           <button class="btn-reorder ${i === last ? 'invisible' : ''}" data-action="move-down" data-team-index="${i}">▼</button>
@@ -166,14 +166,7 @@ export class ShopScreen {
           ${renderTypeBadges(mon.types)}
           ${renderHPBar(mon.battleHp, mon.maxBattleHp, `shop-hp-${i}`, true)}
           ${mon.battleStatus ? `<span class="status-badge status-${mon.battleStatus}">${mon.battleStatus.toUpperCase()}</span>` : ''}
-        </div>
-        <div class="shop-pokemon-item">
-          ${mon.heldItem
-            ? `<div class="held-item-slot has-item" title="${mon.heldItem.name} — ${mon.heldItem.description}">
-                 ${mon.heldItem.icon}
-                 <span class="held-item-name">${mon.heldItem.name}</span>
-               </div>`
-            : `<div class="held-item-slot empty">No Item</div>`}
+          ${this.renderItemSlots(mon)}
         </div>
       </div>
     `).join('');
@@ -181,34 +174,74 @@ export class ShopScreen {
 
   private renderInventory(): string {
     if (this.state.inventory.length === 0) {
-      return '<div class="inventory-empty">No items in inventory</div>';
+      return '<div class="inventory-empty">Keine Items im Inventar</div>';
     }
     return this.state.inventory.map((inv, i) => `
-      <div
-        class="inventory-row ${i === this.selectedInventoryIndex ? 'selected' : ''}"
-        data-inv-index="${i}"
-      >
+      <div class="inventory-row ${i === this.selectedInventoryIndex ? 'selected' : ''}" data-inv-index="${i}">
         <span class="inv-icon">${inv.item.icon}</span>
         <div class="inv-info">
           <span class="inv-name">${inv.item.name}</span>
-          <span class="inv-type">${inv.item.itemType === 'held' ? 'Held' : 'Consumable'}</span>
+          <span class="inv-type">${inv.item.itemType === 'held' ? 'Gehalten' : 'Verbrauchbar'}</span>
         </div>
         <span class="inv-qty">×${inv.quantity}</span>
         <div class="inv-actions">
           ${inv.item.itemType === 'held'
-            ? `<button class="btn btn-sm btn-secondary" data-action="assign-item" data-inv-index="${i}">Assign</button>`
-            : `<button class="btn btn-sm btn-secondary" data-action="use-item" data-inv-index="${i}">Use</button>`}
+            ? `<button class="btn btn-sm btn-secondary" data-action="assign-item" data-inv-index="${i}">Zuweisen</button>`
+            : `<button class="btn btn-sm btn-secondary" data-action="use-item" data-inv-index="${i}">Verwenden</button>`}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  private renderTeamRewards(): string {
+    if (!this.state.teamRewards || this.state.teamRewards.length === 0) {
+      return '<div class="team-rewards-empty">Keine aktiven Team-Rewards</div>';
+    }
+    return this.state.teamRewards.map(tr => `
+      <div class="team-reward-row">
+        <span class="inv-icon">${tr.item.icon}</span>
+        <div class="inv-info">
+          <span class="inv-name">${tr.item.name}</span>
+          <span class="inv-type">${tr.item.description}</span>
         </div>
       </div>
     `).join('');
   }
 
   private attachEvents(): void {
-    // Buy item
     this.container.addEventListener('click', async (e) => {
       const target = e.target as HTMLElement;
 
-      // Buy from shop
+      // Slot freischalten
+      const unlockBtn = target.closest('[data-unlock-slot]') as HTMLElement | null;
+      if (unlockBtn) {
+        const si = parseInt(unlockBtn.dataset['unlockSlot'] ?? '0');
+        const pi = parseInt(unlockBtn.dataset['assignPokemon'] ?? '0');
+        const cost = SLOT_UNLOCK_COSTS[si];
+        if (this.state.coins < cost) { showToast('Nicht genug Coins!', 'error'); return; }
+        const mon = this.state.team[pi];
+        if (mon?.itemSlots[si]) {
+          const oldCoins = this.state.coins;
+          this.state.coins -= cost;
+          mon.itemSlots[si].unlocked = true;
+          const coinEl = this.container.querySelector<HTMLElement>('#shop-coin-display');
+          if (coinEl) animateCoinGain(coinEl, oldCoins, this.state.coins);
+          showToast(`Slot ${si + 1} für ${mon.displayName} freigeschaltet!`, 'success');
+          this.openAssignModal(this.selectedInventoryIndex);
+        }
+        return;
+      }
+
+      // Item in bestimmten Slot zuweisen
+      const assignSlotBtn = target.closest('[data-assign-slot]') as HTMLElement | null;
+      if (assignSlotBtn) {
+        const si = parseInt(assignSlotBtn.dataset['assignSlot'] ?? '0');
+        const pi = parseInt(assignSlotBtn.dataset['assignPokemon'] ?? '0');
+        this.assignHeldItemToSlot(pi, si);
+        return;
+      }
+
+      // Shop kaufen
       const shopCard = target.closest('[data-shop-index]') as HTMLElement | null;
       if (shopCard && !target.dataset['action']) {
         const idx = parseInt(shopCard.dataset['shopIndex'] ?? '0');
@@ -216,61 +249,54 @@ export class ShopScreen {
         return;
       }
 
-      // Assign held item from inventory
       if (target.dataset['action'] === 'assign-item') {
         const invIdx = parseInt(target.dataset['invIndex'] ?? '0');
         this.openAssignModal(invIdx);
         return;
       }
 
-      // Use consumable from inventory
       if (target.dataset['action'] === 'use-item') {
         const invIdx = parseInt(target.dataset['invIndex'] ?? '0');
         this.openUseModal(invIdx);
         return;
       }
 
-      // Reorder team
       if (target.dataset['action'] === 'move-up') {
         const idx = parseInt(target.dataset['teamIndex'] ?? '0');
         if (idx > 0) {
-          [this.state.team[idx - 1], this.state.team[idx]] =
-            [this.state.team[idx], this.state.team[idx - 1]];
-          this.refreshTeamList();
-        }
-        return;
-      }
-      if (target.dataset['action'] === 'move-down') {
-        const idx = parseInt(target.dataset['teamIndex'] ?? '0');
-        if (idx < this.state.team.length - 1) {
-          [this.state.team[idx], this.state.team[idx + 1]] =
-            [this.state.team[idx + 1], this.state.team[idx]];
+          [this.state.team[idx - 1], this.state.team[idx]] = [this.state.team[idx], this.state.team[idx - 1]];
           this.refreshTeamList();
         }
         return;
       }
 
-      // Select team member
+      if (target.dataset['action'] === 'move-down') {
+        const idx = parseInt(target.dataset['teamIndex'] ?? '0');
+        if (idx < this.state.team.length - 1) {
+          [this.state.team[idx], this.state.team[idx + 1]] = [this.state.team[idx + 1], this.state.team[idx]];
+          this.refreshTeamList();
+        }
+        return;
+      }
+
       const teamRow = target.closest('[data-team-index]') as HTMLElement | null;
-      if (teamRow) {
+      if (teamRow && !target.dataset['action']) {
         this.selectedTeamIndex = parseInt(teamRow.dataset['teamIndex'] ?? '0');
         this.refreshTeamList();
         return;
       }
 
-      // Reroll
       if (target.id === 'reroll-btn' || target.closest('#reroll-btn')) {
         this.rerollShop();
         return;
       }
 
-      // Continue
       if (target.id === 'continue-btn' || target.closest('#continue-btn')) {
+        this.performWaveEndCleanup();
         this.onShopDone(this.state);
         return;
       }
 
-      // Close modals
       if (target.id === 'close-assign' || target.id === 'assign-modal') {
         this.container.querySelector('#assign-modal')?.classList.add('hidden');
         this.assigningItem = null;
@@ -281,15 +307,6 @@ export class ShopScreen {
         return;
       }
 
-      // Assign to team member
-      const assignRow = target.closest('[data-assign-index]') as HTMLElement | null;
-      if (assignRow) {
-        const teamIdx = parseInt(assignRow.dataset['assignIndex'] ?? '0');
-        this.assignHeldItem(teamIdx);
-        return;
-      }
-
-      // Use on team member
       const useRow = target.closest('[data-use-index]') as HTMLElement | null;
       if (useRow) {
         const teamIdx = parseInt(useRow.dataset['useIndex'] ?? '0');
@@ -302,12 +319,10 @@ export class ShopScreen {
   private buyItem(shopIndex: number): void {
     const shopItem = this.state.shopItems[shopIndex];
     if (!shopItem || shopItem.sold) return;
-
     if (!canAfford(shopItem.price, this.state.coins)) {
-      showToast('Not enough coins!', 'error');
+      showToast('Nicht genug Coins!', 'error');
       return;
     }
-
     const { success, newCoins } = purchaseShopItem(shopItem, this.state.coins);
     if (!success) return;
 
@@ -315,38 +330,31 @@ export class ShopScreen {
     this.state.coins = newCoins;
     shopItem.sold = true;
 
-    // Add to inventory
     const existing = this.state.inventory.find(i => i.item.id === shopItem.item.id);
-    if (existing) {
-      existing.quantity++;
-    } else {
-      this.state.inventory.push({ item: shopItem.item, quantity: 1 });
-    }
+    if (existing) existing.quantity++;
+    else this.state.inventory.push({ item: shopItem.item, quantity: 1 });
     this.state.runStats.itemsCollected++;
 
-    // Animate coin count
     const coinEl = this.container.querySelector<HTMLElement>('#shop-coin-display');
     if (coinEl) animateCoinGain(coinEl, oldCoins, newCoins);
 
-    showToast(`Bought ${shopItem.item.name}!`, 'success');
+    showToast(`${shopItem.item.name} gekauft!`, 'success');
     this.refreshShop();
     this.refreshInventory();
   }
 
   private rerollShop(): void {
     if (!canAfford(REROLL_COST, this.state.coins)) {
-      showToast('Not enough coins to reroll!', 'error');
+      showToast('Nicht genug Coins zum Rerolln!', 'error');
       return;
     }
     const oldCoins = this.state.coins;
     this.state.coins -= REROLL_COST;
     this.state.shopItems = rerollShop(this.state.wave);
-
     const coinEl = this.container.querySelector<HTMLElement>('#shop-coin-display');
     if (coinEl) animateCoinGain(coinEl, oldCoins, this.state.coins);
-
     this.refreshShop();
-    showToast('Shop rerolled!', 'info');
+    showToast('Shop neu gewürfelt!', 'info');
   }
 
   private openAssignModal(invIdx: number): void {
@@ -359,63 +367,70 @@ export class ShopScreen {
     const titleEl = modal.querySelector('#assign-modal-title')!;
     const listEl = modal.querySelector('#assign-team-list')!;
 
-    titleEl.textContent = `Assign "${inv.item.name}" to:`;
+    titleEl.textContent = `"${inv.item.name}" zuweisen:`;
     listEl.innerHTML = this.state.team.map((mon, i) => `
-      <div class="assign-row" data-assign-index="${i}">
+      <div class="assign-row">
         <img src="${mon.sprite}" class="assign-sprite" alt="${mon.displayName}" />
         <div class="assign-info">
           <span class="assign-name">${mon.displayName}</span>
-          <span class="assign-current-item">${mon.heldItem ? `Currently: ${mon.heldItem.name}` : 'No item'}</span>
+          <div class="assign-slots">
+            ${(mon.itemSlots ?? []).map((slot, si) => {
+              if (!slot.unlocked) {
+                return `<button class="item-slot locked btn-sm" data-unlock-slot="${si}" data-assign-pokemon="${i}" title="Freischalten: ${SLOT_UNLOCK_COSTS[si]}🪙">🔒 ${SLOT_UNLOCK_COSTS[si]}🪙</button>`;
+              } else if (slot.item) {
+                return `<button class="item-slot filled btn-sm" data-assign-slot="${si}" data-assign-pokemon="${i}" title="${slot.item.name} — ersetzen">${slot.item.icon}</button>`;
+              } else {
+                return `<button class="item-slot empty btn-sm" data-assign-slot="${si}" data-assign-pokemon="${i}" title="Hier zuweisen">+</button>`;
+              }
+            }).join('')}
+          </div>
         </div>
-        <button class="btn btn-sm btn-primary">Assign</button>
       </div>
     `).join('');
 
     modal.classList.remove('hidden');
   }
 
-  private assignHeldItem(teamIdx: number): void {
+  private assignHeldItemToSlot(teamIdx: number, slotIdx: number): void {
     if (!this.assigningItem) return;
     const mon = this.state.team[teamIdx];
-    if (!mon) return;
+    if (!mon || !mon.itemSlots[slotIdx]?.unlocked) return;
 
-    // If mon already has item, put it back in inventory
-    if (mon.heldItem) {
-      const existing = this.state.inventory.find(i => i.item.id === mon.heldItem!.id);
+    const oldItem = mon.itemSlots[slotIdx].item;
+    if (oldItem) {
+      const existing = this.state.inventory.find(i => i.item.id === oldItem.id);
       if (existing) existing.quantity++;
-      else this.state.inventory.push({ item: mon.heldItem, quantity: 1 });
+      else this.state.inventory.push({ item: oldItem, quantity: 1 });
     }
 
-    // Equip new item
-    mon.heldItem = this.assigningItem;
+    const newItem = this.assigningItem;
+    mon.itemSlots[slotIdx].item = newItem;
+    if (slotIdx === 0) mon.heldItem = newItem;
 
-    // Remove from inventory
     const invItem = this.state.inventory[this.selectedInventoryIndex];
     if (invItem) {
       invItem.quantity--;
-      if (invItem.quantity <= 0) {
-        this.state.inventory.splice(this.selectedInventoryIndex, 1);
-      }
+      if (invItem.quantity <= 0) this.state.inventory.splice(this.selectedInventoryIndex, 1);
     }
 
-    // Recalculate battle stats with new item
-    const newMon = toBattlePokemon({ ...mon, heldItem: this.assigningItem }, this.state.activePerks);
+    const newMon = toBattlePokemon({ ...mon }, this.state.activePerks);
     newMon.battleHp = Math.min(mon.battleHp, newMon.maxBattleHp);
     newMon.battleStatus = mon.battleStatus;
+    newMon.xp = mon.xp;
+    newMon.xpToNextLevel = mon.xpToNextLevel;
     this.state.team[teamIdx] = newMon;
 
     this.assigningItem = null;
     this.selectedInventoryIndex = -1;
     this.container.querySelector('#assign-modal')?.classList.add('hidden');
 
-    showToast(`${mon.displayName} equipped ${mon.heldItem?.name ?? 'item'}!`, 'success');
+    showToast(`${mon.displayName} hat ${newItem.name} in Slot ${slotIdx + 1} ausgerüstet!`, 'success');
     this.refreshTeamList();
     this.refreshInventory();
   }
 
-  /** Items that apply to the whole team and don't need a Pokémon target. */
   private static readonly GLOBAL_ITEMS = new Set([
-    'star_piece', 'big_nugget', 'sacred_ash', 'max_elixir', 'team_vitals',
+    'star_piece', 'big_nugget', 'sacred_ash', 'max_elixir', 'team_vitals', 'reroll_token',
   ]);
 
   private openUseModal(invIdx: number): void {
@@ -423,13 +438,10 @@ export class ShopScreen {
     if (!inv || inv.item.itemType !== 'consumable') return;
     this.selectedInventoryIndex = invIdx;
 
-    // Global items are applied immediately, no target selection needed
     if (ShopScreen.GLOBAL_ITEMS.has(inv.item.id)) {
       this.useGlobalConsumable();
       return;
     }
-
-    // Evolution Stone: open modal filtered to non-fully-evolved Pokémon
     if (inv.item.id === 'evolution_stone') {
       this.openEvolutionStoneModal(invIdx);
       return;
@@ -439,31 +451,30 @@ export class ShopScreen {
     const titleEl = modal.querySelector('#use-modal-title')!;
     const listEl = modal.querySelector('#use-team-list')!;
 
-    titleEl.textContent = `Use "${inv.item.name}" on:`;
+    titleEl.textContent = `"${inv.item.name}" verwenden auf:`;
 
     const isRevive = inv.item.id === 'revive' || inv.item.id === 'max_revive';
     const team = isRevive
       ? this.state.team.filter(m => m.battleHp <= 0)
       : this.state.team.filter(m => m.battleHp > 0);
 
-    listEl.innerHTML = team.map((mon) => {
+    listEl.innerHTML = team.map(mon => {
       const realIdx = this.state.team.indexOf(mon);
       return `
         <div class="assign-row" data-use-index="${realIdx}">
           <img src="${mon.sprite}" class="assign-sprite" alt="${mon.displayName}" />
           <div class="assign-info">
             <span class="assign-name">${mon.displayName} Lv.${mon.level}</span>
-            <span class="assign-current-item">${mon.battleHp}/${mon.maxBattleHp} HP ${mon.battleStatus ? `• ${mon.battleStatus}` : ''}</span>
+            <span class="assign-current-item">${mon.battleHp}/${mon.maxBattleHp} HP${mon.battleStatus ? ` • ${mon.battleStatus}` : ''}</span>
           </div>
-          <button class="btn btn-sm btn-primary">Use</button>
+          <button class="btn btn-sm btn-primary">Verwenden</button>
         </div>
       `;
-    }).join('') || '<p style="padding:1rem;color:var(--text-muted)">No valid targets</p>';
+    }).join('') || '<p style="padding:1rem;color:var(--text-muted)">Kein gültiges Ziel</p>';
 
     modal.classList.remove('hidden');
   }
 
-  /** Apply a global consumable immediately without Pokémon target. */
   private useGlobalConsumable(): void {
     const inv = this.state.inventory[this.selectedInventoryIndex];
     if (!inv) return;
@@ -474,29 +485,28 @@ export class ShopScreen {
       this.state.coins += 50;
       const el = this.container.querySelector<HTMLElement>('#shop-coin-display');
       if (el) animateCoinGain(el, old, this.state.coins);
-      showToast('+50 coins from Star Piece!', 'success');
+      showToast('+50 Coins durch Star Piece!', 'success');
     } else if (item.id === 'big_nugget') {
       const old = this.state.coins;
       this.state.coins += 150;
       const el = this.container.querySelector<HTMLElement>('#shop-coin-display');
       if (el) animateCoinGain(el, old, this.state.coins);
-      showToast('+150 coins from Big Nugget!', 'success');
+      showToast('+150 Coins durch Big Nugget!', 'success');
     } else if (item.id === 'sacred_ash') {
-      this.state.team.forEach(m => {
-        m.battleHp = m.maxBattleHp;
-        m.battleStatus = null;
-      });
-      showToast('Sacred Ash revived your entire team to full HP!', 'success');
+      this.state.team.forEach(m => { m.battleHp = m.maxBattleHp; m.battleStatus = null; });
+      showToast('Sacred Ash hat dein ganzes Team vollständig geheilt!', 'success');
     } else if (item.id === 'max_elixir') {
       this.state.team.forEach(m => m.moves.forEach(mv => { mv.pp = mv.maxPp; }));
-      showToast('Max Elixir fully restored all PP for your team!', 'success');
+      showToast('Max Elixir hat alle PP deines Teams wiederhergestellt!', 'success');
     } else if (item.id === 'team_vitals') {
       this.state.team.forEach(m => {
-        if (m.battleHp > 0) {
-          m.battleHp = Math.min(m.maxBattleHp, m.battleHp + Math.floor(m.maxBattleHp * 0.5));
-        }
+        if (m.battleHp > 0) m.battleHp = Math.min(m.maxBattleHp, m.battleHp + Math.floor(m.maxBattleHp * 0.5));
       });
-      showToast('Team Vitals healed 50% HP for your entire team!', 'success');
+      showToast('Team Vitals hat 50% HP für dein ganzes Team geheilt!', 'success');
+    } else if (item.id === 'reroll_token') {
+      this.state.shopItems = rerollShop(this.state.wave);
+      this.refreshShop();
+      showToast('Shop neu gewürfelt (kostenlos)!', 'info');
     }
 
     this.consumeInventoryItem();
@@ -509,23 +519,22 @@ export class ShopScreen {
     const titleEl = modal.querySelector('#use-modal-title')!;
     const listEl = modal.querySelector('#use-team-list')!;
 
-    titleEl.textContent = 'Evolve which Pokémon?';
-
+    titleEl.textContent = 'Welches Pokémon entwickeln?';
     const candidates = this.state.team.filter(m => !m.isFullyEvolved && m.nextEvolutionId !== null);
 
-    listEl.innerHTML = candidates.map((mon) => {
+    listEl.innerHTML = candidates.map(mon => {
       const realIdx = this.state.team.indexOf(mon);
       return `
         <div class="assign-row" data-use-index="${realIdx}">
           <img src="${mon.sprite}" class="assign-sprite" alt="${mon.displayName}" />
           <div class="assign-info">
             <span class="assign-name">${mon.displayName} Lv.${mon.level}</span>
-            <span class="assign-current-item">${mon.isFullyEvolved ? 'Fully evolved' : 'Can evolve'}</span>
+            <span class="assign-current-item">Kann sich entwickeln</span>
           </div>
-          <button class="btn btn-sm btn-primary">Evolve</button>
+          <button class="btn btn-sm btn-primary">Entwickeln</button>
         </div>
       `;
-    }).join('') || '<p style="padding:1rem;color:var(--text-muted)">No Pokémon can evolve right now.</p>';
+    }).join('') || '<p style="padding:1rem;color:var(--text-muted)">Kein Pokémon kann sich jetzt entwickeln.</p>';
 
     modal.classList.remove('hidden');
   }
@@ -539,31 +548,74 @@ export class ShopScreen {
     const item = inv.item;
     const effect = item.effect;
 
-    // Evolution Stone — async, handled separately
     if (item.id === 'evolution_stone') {
       this.container.querySelector('#use-modal')?.classList.add('hidden');
       this.evolveWithStone(teamIdx);
       return;
     }
 
-    // Single-target heals
+    if (item.id === 'ether') {
+      mon.moves.forEach(m => { m.pp = m.maxPp; });
+      showToast(`${mon.displayName}'s PP wurden vollständig wiederhergestellt!`, 'success');
+      this.consumeInventoryItem();
+      this.container.querySelector('#use-modal')?.classList.add('hidden');
+      this.refreshTeamList();
+      this.refreshInventory();
+      return;
+    }
+
+    if (item.id === 'item_pouch') {
+      if (mon.itemSlots[1] && !mon.itemSlots[1].unlocked) {
+        mon.itemSlots[1].unlocked = true;
+        showToast(`Slot 2 für ${mon.displayName} freigeschaltet!`, 'success');
+      } else {
+        showToast(`${mon.displayName} hat Slot 2 bereits freigeschaltet!`, 'info');
+      }
+      this.consumeInventoryItem();
+      this.container.querySelector('#use-modal')?.classList.add('hidden');
+      this.refreshTeamList();
+      this.refreshInventory();
+      return;
+    }
+
+    if (effect.permanentStatBoost) {
+      const boost = effect.permanentStatBoost;
+      if (boost.attack) mon.baseStats.attack = Math.floor(mon.baseStats.attack * 1.1);
+      if (boost.defense) mon.baseStats.defense = Math.floor(mon.baseStats.defense * 1.1);
+      if (boost.speed) mon.baseStats.speed = Math.floor(mon.baseStats.speed * 1.1);
+      if (boost.spAtk) mon.baseStats.spAtk = Math.floor(mon.baseStats.spAtk * 1.1);
+      if (boost.spDef) mon.baseStats.spDef = Math.floor(mon.baseStats.spDef * 1.1);
+      if (boost.hp) mon.baseStats.hp = Math.floor(mon.baseStats.hp * 1.1);
+      const boosted = toBattlePokemon({ ...mon }, this.state.activePerks);
+      boosted.battleHp = Math.min(Math.floor(mon.battleHp * 1.1), boosted.maxBattleHp);
+      boosted.battleStatus = mon.battleStatus;
+      boosted.xp = mon.xp;
+      boosted.xpToNextLevel = mon.xpToNextLevel;
+      this.state.team[teamIdx] = boosted;
+      showToast(`${mon.displayName}'s Stats wurden permanent erhöht!`, 'success');
+      this.consumeInventoryItem();
+      this.container.querySelector('#use-modal')?.classList.add('hidden');
+      this.refreshTeamList();
+      this.refreshInventory();
+      return;
+    }
+
     if (effect.healPercent && item.id !== 'team_vitals') {
       const heal = Math.floor(mon.maxBattleHp * effect.healPercent);
       mon.battleHp = Math.min(mon.maxBattleHp, mon.battleHp + heal);
-      showToast(`${mon.displayName} restored ${heal} HP!`, 'success');
+      showToast(`${mon.displayName} hat ${heal} HP wiederhergestellt!`, 'success');
     } else if (effect.healAmount) {
       mon.battleHp = Math.min(mon.maxBattleHp, mon.battleHp + effect.healAmount);
-      showToast(`${mon.displayName} restored ${effect.healAmount} HP!`, 'success');
+      showToast(`${mon.displayName} hat ${effect.healAmount} HP wiederhergestellt!`, 'success');
     }
 
     if (effect.curesStatus) {
       if (effect.curesStatus === 'any' || effect.curesStatus === mon.battleStatus) {
         mon.battleStatus = null;
-        showToast(`${mon.displayName}'s status was cured!`, 'success');
+        showToast(`${mon.displayName}'s Status wurde geheilt!`, 'success');
       }
     }
 
-    // Rare Candy: level up + stat recalc + evolution check
     if (item.id === 'rare_candy') {
       const newLevel = Math.min(100, mon.level + 1);
       const leveled = toBattlePokemon({ ...mon, level: newLevel }, this.state.activePerks);
@@ -571,18 +623,9 @@ export class ShopScreen {
       leveled.battleHp = Math.min(leveled.maxBattleHp, mon.battleHp + hpGain);
       leveled.battleStatus = mon.battleStatus;
       this.state.team[teamIdx] = leveled;
-      showToast(`${mon.displayName} leveled up to Lv.${newLevel}!`, 'success');
-
-      // Check evolution
-      if (
-        !leveled.isFullyEvolved &&
-        leveled.nextEvolutionId !== null &&
-        leveled.evolutionLevel !== null &&
-        newLevel >= leveled.evolutionLevel
-      ) {
+      showToast(`${mon.displayName} ist auf Lv.${newLevel} aufgestiegen!`, 'success');
+      if (!leveled.isFullyEvolved && leveled.nextEvolutionId !== null && leveled.evolutionLevel !== null && newLevel >= leveled.evolutionLevel) {
         leveled.pendingEvolution = true;
-        showToast(`${leveled.displayName} is ready to evolve! Check the team section.`, 'info');
-        // Auto-evolve immediately via stone logic
         this.consumeInventoryItem();
         this.container.querySelector('#use-modal')?.classList.add('hidden');
         this.processPendingEvolutions();
@@ -592,14 +635,13 @@ export class ShopScreen {
       }
     }
 
-    // X items: stat stage boosts
     const statBoostMap: Record<string, keyof typeof mon.statStages> = {
       'x_attack': 'attack', 'x_sp_atk': 'spAtk', 'x_speed': 'speed',
     };
     const boostKey = statBoostMap[item.id];
     if (boostKey) {
       mon.statStages[boostKey] = Math.min(6, mon.statStages[boostKey] + 2);
-      showToast(`${mon.displayName}'s ${boostKey} rose sharply!`, 'success');
+      showToast(`${mon.displayName}'s ${boostKey} ist stark gestiegen!`, 'success');
     }
 
     this.consumeInventoryItem();
@@ -608,30 +650,25 @@ export class ShopScreen {
     this.refreshInventory();
   }
 
-  /** Consume one unit of the currently selected inventory item. */
   private consumeInventoryItem(): void {
     const inv = this.state.inventory[this.selectedInventoryIndex];
     if (!inv) return;
     inv.quantity--;
-    if (inv.quantity <= 0) {
-      this.state.inventory.splice(this.selectedInventoryIndex, 1);
-    }
+    if (inv.quantity <= 0) this.state.inventory.splice(this.selectedInventoryIndex, 1);
     this.selectedInventoryIndex = -1;
   }
 
-  /** Async: fetch the evolved form and replace the Pokémon in the team. */
   private async evolveWithStone(teamIdx: number): Promise<void> {
     const mon = this.state.team[teamIdx];
     if (!mon || mon.isFullyEvolved || !mon.nextEvolutionId) {
-      showToast('This Pokémon cannot evolve!', 'error');
+      showToast('Dieses Pokémon kann sich nicht entwickeln!', 'error');
       return;
     }
-
-    showToast(`Evolving ${mon.displayName}…`, 'info');
+    showToast(`${mon.displayName} entwickelt sich…`, 'info');
     try {
       const evolved = await fetchPokemon(mon.nextEvolutionId, mon.level);
       const evolvedBattle = toBattlePokemon(
-        { ...evolved, heldItem: mon.heldItem },
+        { ...evolved, itemSlots: mon.itemSlots, heldItem: mon.heldItem },
         this.state.activePerks,
       );
       evolvedBattle.battleHp = Math.min(evolvedBattle.maxBattleHp, mon.battleHp);
@@ -639,17 +676,51 @@ export class ShopScreen {
       evolvedBattle.xp = mon.xp;
       evolvedBattle.xpToNextLevel = xpForLevel(evolved.level);
       evolvedBattle.pendingEvolution = false;
-
       this.state.team[teamIdx] = evolvedBattle;
-
       this.consumeInventoryItem();
-      showToast(`${mon.displayName} evolved into ${evolved.displayName}! ✨`, 'success');
+      showToast(`${mon.displayName} hat sich zu ${evolved.displayName} entwickelt! ✨`, 'success');
     } catch {
-      showToast('Evolution failed — try again.', 'error');
+      showToast('Entwicklung fehlgeschlagen — versuche es erneut.', 'error');
     }
-
     this.refreshTeamList();
     this.refreshInventory();
+  }
+
+  private performWaveEndCleanup(): void {
+    const wave = this.state.wave;
+    this.state.team.forEach(mon => {
+      if (!mon.itemSlots) return;
+
+      if (mon.focusSashBroken) {
+        for (const slot of mon.itemSlots) {
+          if (slot.item?.id === 'focus_sash') { slot.item = null; break; }
+        }
+        if (mon.heldItem?.id === 'focus_sash') mon.heldItem = null;
+        mon.focusSashBroken = false;
+      }
+
+      if (mon.reviveHeartUsed) {
+        for (const slot of mon.itemSlots) {
+          if (slot.item?.id === 'revive_heart') { slot.item = null; break; }
+        }
+        if (mon.heldItem?.id === 'revive_heart') mon.heldItem = null;
+      }
+
+      if (monHasItem(mon, 'oran_berry')) {
+        mon.usedBerries = (mon.usedBerries ?? []).filter(id => id !== 'oran_berry');
+      }
+
+      if (monHasItem(mon, 'sitrus_berry') && (mon.usedBerries ?? []).includes('sitrus_berry')) {
+        if (wave - (mon.sitrusBerryLastUsedWave ?? 0) >= 3) {
+          mon.usedBerries = (mon.usedBerries ?? []).filter(id => id !== 'sitrus_berry');
+        }
+      }
+
+      if (monHasItem(mon, 'poke_bandage') && mon.battleHp > 0) {
+        const heal = Math.floor(mon.maxBattleHp * 0.15);
+        mon.battleHp = Math.min(mon.maxBattleHp, mon.battleHp + heal);
+      }
+    });
   }
 
   private refreshShop(): void {

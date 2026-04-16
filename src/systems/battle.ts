@@ -1,9 +1,33 @@
 import type {
   BattlePokemon, Move, Perk, DamageResult, BattleLogEntry,
-  StatusEffect, StatStages, BaseStats, PokemonType,
+  StatusEffect, StatStages, BaseStats, PokemonType, Item, ItemSlot,
 } from '../types';
+import { defaultItemSlots } from '../types';
 import { getTypeEffectiveness } from '../data/typeChart';
 import { calcStat } from '../api/pokeapi';
+
+// ============================================================
+// Item Slot Helpers
+// ============================================================
+
+/** Returns all active (unlocked + filled) items across all slots. */
+export function getSlotItems(mon: { itemSlots?: ItemSlot[]; heldItem?: Item | null }): Item[] {
+  if (mon.itemSlots?.length) {
+    return mon.itemSlots.filter(s => s.unlocked && s.item != null).map(s => s.item!);
+  }
+  return mon.heldItem ? [mon.heldItem] : [];
+}
+
+/** Checks if any unlocked slot holds an item with the given ID. */
+export function monHasItem(
+  mon: { itemSlots?: ItemSlot[]; heldItem?: Item | null },
+  itemId: string,
+): boolean {
+  if (mon.itemSlots?.length) {
+    return mon.itemSlots.some(s => s.unlocked && s.item?.id === itemId);
+  }
+  return mon.heldItem?.id === itemId;
+}
 
 // ============================================================
 // Stat Stage Multiplier
@@ -84,9 +108,19 @@ export function calculateDamage(
     defStat = getEffectiveStat(defender, 'spDef');
   }
 
-  // Burn halves physical attack
+  // Burn halves physical attack — but Guts (Flame Orb) boosts instead
   if (attacker.battleStatus === 'burn' && move.category === 'physical') {
-    atkStat = Math.floor(atkStat * 0.5);
+    if (monHasItem(attacker, 'flame_orb')) {
+      atkStat = Math.floor(atkStat * 1.5); // Guts: +50% under status
+    } else {
+      atkStat = Math.floor(atkStat * 0.5);
+    }
+  }
+  // Also apply Guts for other statuses (poison, paralysis etc.) with Flame Orb carrier
+  if (attacker.battleStatus && attacker.battleStatus !== 'burn' && move.category === 'physical') {
+    if (monHasItem(attacker, 'flame_orb') || monHasItem(attacker, 'toxic_orb')) {
+      atkStat = Math.floor(atkStat * 1.5);
+    }
   }
 
   // Paralysis halves Speed (handled elsewhere) but not attack
@@ -100,7 +134,7 @@ export function calculateDamage(
   let critChance = 0.0625; // 6.25% base
   if (perks.some(p => p.id === 'lucky_streak')) critChance += 0.03;
   if (perks.some(p => p.id === 'adrenaline_rush') && isFirstMove) critChance = 1;
-  if (attacker.heldItem?.id === 'scope_lens') critChance = 0.125;
+  if (monHasItem(attacker, 'scope_lens')) critChance = 0.125;
   const isCritical = Math.random() < critChance;
   if (isCritical) damage = Math.floor(damage * 1.5);
 
@@ -122,39 +156,20 @@ export function calculateDamage(
   const random = 0.85 + Math.random() * 0.15;
   damage = Math.floor(damage * random);
 
-  // === Item Effects ===
+  // === Item Effects (all unlocked slots) ===
 
-  // Life Orb
-  if (attacker.heldItem?.id === 'life_orb') {
-    damage = Math.floor(damage * 1.3);
-  }
+  if (monHasItem(attacker, 'life_orb')) damage = Math.floor(damage * 1.3);
+  if (monHasItem(attacker, 'expert_belt') && effectiveness > 1) damage = Math.floor(damage * 1.2);
+  if (monHasItem(attacker, 'muscle_band') && move.category === 'physical') damage = Math.floor(damage * 1.1);
+  if (monHasItem(attacker, 'wise_glasses') && move.category === 'special') damage = Math.floor(damage * 1.1);
+  if (monHasItem(attacker, 'mega_stone')) damage = Math.floor(damage * 1.3);
 
-  // Expert Belt (super effective only)
-  if (attacker.heldItem?.id === 'expert_belt' && effectiveness > 1) {
-    damage = Math.floor(damage * 1.2);
-  }
-
-  // Muscle Band (physical only)
-  if (attacker.heldItem?.id === 'muscle_band' && move.category === 'physical') {
-    damage = Math.floor(damage * 1.1);
-  }
-
-  // Wise Glasses (special only)
-  if (attacker.heldItem?.id === 'wise_glasses' && move.category === 'special') {
-    damage = Math.floor(damage * 1.1);
-  }
-
-  // Type-boosting items
-  if (attacker.heldItem?.effect.typePowerBoost) {
-    const { type, multiplier } = attacker.heldItem.effect.typePowerBoost;
-    if (move.type === type) {
-      damage = Math.floor(damage * multiplier);
+  // Type-boosting items — check all slots
+  for (const item of getSlotItems(attacker)) {
+    if (item.effect.typePowerBoost) {
+      const { type, multiplier } = item.effect.typePowerBoost;
+      if (move.type === type) damage = Math.floor(damage * multiplier);
     }
-  }
-
-  // Mega Stone
-  if (attacker.heldItem?.id === 'mega_stone') {
-    damage = Math.floor(damage * 1.3);
   }
 
   // Z-Crystal (handled separately via z-move UI)
@@ -229,7 +244,7 @@ export function checkMoveHits(attacker: BattlePokemon, move: Move, perks: Perk[]
   let accuracy = move.accuracy / 100;
 
   // Wide Lens
-  if (attacker.heldItem?.id === 'wide_lens') accuracy *= 1.1;
+  if (monHasItem(attacker, 'wide_lens')) accuracy *= 1.1;
 
   // Sharp Senses perk
   if (perks.some(p => p.id === 'sharp_senses')) accuracy *= 1.05;
@@ -322,8 +337,8 @@ export function determineTurnOrder(
   }
 
   // Quick Claw check
-  const playerHasQuickClaw = playerMon.heldItem?.id === 'quick_claw';
-  const enemyHasQuickClaw = enemyMon.heldItem?.id === 'quick_claw';
+  const playerHasQuickClaw = monHasItem(playerMon, 'quick_claw');
+  const enemyHasQuickClaw = monHasItem(enemyMon, 'quick_claw');
   if (playerHasQuickClaw && Math.random() < 0.2) return 'player';
   if (enemyHasQuickClaw && Math.random() < 0.2) return 'enemy';
 
@@ -359,16 +374,30 @@ export function applyEndOfTurnStatus(
       break;
     }
     case 'poison': {
-      const d = Math.max(1, Math.floor(pokemon.maxBattleHp / 8));
-      damage = d;
-      log.push({ text: `${pokemon.displayName} is hurt by poison! (−${d} HP)`, type: 'damage' });
+      // Toxic Orb: Poison Heal — heal instead of taking damage
+      if (monHasItem(pokemon, 'toxic_orb')) {
+        const h = Math.max(1, Math.floor(pokemon.maxBattleHp * 0.12));
+        damage = -h; // negative = heal in the caller
+        log.push({ text: `${pokemon.displayName} recovered HP via Poison Heal! (+${h})`, type: 'heal' });
+      } else {
+        const d = Math.max(1, Math.floor(pokemon.maxBattleHp / 8));
+        damage = d;
+        log.push({ text: `${pokemon.displayName} is hurt by poison! (−${d} HP)`, type: 'damage' });
+      }
       break;
     }
     case 'badPoison': {
-      pokemon.poisonCounter = (pokemon.poisonCounter ?? 1) + 1;
-      const d = Math.max(1, Math.floor(pokemon.maxBattleHp * pokemon.poisonCounter / 16));
-      damage = d;
-      log.push({ text: `${pokemon.displayName} is badly poisoned! (−${d} HP)`, type: 'damage' });
+      // Toxic Orb: Poison Heal
+      if (monHasItem(pokemon, 'toxic_orb')) {
+        const h = Math.max(1, Math.floor(pokemon.maxBattleHp * 0.12));
+        damage = -h;
+        log.push({ text: `${pokemon.displayName} recovered HP via Poison Heal! (+${h})`, type: 'heal' });
+      } else {
+        pokemon.poisonCounter = (pokemon.poisonCounter ?? 1) + 1;
+        const d = Math.max(1, Math.floor(pokemon.maxBattleHp * pokemon.poisonCounter / 16));
+        damage = d;
+        log.push({ text: `${pokemon.displayName} is badly poisoned! (−${d} HP)`, type: 'damage' });
+      }
       break;
     }
     case 'sleep': {
@@ -404,29 +433,28 @@ export function applyEndOfTurnItems(
 
   if (pokemon.battleHp <= 0) return { heal, log };
 
-  const item = pokemon.heldItem;
-  if (!item) return { heal, log };
-
-  if (item.id === 'leftovers') {
-    const h = Math.max(1, Math.floor(pokemon.maxBattleHp * 0.0625));
-    if (pokemon.battleHp < pokemon.maxBattleHp) {
-      heal = h;
-      log.push({ text: `${pokemon.displayName} restored a little HP with Leftovers! (+${h} HP)`, type: 'heal' });
-    }
-  }
-
-  if (item.id === 'black_sludge') {
-    if (pokemon.types.includes('poison')) {
+  for (const item of getSlotItems(pokemon)) {
+    if (item.id === 'leftovers') {
       const h = Math.max(1, Math.floor(pokemon.maxBattleHp * 0.0625));
       if (pokemon.battleHp < pokemon.maxBattleHp) {
-        heal = h;
-        log.push({ text: `${pokemon.displayName} absorbed toxins with Black Sludge! (+${h} HP)`, type: 'heal' });
+        heal += h;
+        log.push({ text: `${pokemon.displayName} restored HP with Leftovers! (+${h})`, type: 'heal' });
       }
-    } else {
-      const d = Math.max(1, Math.floor(pokemon.maxBattleHp * 0.0625));
-      heal = -d;
-      log.push({ text: `${pokemon.displayName} is hurt by Black Sludge! (−${d} HP)`, type: 'damage' });
     }
+
+    if (item.id === 'black_sludge') {
+      if (pokemon.types.includes('poison')) {
+        const h = Math.max(1, Math.floor(pokemon.maxBattleHp * 0.0625));
+        if (pokemon.battleHp < pokemon.maxBattleHp) { heal += h; log.push({ text: `${pokemon.displayName} absorbed toxins! (+${h})`, type: 'heal' }); }
+      } else {
+        const d = Math.max(1, Math.floor(pokemon.maxBattleHp * 0.0625));
+        heal -= d;
+        log.push({ text: `${pokemon.displayName} is hurt by Black Sludge! (−${d})`, type: 'damage' });
+      }
+    }
+
+    // Toxic Orb — Poison Heal: heal instead of taking poison damage
+    // (override handled in applyEndOfTurnStatus instead; mark active here)
   }
 
   return { heal, log };
@@ -446,8 +474,8 @@ export function applyDamage(
   let actualDamage = damage;
   let focusSashTriggered = false;
 
-  // Focus Sash
-  const hasFocusSash = pokemon.heldItem?.id === 'focus_sash';
+  // Focus Sash (v2: survive at 1 HP, mark for wave-end destruction)
+  const hasFocusSash = monHasItem(pokemon, 'focus_sash');
   const hasFocusSashAll = perks.some(p => p.id === 'immortal_grit');
   if (
     (hasFocusSash || hasFocusSashAll) &&
@@ -457,17 +485,42 @@ export function applyDamage(
   ) {
     actualDamage = pokemon.battleHp - 1;
     pokemon.hasUsedFocusSash = true;
+    if (hasFocusSash) pokemon.focusSashBroken = true; // destroy at wave end
     focusSashTriggered = true;
     log.push({ text: `${pokemon.displayName} held on with its Focus Sash!`, type: 'system' });
   }
 
   pokemon.battleHp = Math.max(0, pokemon.battleHp - actualDamage);
 
-  // Rocky Helmet recoil (handled in main battle loop)
+  // Oran Berry (v2: 15% max HP, <40% HP, once per wave)
+  if (
+    monHasItem(pokemon, 'oran_berry') &&
+    !(pokemon.usedBerries ?? []).includes('oran_berry') &&
+    pokemon.battleHp > 0 &&
+    pokemon.battleHp / pokemon.maxBattleHp < 0.4
+  ) {
+    const h = Math.max(1, Math.floor(pokemon.maxBattleHp * 0.15));
+    pokemon.battleHp = Math.min(pokemon.maxBattleHp, pokemon.battleHp + h);
+    pokemon.usedBerries = [...(pokemon.usedBerries ?? []), 'oran_berry'];
+    log.push({ text: `${pokemon.displayName} ate its Oran Berry! (+${h} HP)`, type: 'heal' });
+  }
+
+  // Sitrus Berry (v2: 25% max HP, <50% HP, recharge every 3 waves)
+  if (
+    monHasItem(pokemon, 'sitrus_berry') &&
+    !(pokemon.usedBerries ?? []).includes('sitrus_berry') &&
+    pokemon.battleHp > 0 &&
+    pokemon.battleHp / pokemon.maxBattleHp < 0.5
+  ) {
+    const h = Math.max(1, Math.floor(pokemon.maxBattleHp * 0.25));
+    pokemon.battleHp = Math.min(pokemon.maxBattleHp, pokemon.battleHp + h);
+    pokemon.usedBerries = [...(pokemon.usedBerries ?? []), 'sitrus_berry'];
+    log.push({ text: `${pokemon.displayName} ate its Sitrus Berry! (+${h} HP)`, type: 'heal' });
+  }
 
   // Weakness Policy trigger
   if (move && getTypeEffectiveness(move.type, pokemon.types) > 1) {
-    if (pokemon.heldItem?.id === 'weakness_policy') {
+    if (monHasItem(pokemon, 'weakness_policy')) {
       pokemon.statStages.attack = Math.min(6, pokemon.statStages.attack + 2);
       pokemon.statStages.spAtk = Math.min(6, pokemon.statStages.spAtk + 2);
       log.push({ text: `${pokemon.displayName}'s Weakness Policy activated! Atk and SpAtk rose sharply!`, type: 'status' });
@@ -481,6 +534,16 @@ export function applyDamage(
   }
 
   const fainted = pokemon.battleHp <= 0;
+
+  // Revive Heart: once per run, revive at 30% HP
+  if (fainted && monHasItem(pokemon, 'revive_heart') && !pokemon.reviveHeartUsed) {
+    const reviveHp = Math.max(1, Math.floor(pokemon.maxBattleHp * 0.3));
+    pokemon.battleHp = reviveHp;
+    pokemon.reviveHeartUsed = true;
+    log.push({ text: `${pokemon.displayName}'s Revive Heart activated! It recovered ${reviveHp} HP!`, type: 'heal' });
+    return { actualDamage, fainted: false, focusSashTriggered, log };
+  }
+
   if (fainted) {
     log.push({ text: `${pokemon.displayName} fainted!`, type: 'system' });
   }
@@ -493,8 +556,19 @@ export function applyDamage(
 // ============================================================
 
 export function toBattlePokemon(pokemon: import('../types').Pokemon, perks: Perk[]): BattlePokemon {
+  // Initialize / deep-copy item slots
+  const itemSlots: ItemSlot[] = pokemon.itemSlots?.length
+    ? pokemon.itemSlots.map(s => ({ ...s, item: s.item ? { ...s.item } : null }))
+    : defaultItemSlots();
+
+  // Build a temporary lookup object so monHasItem/getSlotItems work during construction
+  const withSlots = { ...pokemon, itemSlots };
+
+  // Sync legacy heldItem alias from slot 0
+  const heldItem = itemSlots[0]?.item ?? null;
+
   // Apply perk stat multipliers
-  let stats = { ...pokemon.baseStats };
+  const stats = { ...pokemon.baseStats };
 
   // All stats multiplier perks
   const allStatsMult = perks.reduce((acc, p) => {
@@ -523,8 +597,8 @@ export function toBattlePokemon(pokemon: import('../types').Pokemon, perks: Perk
     return acc;
   }, allStatsMult);
 
-  // Apply eviolite
-  const evioliteActive = !pokemon.isFullyEvolved && pokemon.heldItem?.id === 'eviolite';
+  // Eviolite — check all slots
+  const evioliteActive = !pokemon.isFullyEvolved && monHasItem(withSlots, 'eviolite');
 
   const effectiveStats: BaseStats = {
     hp: Math.floor(stats.hp * hpMult),
@@ -535,34 +609,36 @@ export function toBattlePokemon(pokemon: import('../types').Pokemon, perks: Perk
     speed: Math.floor(stats.speed * speedMult),
   };
 
-  // Choice item speed boost
-  if (pokemon.heldItem?.id === 'choice_scarf') {
+  // Choice item boosts — check all slots
+  if (monHasItem(withSlots, 'choice_scarf')) {
     effectiveStats.speed = Math.floor(effectiveStats.speed * 1.5);
   }
-  if (pokemon.heldItem?.id === 'choice_band') {
+  if (monHasItem(withSlots, 'choice_band')) {
     effectiveStats.attack = Math.floor(effectiveStats.attack * 1.5);
   }
-  if (pokemon.heldItem?.id === 'choice_specs') {
+  if (monHasItem(withSlots, 'choice_specs')) {
     effectiveStats.spAtk = Math.floor(effectiveStats.spAtk * 1.5);
   }
 
   // Assault Vest SpDef boost
-  if (pokemon.heldItem?.id === 'assault_vest') {
+  if (monHasItem(withSlots, 'assault_vest')) {
     effectiveStats.spDef = Math.floor(effectiveStats.spDef * 1.5);
   }
 
   // Mega Stone HP boost
-  if (pokemon.heldItem?.id === 'mega_stone') {
+  if (monHasItem(withSlots, 'mega_stone')) {
     effectiveStats.hp = Math.floor(effectiveStats.hp * 1.2);
   }
 
   const maxHp = effectiveStats.hp;
 
-  // Preserve XP/level-up state when rebuilding an existing BattlePokemon
+  // Preserve persistent battle state when rebuilding an existing BattlePokemon
   const existingBattle = pokemon as Partial<BattlePokemon>;
 
-  return {
+  const result: BattlePokemon = {
     ...pokemon,
+    itemSlots,
+    heldItem,
     battleHp: maxHp,
     maxBattleHp: maxHp,
     effectiveStats,
@@ -575,14 +651,28 @@ export function toBattlePokemon(pokemon: import('../types').Pokemon, perks: Perk
     hasUsedFocusSash: false,
     choiceLockedMove: null,
     hasUsedZMove: false,
-    hasAirBalloon: pokemon.heldItem?.id === 'air_balloon',
+    hasAirBalloon: monHasItem(withSlots, 'air_balloon'),
     twoTurnMove: null,
     sleepTurns: 0,
-    moves: pokemon.moves.map(m => ({ ...m })), // Fresh copy with PP
+    moves: pokemon.moves.map(m => ({ ...m })), // Fresh copy with full PP
     xp: existingBattle.xp ?? 0,
     xpToNextLevel: xpForLevel(pokemon.level),
     pendingEvolution: existingBattle.pendingEvolution ?? false,
+    usedBerries: existingBattle.usedBerries ?? [],
+    sitrusBerryLastUsedWave: existingBattle.sitrusBerryLastUsedWave ?? 0,
+    focusSashBroken: false,
+    reviveHeartUsed: existingBattle.reviveHeartUsed ?? false,
+    leechSeedActive: monHasItem(withSlots, 'leech_seed'),
   };
+
+  // Battle-start self-inflicted status (Flame Orb → burn, Toxic Orb → badPoison)
+  if (monHasItem(result, 'flame_orb')) {
+    result.battleStatus = 'burn';
+  } else if (monHasItem(result, 'toxic_orb')) {
+    result.battleStatus = 'badPoison';
+  }
+
+  return result;
 }
 
 // ============================================================

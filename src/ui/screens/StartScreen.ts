@@ -288,6 +288,7 @@ export class StartScreen {
         },
         godModeAvailable: false,
         zMovesAvailable: 0,
+        teamRewards: [],
       };
 
       this.onStart(initialState);

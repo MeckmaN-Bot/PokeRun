@@ -2,6 +2,7 @@ import type {
   Pokemon, Move, BaseStats, PokemonType, MoveCategory,
   PokeAPIResponse, PokeAPIMoveResponse,
 } from '../types';
+import { defaultItemSlots } from '../types';
 import { getStaticSprite, getAnimatedSprite, likelyHasAnimatedSprite } from './sprites';
 
 const CACHE_KEY_PREFIX = 'pokelike_cache_';
@@ -311,6 +312,7 @@ export async function fetchPokemon(idOrName: number | string, level: number): Pr
     level,
     moves,
     heldItem: null,
+    itemSlots: defaultItemSlots(),
     sprite,
     animatedSprite,
     isFullyEvolved: evoInfo.isFullyEvolved,
