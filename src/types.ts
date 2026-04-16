@@ -73,6 +73,29 @@ export interface Move {
 }
 
 // ============================================================
+// Item Slots
+// ============================================================
+
+export interface ItemSlot {
+  unlocked: boolean;
+  item: Item | null;
+}
+
+/** Costs (in coins) to unlock each slot (index 0 = slot 1 which is free). */
+export const SLOT_UNLOCK_COSTS: number[] = [0, 50, 100, 200, 400];
+
+/** Creates a default set of 5 item slots (slot 1 unlocked, rest locked). */
+export function defaultItemSlots(): ItemSlot[] {
+  return [
+    { unlocked: true, item: null },
+    { unlocked: false, item: null },
+    { unlocked: false, item: null },
+    { unlocked: false, item: null },
+    { unlocked: false, item: null },
+  ];
+}
+
+// ============================================================
 // Items
 // ============================================================
 
@@ -100,6 +123,35 @@ export interface ItemEffect {
   costHpPercent?: number;
   regenPercent?: number;
   evasionBoost?: number;
+  // New fields
+  /** Life Orb v2: costs % of CURRENT HP per attack instead of max HP */
+  currentHpCostPercent?: number;
+  /** Life Orb v2: no self-damage when below this HP ratio */
+  noSelfDamageBelowHpPct?: number;
+  /** Rocky Helmet v2: chance to paralyze contact attackers */
+  paralysisOnContact?: number;
+  /** Flame/Toxic Orb: inflict this status on self at battle start */
+  selfInflictStatus?: StatusEffect;
+  /** Flame Orb: +50% Atk when statused (Guts) */
+  gutsEffect?: boolean;
+  /** Toxic Orb: heal instead of taking poison damage (Poison Heal) */
+  poisonHealEffect?: boolean;
+  /** Leech Seed: drain this % of enemy max HP per turn, heal self */
+  drainPercent?: number;
+  /** Revive Heart: revive once per run with this % HP, then destroy */
+  reviveOncePercent?: number;
+  /** Shell Bell v2: minimum heal per hit */
+  minHealAmount?: number;
+  /** Poké Bandage: % HP healed after each wave */
+  waveRegen?: number;
+  /** Oran Berry: recharges each wave */
+  rechargesEveryWave?: boolean;
+  /** Sitrus Berry: recharges after this many waves */
+  rechargesAfterWaves?: number;
+  /** Focus Sash v2: destroy item at end of wave after triggering */
+  waveEndDestroy?: boolean;
+  /** Protein/Iron/Carbos: permanent % stat boost */
+  permanentStatBoost?: Partial<BaseStats>;
 }
 
 export interface Item {
@@ -176,7 +228,10 @@ export interface Pokemon {
   baseStats: BaseStats;
   level: number;
   moves: Move[];
+  /** Legacy single-slot alias (= itemSlots[0].item). Keep for backwards compat with battle checks. */
   heldItem: Item | null;
+  /** All 5 item slots. Slot 0 is always unlocked; others cost coins. */
+  itemSlots: ItemSlot[];
   sprite: string;
   animatedSprite: string;
   isFullyEvolved: boolean;
@@ -211,6 +266,16 @@ export interface BattlePokemon extends Pokemon {
   xpToNextLevel: number;
   /** True when a level-up triggered an evolution that hasn't happened yet. */
   pendingEvolution: boolean;
+  /** IDs of once-per-battle berries consumed this wave (reset at wave end). */
+  usedBerries: string[];
+  /** Wave number when Sitrus Berry was last consumed (for 3-wave recharge). */
+  sitrusBerryLastUsedWave: number;
+  /** Focus Sash triggered this wave — destroy item at wave end. */
+  focusSashBroken: boolean;
+  /** Revive Heart has been used this run — destroy item at wave end. */
+  reviveHeartUsed: boolean;
+  /** Leech Seed is active (drains enemy each turn). */
+  leechSeedActive: boolean;
 }
 
 // ============================================================
@@ -247,6 +312,8 @@ export interface GameState {
   runStats: RunStats;
   godModeAvailable: boolean;
   zMovesAvailable: number;
+  /** Active team-wide reward items (displayed in shop Team Rewards panel). */
+  teamRewards: InventoryItem[];
 }
 
 // ============================================================

@@ -24,6 +24,8 @@ function getPrice(rarity: Rarity, wave: number): number {
 // Shop Generation
 // ============================================================
 
+const HEALING_ITEM_IDS = ['potion', 'super_potion', 'hyper_potion', 'full_restore', 'pokemon_food'];
+
 export function generateShop(wave: number, existingItemIds: string[] = []): ShopItem[] {
   const items: ShopItem[] = [];
   const usedIds = new Set<string>(existingItemIds);
@@ -59,6 +61,22 @@ export function generateShop(wave: number, existingItemIds: string[] = []): Shop
       price: getPrice(rarity, wave),
       sold: false,
     });
+  }
+
+  // Guarantee at least one healing item in the shop
+  const hasHealing = items.some(s => HEALING_ITEM_IDS.includes(s.item.id));
+  if (!hasHealing) {
+    const healingPool = ALL_ITEMS.filter(
+      i => HEALING_ITEM_IDS.includes(i.id) && !usedIds.has(i.id)
+    );
+    if (healingPool.length > 0) {
+      const healItem = healingPool[Math.floor(Math.random() * healingPool.length)];
+      items.push({
+        item: healItem,
+        price: getPrice(healItem.rarity, wave),
+        sold: false,
+      });
+    }
   }
 
   return items;
