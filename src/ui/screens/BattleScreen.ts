@@ -1,11 +1,16 @@
 import type {
-  GameState, BattlePokemon, Move, BattleLogEntry, Perk,
+  GameState, BattlePokemon, Move, BattleLogEntry, Perk, Item,
 } from '../../types';
 import {
   calculateDamage, checkMoveHits, applyDamage, applyEndOfTurnStatus,
-  applyEndOfTurnItems, aiSelectMove, determineTurnOrder, canMove,
+  applyEndOfTurnItems, aiSelectMove, playerAutoSelectMove, determineTurnOrder, canMove,
   toBattlePokemon, healPokemon, grantXP, xpFromKO, monHasItem,
+  applyToothHealCheck, applyHookItemLoss, canInflictStatus,
 } from '../../systems/battle';
+import { getBossBlindById, blindDisablesItems } from '../../data/bossBlinds';
+import { evaluateSynergies, type ActiveSynergy } from '../../systems/synergies';
+import { ALL_ITEMS } from '../../data/items';
+import { attachTooltipDelegation } from '../components/Tooltip';
 import { getEffectivenessLabel } from '../../data/typeChart';
 import {
   renderBattleInfoCard, renderBattleSpriteImg,
@@ -16,8 +21,25 @@ import { renderTypeBadges } from '../components/TypeBadge';
 import {
   fadeIn, attackAnimation, hitAnimation, faintAnimation, enterAnimation,
   showDamageNumber, animateHPBar, shakeElement, showToast, pulseElement,
-  showTypeAttackEffect,
+  showTypeAttackEffect, screenFlash,
 } from '../animations';
+import { gsap } from 'gsap';
+import { learnMovesForLevel } from '../../api/pokeapi';
+import { Audio } from '../../audio/AudioManager';
+import { isTourActive, isTourBattlePaused } from '../../systems/tutorialTour';
+
+const ITEM_BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+const POKEAPI_ITEMS = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/';
+function itemArt(item: Item, cls = ''): string {
+  const clsStr = cls ? ' ' + cls : '';
+  if (item.pokeapiName) {
+    return `<img src="${POKEAPI_ITEMS}${item.pokeapiName}.png" alt="${item.name}" class="item-sprite${clsStr}" draggable="false">`;
+  }
+  if (item.sprite) {
+    return `<img src="${ITEM_BASE}${item.sprite}" alt="${item.name}" class="item-sprite${clsStr}" draggable="false">`;
+  }
+  return `<span class="item-glyph${clsStr}">${item.icon}</span>`;
+}
 
 export class BattleScreen {
   private container: HTMLElement;
@@ -26,6 +48,8 @@ export class BattleScreen {
   private isAnimating = false;
   private autoInterval: ReturnType<typeof setInterval> | null = null;
   private isFirstMove = true;
+  private activeSynergies: ActiveSynergy[] = [];
+  private xpStart: { level: number; xp: number; xpToNextLevel: number }[] = [];
 
   constructor(
     container: HTMLElement,
@@ -39,12 +63,44 @@ export class BattleScreen {
 
   mount(): void {
     if (!this.state.battleState) return;
+    const bs = this.state.battleState;
+    // Auto-battler: always on
+    bs.autoBattle = true;
+    // Tutorial mode: nerf the very first battle so the player never loses
+    // while learning the screens. Only triggers on wave 1 with the tour active.
+    if (isTourActive() && this.state.wave === 1) {
+      bs.enemyTeam.forEach(mon => {
+        mon.battleHp = 1;
+        mon.maxBattleHp = Math.max(1, Math.min(mon.maxBattleHp, 1));
+        mon.attack = Math.max(1, Math.floor(mon.attack * 0.4));
+        mon.specialAttack = Math.max(1, Math.floor(mon.specialAttack * 0.4));
+      });
+    }
+    // Make sure we don't start the battle with a fainted mon active
+    if (bs.playerTeam[bs.activePlayerIndex]?.battleHp <= 0) {
+      const aliveIdx = bs.playerTeam.findIndex(m => m.battleHp > 0);
+      if (aliveIdx >= 0) bs.activePlayerIndex = aliveIdx;
+    }
+    if (bs.enemyTeam[bs.activeEnemyIndex]?.battleHp <= 0) {
+      const aliveIdx = bs.enemyTeam.findIndex(m => m.battleHp > 0);
+      if (aliveIdx >= 0) bs.activeEnemyIndex = aliveIdx;
+    }
+    // Snapshot XP/level before the fight for the post-battle recap
+    this.xpStart = this.state.battleState.playerTeam.map(m => ({
+      level: m.level, xp: m.xp, xpToNextLevel: m.xpToNextLevel,
+    }));
+    document.body.classList.add('battle-active');
     this.container.innerHTML = this.renderHTML();
     this.container.style.display = '';
     fadeIn(this.container);
     this.attachEvents();
     this.renderMoveButtons();
     this.renderTeamPortraits();
+    this.renderBattleTeamStrip();
+    this.refreshSynergyBar();
+    // Initialise player sprite flip via GSAP so all subsequent animations preserve it
+    const playerSprite = this.container.querySelector<HTMLElement>('#player-active-sprite');
+    if (playerSprite) gsap.set(playerSprite, { scaleX: -1 });
   }
 
   private renderHTML(): string {
@@ -54,15 +110,35 @@ export class BattleScreen {
     const wave = this.state.wave;
     const isBoss = bs.isBossWave;
 
+    const godModeBtn = this.state.activePerks.some(p => p.id === 'god_mode') && this.state.godModeAvailable
+      ? `<button class="ink-btn danger sm" id="god-mode-btn">↯ GOD MODE</button>`
+      : '';
+
     return `
-      <div class="battle-screen screen" id="battle-screen-inner">
-        <!-- Wave Banner -->
-        <div class="wave-banner ${isBoss ? 'boss-wave' : ''}">
-          <span class="wave-text">${isBoss ? '⚡ BOSS WAVE' : 'Wave'} ${wave}</span>
-          <div class="wave-progress-bar">
-            <div class="wave-progress-fill" style="width:${Math.min(100, (wave / 25) * 100)}%"></div>
+      <div class="battle-wrap screen" id="battle-screen-inner">
+
+        <!-- TopStrip: wave-chip | team-dots | coin-chip -->
+        <div class="topstrip${isBoss ? ' boss' : ''}">
+          <div class="wave-chip${isBoss ? ' boss' : ''}">
+            <span class="wlabel">${isBoss ? 'Boss wave' : 'Wave'}</span>
+            <span class="wnum">${String(wave).padStart(2,'0')}</span>
+          </div>
+          <div class="team-dots" id="hud-team-pills">
+            ${this.renderTeamDots()}
+          </div>
+          <div class="coin-chip">
+            <span class="coin-dot"></span>
+            <span id="coin-display">${this.state.coins.toLocaleString()}</span>
           </div>
         </div>
+
+        ${this.renderBossBlindBanner()}
+
+        <!-- Active Perks Strip -->
+        ${this.renderPerksStrip()}
+
+        <!-- Synergy Bar (reserved height so it never shifts layout) -->
+        <div class="synergy-bar" id="synergy-bar"></div>
 
         <!-- Battle Field -->
         <div class="battle-field">
@@ -74,7 +150,7 @@ export class BattleScreen {
             </div>
           </div>
 
-          <!-- Player: sprite LEFT, info RIGHT (row-reverse) -->
+          <!-- Player: sprite LEFT, info RIGHT -->
           <div class="battle-combatant player-combatant" id="player-combatant">
             ${renderBattleInfoCard(playerMon, 'player-active', 'player')}
             <div class="battle-sprite-slot player-sprite-slot" id="player-battle-area">
@@ -83,43 +159,181 @@ export class BattleScreen {
           </div>
         </div>
 
-        <!-- Battle Controls -->
-        <div class="battle-controls">
-          <div class="battle-controls-main">
-            <!-- Move Buttons -->
-            <div class="move-grid" id="move-grid">
-              <!-- Rendered dynamically -->
-            </div>
-
-            <!-- Battle Log -->
-            ${renderBattleLog(bs.log)}
+        <!-- Auto-battler: ticker + team strip + bag controls -->
+        <div class="battle-actions auto">
+          <div class="battle-ticker" id="battle-ticker">
+            ${this.renderTicker(bs.log)}
           </div>
-
-          <!-- Control Bar -->
-          <div class="battle-control-bar">
-            <div class="auto-battle-toggle">
-              <label class="toggle-label">
-                <input type="checkbox" id="auto-battle-toggle" ${bs.autoBattle ? 'checked' : ''} />
-                <span class="toggle-slider"></span>
-                <span class="toggle-text">AUTO</span>
-              </label>
-            </div>
-            ${this.state.activePerks.some(p => p.id === 'god_mode') && this.state.godModeAvailable
-              ? `<button class="btn btn-legendary btn-sm" id="god-mode-btn">⚡ GOD MODE</button>`
-              : ''
-            }
-            <div class="battle-coins">
-              🪙 <span id="coin-display">${this.state.coins}</span>
-            </div>
+          <div class="battle-team-strip" id="battle-team-strip">
+            <!-- Rendered dynamically -->
+          </div>
+          <div class="battle-controls">
+            <div id="battle-bag-row">${this.renderBagButtons()}</div>
+            ${godModeBtn}
           </div>
         </div>
 
-        <!-- Team Overview (bottom) -->
-        <div class="team-overview" id="team-overview">
-          <!-- Rendered dynamically -->
-        </div>
       </div>
     `;
+  }
+
+  private renderBattleTeamStrip(): void {
+    const bs = this.state.battleState;
+    if (!bs) return;
+    const strip = this.container.querySelector<HTMLElement>('#battle-team-strip');
+    if (!strip) return;
+    const itemsDisabled = blindDisablesItems(bs.bossBlind);
+    strip.innerHTML = bs.playerTeam.map((mon, i) => {
+      const isActive = i === bs.activePlayerIndex;
+      const isFainted = mon.battleHp <= 0;
+      const hpPct = Math.max(0, Math.min(100, (mon.battleHp / mon.maxBattleHp) * 100));
+      const hpClass = hpPct > 50 ? 'high' : hpPct > 20 ? 'mid' : 'low';
+      return `
+        <div class="bts-card ${isFainted ? 'fainted' : ''} ${isActive ? 'active' : ''}"
+             data-bts-index="${i}"
+             title="${mon.displayName} · Lv ${mon.level} · ${Math.max(0, mon.battleHp)}/${mon.maxBattleHp}">
+          <img class="bts-sprite" src="${mon.sprite}" alt="${mon.displayName}" draggable="false">
+          <div class="bts-info">
+            <div class="bts-name">${mon.displayName}</div>
+            <div class="bts-types">${renderTypeBadges(mon.types)}</div>
+            <div class="bts-hp-bar">
+              <div class="bts-hp-fill ${hpClass}" style="width:${hpPct}%"></div>
+            </div>
+            <div class="bts-hp-num">${Math.max(0, mon.battleHp)}/${mon.maxBattleHp}</div>
+            ${this.renderBtsItems(mon, itemsDisabled)}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  private renderBtsItems(mon: BattlePokemon, disabled: boolean): string {
+    const slots = mon.itemSlots ?? [];
+    const visible = slots.filter(s => s.unlocked);
+    if (visible.length === 0) return '';
+    const cells = visible.map(slot => {
+      if (!slot.item) return `<span class="bts-slot empty" title="Empty slot">·</span>`;
+      const cls = `bts-slot filled${disabled ? ' disabled' : ''}`;
+      const tt = disabled ? `${slot.item.name} (disabled — Boss Blind)` : slot.item.name;
+      return `<span class="${cls}" title="${tt}" data-tooltip-item-id="${slot.item.id}">${itemArt(slot.item)}</span>`;
+    }).join('');
+    return `<div class="bts-items${disabled ? ' all-disabled' : ''}">${cells}</div>`;
+  }
+
+  private renderTicker(log: BattleLogEntry[]): string {
+    const last = log.slice(-3);
+    if (last.length === 0) return `<span class="bt-msg muted">— battle starts —</span>`;
+    return last.map(e => `<span class="bt-msg t-${e.type}">${e.text}</span>`).join('');
+  }
+
+  private renderBossBlindBanner(): string {
+    const bs = this.state.battleState!;
+    if (!bs.bossBlind) return '';
+    const blind = getBossBlindById(bs.bossBlind);
+    if (!blind) return '';
+    return `
+      <div class="boss-blind-banner" style="--blind-color:${blind.color}">
+        <div class="bb-icon">${blind.icon}</div>
+        <div class="bb-text">
+          <div class="bb-name">Boss Blind · ${blind.name}</div>
+          <div class="bb-desc">${blind.description}</div>
+        </div>
+        <div class="bb-hint">${blind.tacticalHint}</div>
+      </div>
+    `;
+  }
+
+  private renderPerksStrip(): string {
+    const perks = this.state.activePerks ?? [];
+    if (perks.length === 0) return '';
+    return `
+      <div class="perks-strip" id="perks-strip">
+        <span class="ps-label">Perks</span>
+        ${perks.map(p => `
+          <div class="ps-chip" data-perk-id="${p.id}" title="${p.name} — ${p.description ?? ''}">
+            <span class="ps-icon">${p.icon ?? '◈'}</span>
+            <span class="ps-name">${p.name}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  private renderTeamDots(): string {
+    const bs = this.state.battleState!;
+    return bs.playerTeam.map((mon, i) => {
+      const isActive = i === bs.activePlayerIndex;
+      const isFainted = mon.battleHp <= 0;
+      return `<div class="team-dot ${isFainted ? 'fainted' : 'alive'}${isActive && !isFainted ? ' active' : ''}" title="${mon.displayName} · ${mon.battleHp}/${mon.maxBattleHp}"></div>`;
+    }).join('');
+  }
+
+  private renderRewardsSidebar(): string {
+    const rewards = this.state.teamRewards ?? [];
+    const perks = this.state.activePerks ?? [];
+    const items: string[] = [];
+
+    perks.forEach(p => {
+      items.push(`
+        <div class="sidebar-reward-row">
+          <span class="sidebar-reward-icon">◈</span>
+          <div>
+            <div class="sidebar-reward-name">${p.name}</div>
+          </div>
+        </div>
+      `);
+    });
+
+    rewards.forEach(r => {
+      items.push(`
+        <div class="sidebar-reward-row" data-tooltip-item-id="${r.item.id}">
+          <span class="sidebar-reward-icon">${itemArt(r.item)}</span>
+          <div>
+            <div class="sidebar-reward-name">${r.item.name}</div>
+            <div class="sidebar-reward-desc">${r.item.description}</div>
+          </div>
+        </div>
+      `);
+    });
+
+    if (items.length === 0) {
+      return '<div class="sidebar-empty">No rewards yet</div>';
+    }
+    return items.join('');
+  }
+
+  private renderItemsSidebar(): string {
+    const inv = this.state.inventory ?? [];
+    if (inv.length === 0) {
+      return '<div class="sidebar-empty">No items</div>';
+    }
+    return inv.map(entry => `
+      <div class="sidebar-item-row" data-tooltip-item-id="${entry.item.id}">
+        <span class="sidebar-item-icon">${itemArt(entry.item)}</span>
+        <div class="sidebar-item-info">
+          <div class="sidebar-item-name">${entry.item.name}</div>
+          <div class="sidebar-item-qty">×${entry.quantity}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  private renderBagButtons(): string {
+    const bs = this.state.battleState!;
+    const isSelecting = bs.phase === 'selecting' && !bs.autoBattle;
+    const usable = (this.state.inventory ?? []).filter(inv => {
+      const e = inv.item.effect;
+      return inv.item.itemType === 'consumable' && (e.healPercent || e.healAmount || e.curesStatus || inv.item.id === 'full_restore' || inv.item.id === 'revive' || inv.item.id === 'max_revive');
+    });
+    if (usable.length === 0) return '';
+    return usable.map((inv, i) => `
+      <button
+        class="ink-btn ghost sm${!isSelecting ? ' move-disabled' : ''}"
+        data-bag-index="${i}"
+        data-tooltip-item-id="${inv.item.id}"
+        ${!isSelecting ? 'disabled' : ''}
+      >${itemArt(inv.item)} ${inv.item.name} ×${inv.quantity}</button>
+    `).join('');
   }
 
   private renderMoveButtons(): void {
@@ -130,38 +344,39 @@ export class BattleScreen {
 
     const isSelecting = bs.phase === 'selecting' && !bs.autoBattle;
 
+    const eyeActive = bs.bossBlind === 'the_eye';
+
     grid.innerHTML = playerMon.moves.map((move, i) => {
       const ppEmpty = move.pp <= 0;
-      const typeColors: Record<string, string> = {
-        normal: '#A8A878', fire: '#F08030', water: '#6890F0', electric: '#F8D030',
-        grass: '#78C850', ice: '#98D8D8', fighting: '#C03028', poison: '#A040A0',
-        ground: '#E0C068', flying: '#A890F0', psychic: '#F85888', bug: '#A8B820',
-        rock: '#B8A038', ghost: '#705898', dragon: '#7038F8', dark: '#705848',
-        steel: '#B8B8D0', fairy: '#EE99AC',
-      };
-      const typeColor = typeColors[move.type] ?? '#888';
+      const eyeBlocked = eyeActive && bs.usedMoveIds.includes(move.id);
       const isPhysical = move.category === 'physical';
       const isSpecial = move.category === 'special';
+      const lowPP = move.pp > 0 && move.pp <= move.maxPp * 0.3;
+      const disabled = ppEmpty || !isSelecting || eyeBlocked;
 
       return `
         <button
-          class="move-btn ${ppEmpty ? 'move-empty' : ''} ${!isSelecting ? 'move-disabled' : ''}"
+          class="move-btn${ppEmpty ? ' move-empty' : ''}${eyeBlocked ? ' move-eye-locked' : ''}${!isSelecting ? ' move-disabled' : ''}"
           data-move-index="${i}"
-          ${ppEmpty || !isSelecting ? 'disabled' : ''}
-          style="--move-type-color: ${typeColor}"
+          ${disabled ? 'disabled' : ''}
+          style="--m-color: var(--t-${move.type})"
+          ${eyeBlocked ? 'title="Blocked by The Eye — already used this battle"' : ''}
         >
-          <div class="move-btn-inner">
-            <span class="move-name">${move.displayName}</span>
-            <div class="move-meta">
-              <span class="move-type-badge" style="background:${typeColor}">${move.type.toUpperCase()}</span>
-              <span class="move-category">${isPhysical ? '⚔️' : isSpecial ? '✨' : '🌀'}</span>
-              <span class="move-power">${move.power > 0 ? `PWR ${move.power}` : 'STATUS'}</span>
-              <span class="move-pp ${move.pp <= move.maxPp * 0.25 ? 'pp-low' : ''}">PP ${move.pp}/${move.maxPp}</span>
-            </div>
+          <div class="mtop">
+            <span class="mname">${move.displayName}${eyeBlocked ? ' 👁' : ''}</span>
+            <span class="type-stamp type-${move.type}">${move.type}</span>
+          </div>
+          <div class="mmeta">
+            <span>${isPhysical ? '† phys' : isSpecial ? '✦ spec' : '● stat'}</span>
+            <span>pow ${move.power > 0 ? move.power : '—'}</span>
+            <span class="pp${lowPP ? ' low' : ''}">pp ${move.pp}/${move.maxPp}</span>
           </div>
         </button>
       `;
     }).join('');
+
+    const bagRow = this.container.querySelector<HTMLElement>('#battle-bag-row');
+    if (bagRow) bagRow.innerHTML = this.renderBagButtons();
   }
 
   private renderTeamPortraits(): void {
@@ -178,15 +393,64 @@ export class BattleScreen {
       playerBar.innerHTML = renderTeamBar(bs.playerTeam, bs.activePlayerIndex, 'player');
     }
 
-    const overview = this.container.querySelector('#team-overview');
-    if (overview) {
-      overview.innerHTML = bs.playerTeam.map((p, i) =>
-        renderPokemonPortrait(p, `portrait-${i}`, i === bs.activePlayerIndex)
-      ).join('');
+    // Refresh team dots
+    const hudPills = this.container.querySelector('#hud-team-pills');
+    if (hudPills) {
+      hudPills.innerHTML = this.renderTeamDots();
     }
+
+    // Refresh bottom battle team strip (auto-battler view)
+    this.renderBattleTeamStrip();
+  }
+
+  private refreshSynergyBar(): void {
+    const bar = this.container.querySelector<HTMLElement>('#synergy-bar');
+    if (!bar) return;
+    const bs = this.state.battleState;
+    if (!bs) return;
+
+    const playerMon = bs.playerTeam[bs.activePlayerIndex];
+    if (!playerMon || playerMon.battleHp <= 0) {
+      this.activeSynergies = [];
+      bar.innerHTML = '';
+      return;
+    }
+
+    const { activeSynergies } = evaluateSynergies({
+      attacker: playerMon,
+      team: bs.playerTeam,
+      slotIndex: bs.activePlayerIndex,
+    });
+
+    this.activeSynergies = activeSynergies;
+    bar.innerHTML = activeSynergies.map(s => `
+      <div class="syn-badge syn-${s.color}" data-synergy-id="${s.id}">
+        <span class="syn-icon">${s.icon}</span>
+        <span class="syn-name">${s.name}</span>
+        <span class="syn-mult">×${s.multiplier.toFixed(2)}</span>
+      </div>
+    `).join('');
+  }
+
+  private pulseSynergies(ids: string[]): void {
+    ids.forEach(id => {
+      const badge = this.container.querySelector<HTMLElement>(`[data-synergy-id="${id}"]`);
+      if (!badge) return;
+      badge.classList.remove('syn-pulsing');
+      void (badge as HTMLElement).offsetWidth; // force reflow to restart animation
+      badge.classList.add('syn-pulsing');
+      badge.addEventListener('animationend', () => badge.classList.remove('syn-pulsing'), { once: true });
+    });
   }
 
   private attachEvents(): void {
+    // Tooltip delegation — items and synergy badges
+    attachTooltipDelegation(
+      this.container,
+      (id) => ALL_ITEMS.find(i => i.id === id),
+      () => this.activeSynergies,
+    );
+
     // Move buttons
     this.container.addEventListener('click', async (e) => {
       const btn = (e.target as HTMLElement).closest('[data-move-index]') as HTMLElement;
@@ -194,20 +458,32 @@ export class BattleScreen {
         const idx = parseInt(btn.dataset['moveIndex'] ?? '0');
         await this.executeTurn(idx);
       }
+      // Bag (in-battle item use)
+      const bagBtn = (e.target as HTMLElement).closest('[data-bag-index]') as HTMLElement;
+      if (bagBtn && !this.isAnimating) {
+        const usable = (this.state.inventory ?? []).filter(inv => {
+          const ef = inv.item.effect;
+          return inv.item.itemType === 'consumable' && (ef.healPercent || ef.healAmount || ef.curesStatus || inv.item.id === 'full_restore' || inv.item.id === 'revive' || inv.item.id === 'max_revive');
+        });
+        const idx = parseInt(bagBtn.dataset['bagIndex'] ?? '0');
+        const invEntry = usable[idx];
+        if (invEntry) this.useBattleItem(invEntry.item);
+      }
     });
 
-    // Auto-battle toggle
-    const autoToggle = this.container.querySelector<HTMLInputElement>('#auto-battle-toggle');
-    if (autoToggle) {
-      autoToggle.addEventListener('change', () => {
-        const bs = this.state.battleState!;
-        bs.autoBattle = autoToggle.checked;
-        this.renderMoveButtons();
-        if (bs.autoBattle) {
-          this.startAutoMode();
-        } else {
-          this.stopAutoMode();
-        }
+    // Team strip — click to switch active Pokémon (manual override)
+    const teamStrip = this.container.querySelector<HTMLElement>('#battle-team-strip');
+    if (teamStrip) {
+      teamStrip.addEventListener('click', (e) => {
+        const card = (e.target as HTMLElement).closest<HTMLElement>('[data-bts-index]');
+        if (!card) return;
+        const idx = parseInt(card.dataset['btsIndex'] ?? '-1');
+        const bs = this.state.battleState;
+        if (!bs || idx < 0 || idx === bs.activePlayerIndex) return;
+        const target = bs.playerTeam[idx];
+        if (!target || target.battleHp <= 0) return;
+        if (this.isAnimating || bs.phase !== 'selecting' || bs.winner) return;
+        this.manualSwitchTo(idx);
       });
     }
 
@@ -228,12 +504,21 @@ export class BattleScreen {
     const doAuto = async () => {
       if (!this.state.battleState?.autoBattle) return;
       if (this.isAnimating) return;
+      // Tour pause — freeze the auto-battler while the tour is explaining
+      // battle UI areas to the player. Resumes when the tour clears the flag.
+      if (isTourBattlePaused()) return;
       const bs = this.state.battleState;
       if (bs.phase !== 'selecting' || bs.winner) return;
 
       const playerMon = bs.playerTeam[bs.activePlayerIndex];
       const enemyMon = bs.enemyTeam[bs.activeEnemyIndex];
-      const move = aiSelectMove(playerMon, enemyMon, this.state.activePerks);
+      // Respect The Eye — filter already-used moves when AI picks
+      const availableMoves = bs.bossBlind === 'the_eye'
+        ? playerMon.moves.filter(m => !bs.usedMoveIds.includes(m.id) && m.pp > 0)
+        : playerMon.moves.filter(m => m.pp > 0);
+      if (availableMoves.length === 0) return;
+      const tempMon = { ...playerMon, moves: availableMoves };
+      const move = playerAutoSelectMove(tempMon, enemyMon, this.state.activePerks);
       const moveIdx = playerMon.moves.findIndex(m => m.id === move.id);
       await this.executeTurn(moveIdx >= 0 ? moveIdx : 0);
     };
@@ -260,6 +545,16 @@ export class BattleScreen {
     const playerMon = bs.playerTeam[bs.activePlayerIndex];
     const enemyMon = bs.enemyTeam[bs.activeEnemyIndex];
     const playerMove = playerMon.moves[playerMoveIndex] ?? playerMon.moves[0];
+
+    // The Eye — block move reuse
+    if (bs.bossBlind === 'the_eye' && bs.usedMoveIds.includes(playerMove.id)) {
+      showToast(`The Eye blocks ${playerMove.displayName}! Pick a different move.`, 'warning');
+      this.isAnimating = false;
+      bs.phase = 'selecting';
+      this.renderMoveButtons();
+      return;
+    }
+
     const enemyMove = aiSelectMove(enemyMon, playerMon, []);
 
     // Set choice lock if applicable
@@ -273,9 +568,10 @@ export class BattleScreen {
     // Determine turn order
     const order = determineTurnOrder(playerMon, enemyMon, playerMove, enemyMove, this.state.activePerks);
 
-    const logEl = this.container.querySelector<HTMLElement>('#battle-log')!;
+    const logEl = this.container.querySelector<HTMLElement>('#battle-log');
 
     const doPlayerAttack = async () => {
+      if (playerMon.battleHp <= 0) return;
       const { canMove: pCanMove, reason } = canMove(playerMon);
       if (!pCanMove) {
         if (reason) this.addLog(logEl, { text: reason, type: 'normal' });
@@ -302,6 +598,12 @@ export class BattleScreen {
       if (!bs.winner) await doPlayerAttack();
     }
 
+    // Record player's used move for The Eye
+    if (bs.bossBlind === 'the_eye' && !bs.usedMoveIds.includes(playerMove.id)) {
+      bs.usedMoveIds.push(playerMove.id);
+    }
+
+    bs.turnsUsed++;
     this.isFirstMove = false;
 
     // End of turn
@@ -310,11 +612,19 @@ export class BattleScreen {
     }
 
     bs.turn++;
+    // Track turns each active Pokémon has spent on the field
+    const pAct = bs.playerTeam[bs.activePlayerIndex];
+    const eAct = bs.enemyTeam[bs.activeEnemyIndex];
+    if (pAct) pAct.turnsInBattle = (pAct.turnsInBattle ?? 0) + 1;
+    if (eAct) eAct.turnsInBattle = (eAct.turnsInBattle ?? 0) + 1;
+    const turnCounter = this.container.querySelector<HTMLElement>('#battle-turn-counter');
+    if (turnCounter) turnCounter.textContent = `Turn ${bs.turn}`;
     this.isAnimating = false;
 
     if (!bs.winner) {
       bs.phase = 'selecting';
       this.renderMoveButtons();
+      this.refreshSynergyBar();
     }
   }
 
@@ -323,7 +633,7 @@ export class BattleScreen {
     attacker: BattlePokemon,
     defender: BattlePokemon,
     move: Move,
-    logEl: HTMLElement
+    logEl: HTMLElement | null
   ): Promise<void> {
     const bs = this.state.battleState!;
 
@@ -338,17 +648,24 @@ export class BattleScreen {
     const defenderSpriteEl = this.container.querySelector<HTMLElement>(
       `#${side === 'player' ? 'enemy' : 'player'}-active-sprite`
     );
+    // Attacker card for is-attacking highlight
+    const attackerCardEl = this.container.querySelector<HTMLElement>(
+      `#${side === 'player' ? 'player' : 'enemy'}-combatant`
+    );
 
     // Attack animation
+    if (attackerCardEl) attackerCardEl.classList.add('is-attacking');
     if (attackerSpriteEl) {
       await attackAnimation(attackerSpriteEl, side === 'player' ? 'right' : 'left');
     }
+    if (attackerCardEl) attackerCardEl.classList.remove('is-attacking');
 
     // Check if move hits
     const hits = checkMoveHits(attacker, move, this.state.activePerks);
     if (!hits) {
       this.addLog(logEl, { text: `${attacker.displayName}'s attack missed!`, type: 'normal' });
       if (attackerSpriteEl) shakeElement(attackerSpriteEl);
+      Audio.play('battle.miss');
       return;
     }
 
@@ -358,12 +675,36 @@ export class BattleScreen {
       return;
     }
 
-    // Calculate damage
-    const result = calculateDamage(attacker, defender, move, this.state.activePerks, this.isFirstMove);
+    // Evaluate synergies for player (used for damage bonus + post-hit pulse)
+    let activeSynergyIds: string[] = [];
+    if (side === 'player') {
+      const { activeSynergies } = evaluateSynergies({
+        attacker,
+        team: bs.playerTeam,
+        slotIndex: bs.activePlayerIndex,
+        moveType: move.type,
+      });
+      activeSynergyIds = activeSynergies.map(s => s.id);
+    }
+
+    // Calculate damage (pass team context for player attacks to enable synergy bonuses)
+    const teamCtx = side === 'player'
+      ? { team: bs.playerTeam, slotIndex: bs.activePlayerIndex }
+      : undefined;
+    const battleCtx = {
+      bossBlind: bs.bossBlind,
+      isPlayerAttacker: side === 'player',
+      typeLevels: this.state.typeLevels,
+    };
+    // The Ox — "first player attack of battle" flag (battle-scoped, not first-turn move)
+    const isFirstPlayerAttack = side === 'player' && !bs.hasUsedFirstAttack;
+    const result = calculateDamage(attacker, defender, move, this.state.activePerks, isFirstPlayerAttack, teamCtx, battleCtx);
+    if (side === 'player' && !bs.hasUsedFirstAttack) bs.hasUsedFirstAttack = true;
 
     if (result.isImmune) {
       this.addLog(logEl, { text: `It has no effect on ${defender.displayName}!`, type: 'immune' });
       if (defenderSpriteEl) shakeElement(defenderSpriteEl);
+      Audio.play('battle.immune');
       return;
     }
 
@@ -374,10 +715,20 @@ export class BattleScreen {
         text: effectLabel,
         type: result.effectiveness > 1 ? 'super_effective' : 'not_effective',
       });
+      if (result.effectiveness > 1) {
+        screenFlash('#ffb830', 0.12);
+        Audio.play('battle.super_effective');
+      } else {
+        Audio.play('battle.not_effective');
+      }
     }
 
     if (result.isCritical) {
       this.addLog(logEl, { text: 'A critical hit!', type: 'critical' });
+      screenFlash('#ff6bb5', 0.1);
+      Audio.play('battle.crit');
+    } else {
+      Audio.play('battle.hit');
     }
 
     // Apply damage
@@ -389,9 +740,9 @@ export class BattleScreen {
 
     // Update UI
     if (defenderSpriteEl) {
-      // Type-specific particle effect
+      // Type-specific ink strike effect
       if (attackerSpriteEl) {
-        await showTypeAttackEffect(move.type, attackerSpriteEl, defenderSpriteEl);
+        await showTypeAttackEffect(move.type, attackerSpriteEl, defenderSpriteEl, attackerCardEl ?? undefined);
       }
       await hitAnimation(defenderSpriteEl);
       const dmgType = result.isCritical ? 'critical'
@@ -399,6 +750,11 @@ export class BattleScreen {
         : result.effectiveness < 1 ? 'not_effective'
         : 'damage';
       showDamageNumber(defenderSpriteEl, actualDamage, dmgType);
+    }
+
+    // Pulse synergy badges that contributed to this hit
+    if (activeSynergyIds.length > 0) {
+      this.pulseSynergies(activeSynergyIds);
     }
 
     // Animate HP bar
@@ -417,6 +773,20 @@ export class BattleScreen {
 
     // Log damage messages
     dmgLog.forEach(e => this.addLog(logEl, e));
+
+    // The Tooth — heal enemy once when crossing 50% HP
+    if (side === 'player' && !fainted) {
+      const toothResult = applyToothHealCheck(defender, bs.activeEnemyIndex, bs);
+      if (toothResult.healed) {
+        toothResult.log.forEach(e => this.addLog(logEl, e));
+        if (defenderSpriteEl) {
+          const healAmt = Math.floor(defender.maxBattleHp * 0.5);
+          showDamageNumber(defenderSpriteEl, healAmt, 'heal');
+          pulseElement(defenderSpriteEl, '#ff6bb5');
+        }
+        if (hpFill) animateHPBar(hpFill, hpLabel, defender.battleHp, defender.maxBattleHp);
+      }
+    }
 
     // Life Orb recoil (v2: 8% current HP, no damage below 20% max HP)
     if (monHasItem(attacker, 'life_orb') && attacker.battleHp / attacker.maxBattleHp >= 0.2) {
@@ -461,9 +831,19 @@ export class BattleScreen {
       await this.applyMoveEffect(move, defender, logEl);
     }
 
+    // Burn Cascade perk — Fire moves get extra burn chance
+    if (!fainted && move.type === 'fire' && !defender.battleStatus) {
+      const cascade = this.state.activePerks.find(p => p.id === 'burn_cascade');
+      const chance = cascade?.effect.fireBurnChance ?? 0;
+      if (chance > 0 && canInflictStatus(defender, 'burn') && Math.random() < chance) {
+        defender.battleStatus = 'burn';
+        this.addLog(logEl, { text: `${defender.displayName} was burned by Burn Cascade!`, type: 'status' });
+      }
+    }
+
     // Double hit perk
     if (!fainted && this.state.activePerks.some(p => p.id === 'double_up') && Math.random() < 0.15) {
-      const result2 = calculateDamage(attacker, defender, move, this.state.activePerks, false);
+      const result2 = calculateDamage(attacker, defender, move, this.state.activePerks, false, teamCtx, battleCtx);
       const { actualDamage: d2, fainted: f2, log: l2 } = applyDamage(
         defender, result2.damage, move, this.state.activePerks
       );
@@ -481,6 +861,7 @@ export class BattleScreen {
     }
 
     if (fainted) {
+      Audio.play('battle.faint');
       if (defenderSpriteEl) await faintAnimation(defenderSpriteEl);
       await this.handleFaint(side === 'player' ? 'enemy' : 'player', defenderSpriteEl, logEl);
     }
@@ -490,7 +871,7 @@ export class BattleScreen {
     attacker: BattlePokemon,
     defender: BattlePokemon,
     move: Move,
-    logEl: HTMLElement
+    logEl: HTMLElement | null
   ): Promise<void> {
     // Simplified status move handling
     this.addLog(logEl, { text: `${attacker.displayName} used ${move.displayName}!`, type: 'normal' });
@@ -501,7 +882,7 @@ export class BattleScreen {
   private async applyMoveEffect(
     move: Move,
     target: BattlePokemon,
-    logEl: HTMLElement
+    logEl: HTMLElement | null
   ): Promise<void> {
     // Simplified: map common effects to status
     const effect = move.effect?.toLowerCase() ?? '';
@@ -524,8 +905,16 @@ export class BattleScreen {
     }
   }
 
-  private async applyEndOfTurnEffects(logEl: HTMLElement): Promise<void> {
+  private async applyEndOfTurnEffects(logEl: HTMLElement | null): Promise<void> {
     const bs = this.state.battleState!;
+
+    // The Hook — remove one random item from a random player pokemon
+    if (bs.bossBlind === 'the_hook') {
+      bs.hookTurnCount++;
+      const hookLog = applyHookItemLoss(bs);
+      hookLog.forEach(e => this.addLog(logEl, e));
+    }
+
     const allMons = [
       ...bs.playerTeam.slice(0, bs.activePlayerIndex + 1).slice(-1),
       ...bs.enemyTeam.slice(0, bs.activeEnemyIndex + 1).slice(-1),
@@ -535,8 +924,17 @@ export class BattleScreen {
       if (mon.battleHp <= 0) continue;
 
       // Status damage
-      const { damage, log: statusLog } = applyEndOfTurnStatus(mon);
+      let { damage, log: statusLog } = applyEndOfTurnStatus(mon);
       statusLog.forEach(e => this.addLog(logEl, e));
+      // Status Stacker perk — boost burn/poison damage on enemies
+      const isEnemy = bs.enemyTeam.includes(mon);
+      if (isEnemy && damage > 0 &&
+          (mon.battleStatus === 'burn' || mon.battleStatus === 'poison' || mon.battleStatus === 'badPoison')) {
+        const ssPerk = this.state.activePerks.find(p => p.id === 'status_stacker');
+        if (ssPerk?.effect.statusStacker) {
+          damage = Math.floor(damage * ssPerk.effect.statusStacker.damageMult);
+        }
+      }
       if (damage > 0) {
         mon.battleHp = Math.max(0, mon.battleHp - damage);
         this.updateHPDisplay(mon, bs);
@@ -607,15 +1005,36 @@ export class BattleScreen {
   private async handleFaint(
     faintedSide: 'player' | 'enemy',
     _spriteEl: HTMLElement | null,
-    logEl: HTMLElement
+    logEl: HTMLElement | null
   ): Promise<void> {
     const bs = this.state.battleState!;
     const isPlayerFainted = faintedSide === 'player';
 
     if (isPlayerFainted) {
-      // Synergy Link perk
+      // Boss Insurance voucher — once per boss wave, revive at 25% HP
+      if (
+        bs.isBossWave &&
+        this.state.vouchers?.includes('boss_insurance') &&
+        !(this.state as { _bossInsuranceUsed?: boolean })._bossInsuranceUsed
+      ) {
+        const fallen = bs.playerTeam[bs.activePlayerIndex];
+        if (fallen && fallen.battleHp <= 0) {
+          fallen.battleHp = Math.max(1, Math.floor(fallen.maxBattleHp * 0.25));
+          (this.state as { _bossInsuranceUsed?: boolean })._bossInsuranceUsed = true;
+          this.addLog(logEl, {
+            text: `${fallen.displayName} was revived by Boss Insurance!`,
+            type: 'heal',
+          });
+          this.rerenderBattleSprites();
+          return;
+        }
+      }
+
+      // Synergy Link perk — buffs the next alive Pokémon (not the next slot blindly)
       if (this.state.activePerks.some(p => p.id === 'synergy_link')) {
-        const nextMon = bs.playerTeam[bs.activePlayerIndex + 1];
+        const nextMon = bs.playerTeam
+          .slice(bs.activePlayerIndex + 1)
+          .find(m => m.battleHp > 0);
         if (nextMon) {
           nextMon.statStages.attack = Math.min(6, nextMon.statStages.attack + 2);
           nextMon.statStages.spAtk = Math.min(6, nextMon.statStages.spAtk + 2);
@@ -625,20 +1044,51 @@ export class BattleScreen {
         }
       }
 
-      bs.activePlayerIndex++;
-      if (bs.activePlayerIndex >= bs.playerTeam.length ||
-          bs.playerTeam.slice(bs.activePlayerIndex).every(p => p.battleHp <= 0)) {
+      // Advance past every fainted slot until we find an alive one
+      let nextPlayerIdx = bs.activePlayerIndex + 1;
+      while (
+        nextPlayerIdx < bs.playerTeam.length &&
+        bs.playerTeam[nextPlayerIdx].battleHp <= 0
+      ) {
+        nextPlayerIdx++;
+      }
+      if (nextPlayerIdx >= bs.playerTeam.length) {
         bs.winner = 'enemy';
         await this.endBattle(false);
         return;
       }
+      bs.activePlayerIndex = nextPlayerIdx;
 
       // Switch in next Pokemon
       const nextMon = bs.playerTeam[bs.activePlayerIndex];
       this.addLog(logEl, { text: `Go, ${nextMon.displayName}!`, type: 'system' });
+
+      // Tag-Team Bell — fallen ally heals + boosts the next one
+      const fallen = bs.playerTeam[bs.activePlayerIndex - 1];
+      if (fallen && monHasItem(fallen, 'tag_team_bell')) {
+        nextMon.battleHp = nextMon.maxBattleHp;
+        nextMon.statStages.attack = Math.min(6, nextMon.statStages.attack + 1);
+        this.addLog(logEl, {
+          text: `${fallen.displayName}'s Tag-Team Bell rang! ${nextMon.displayName} entered at full HP, Atk rose!`,
+          type: 'heal',
+        });
+      }
+
+      // Pivot Tactics perk — +1 Atk and Speed on switch-in
+      const pivotPerk = this.state.activePerks.find(p => p.id === 'pivot_tactics');
+      if (pivotPerk?.effect.pivotBoost) {
+        const { atk, speed } = pivotPerk.effect.pivotBoost;
+        nextMon.statStages.attack = Math.min(6, nextMon.statStages.attack + atk);
+        nextMon.statStages.speed = Math.min(6, nextMon.statStages.speed + speed);
+        this.addLog(logEl, {
+          text: `${nextMon.displayName} pivoted in! Atk and Speed rose!`,
+          type: 'status',
+        });
+      }
+
       this.rerenderBattleSprites();
       const spriteEl = this.container.querySelector<HTMLElement>('#player-active-sprite');
-      if (spriteEl) enterAnimation(spriteEl);
+      if (spriteEl) enterAnimation(spriteEl, true);
     } else {
       // Enemy fainted
       this.state.runStats.totalKOs++;
@@ -656,6 +1106,7 @@ export class BattleScreen {
       const attacker = bs.playerTeam[attackerIdx];
       if (attacker && attacker.battleHp > 0) {
         const xpGain = xpFromKO(faintedEnemy.level);
+        const preLockedSlots = attacker.itemSlots?.map(s => s.unlocked) ?? [];
         const { leveledUp, newLevel } = grantXP(attacker, xpGain, this.state.activePerks);
         this.addLog(logEl, {
           text: `${attacker.displayName} gained ${xpGain} XP!`,
@@ -663,11 +1114,26 @@ export class BattleScreen {
         });
         if (leveledUp) {
           this.addLog(logEl, {
-            text: `⬆ ${attacker.displayName} grew to Lv.${newLevel}!`,
+            text: `↑ ${attacker.displayName} grew to Lv.${newLevel}!`,
             type: 'system',
+          });
+          // Log any newly auto-unlocked item slots
+          attacker.itemSlots?.forEach((s, si) => {
+            if (s.unlocked && !preLockedSlots[si]) {
+              this.addLog(logEl, { text: `◈ ${attacker.displayName} unlocked Item Slot ${si + 1}!`, type: 'system' });
+            }
           });
           this.updateHPDisplay(attacker, bs);
           this.renderTeamPortraits();
+
+          // Learn new moves
+          const learned = await learnMovesForLevel(attacker);
+          for (const ev of learned) {
+            const txt = ev.replacedMove
+              ? `✦ ${attacker.displayName} forgot ${ev.replacedMove.displayName} and learned ${ev.newMove.displayName}!`
+              : `✦ ${attacker.displayName} learned ${ev.newMove.displayName}!`;
+            this.addLog(logEl, { text: txt, type: 'system' });
+          }
 
           // Check for level-based evolution
           if (
@@ -678,25 +1144,75 @@ export class BattleScreen {
           ) {
             attacker.pendingEvolution = true;
             this.addLog(logEl, {
-              text: `✨ ${attacker.displayName} is ready to evolve!`,
+              text: `◇ ${attacker.displayName} is ready to evolve!`,
               type: 'system',
             });
+          }
+        }
+
+        // Exp. Share — benched alive teammates get 50% XP
+        const sharedXp = Math.max(1, Math.floor(xpGain * 0.5));
+        for (const [idx, mon] of bs.playerTeam.entries()) {
+          if (idx === attackerIdx || mon.battleHp <= 0) continue;
+          const preLocked = mon.itemSlots?.map(s => s.unlocked) ?? [];
+          const { leveledUp: bl, newLevel: blv } = grantXP(mon, sharedXp, this.state.activePerks);
+          if (bl) {
+            this.addLog(logEl, { text: `↑ ${mon.displayName} grew to Lv.${blv}!`, type: 'system' });
+            mon.itemSlots?.forEach((s, si) => {
+              if (s.unlocked && !preLocked[si]) {
+                this.addLog(logEl, { text: `◈ ${mon.displayName} unlocked Item Slot ${si + 1}!`, type: 'system' });
+              }
+            });
+            const benchLearned = await learnMovesForLevel(mon);
+            for (const ev of benchLearned) {
+              const txt = ev.replacedMove
+                ? `✦ ${mon.displayName} forgot ${ev.replacedMove.displayName} and learned ${ev.newMove.displayName}!`
+                : `✦ ${mon.displayName} learned ${ev.newMove.displayName}!`;
+              this.addLog(logEl, { text: txt, type: 'system' });
+            }
+            if (!mon.isFullyEvolved && mon.nextEvolutionId !== null && mon.evolutionLevel !== null && blv >= mon.evolutionLevel) {
+              mon.pendingEvolution = true;
+              this.addLog(logEl, { text: `◇ ${mon.displayName} is ready to evolve!`, type: 'system' });
+            }
           }
         }
       }
       // ─────────────────────────────────────────────────────────
 
-      bs.activeEnemyIndex++;
-      if (bs.activeEnemyIndex >= bs.enemyTeam.length ||
-          bs.enemyTeam.slice(bs.activeEnemyIndex).every(p => p.battleHp <= 0)) {
+      // Advance past every fainted enemy until we find an alive one
+      let nextEnemyIdx = bs.activeEnemyIndex + 1;
+      while (
+        nextEnemyIdx < bs.enemyTeam.length &&
+        bs.enemyTeam[nextEnemyIdx].battleHp <= 0
+      ) {
+        nextEnemyIdx++;
+      }
+      if (nextEnemyIdx >= bs.enemyTeam.length) {
         bs.winner = 'player';
         await this.endBattle(true);
         return;
       }
+      bs.activeEnemyIndex = nextEnemyIdx;
 
       // Switch in next enemy
       const nextEnemy = bs.enemyTeam[bs.activeEnemyIndex];
       this.addLog(logEl, { text: `Enemy sent out ${nextEnemy.displayName}!`, type: 'system' });
+
+      // Reset Pulse — any player Pokémon holding it clears enemy stat stages once per wave
+      const pulseHolder = bs.playerTeam.find(p =>
+        p.battleHp > 0 && monHasItem(p, 'reset_pulse') && !p.resetPulseUsedThisWave
+      );
+      if (pulseHolder) {
+        nextEnemy.statStages = {
+          attack: 0, defense: 0, spAtk: 0, spDef: 0, speed: 0, accuracy: 0, evasion: 0,
+        };
+        pulseHolder.resetPulseUsedThisWave = true;
+        this.addLog(logEl, {
+          text: `${pulseHolder.displayName}'s Reset Pulse cleared ${nextEnemy.displayName}'s stat changes!`,
+          type: 'status',
+        });
+      }
+
       this.rerenderBattleSprites();
       const spriteEl = this.container.querySelector<HTMLElement>('#enemy-active-sprite');
       if (spriteEl) enterAnimation(spriteEl);
@@ -719,6 +1235,8 @@ export class BattleScreen {
       playerCombatant.innerHTML =
         renderBattleInfoCard(playerMon, 'player-active', 'player') +
         `<div class="battle-sprite-slot player-sprite-slot" id="player-battle-area">${renderBattleSpriteImg(playerMon, 'player-active')}</div>`;
+      const ps = playerCombatant.querySelector<HTMLElement>('#player-active-sprite');
+      if (ps) gsap.set(ps, { scaleX: -1 });
     }
     if (enemyCombatant) {
       enemyCombatant.innerHTML =
@@ -727,6 +1245,184 @@ export class BattleScreen {
     }
 
     this.renderMoveButtons();
+  }
+
+  private useBattleItem(item: import('../../types').Item): void {
+    const bs = this.state.battleState!;
+    const logEl = this.container.querySelector<HTMLElement>('#battle-log');
+    const activeMon = bs.playerTeam[bs.activePlayerIndex];
+
+    // For revives, target first fainted mon; otherwise target active mon
+    const isRevive = item.id === 'revive' || item.id === 'max_revive';
+    const target = isRevive
+      ? bs.playerTeam.find(m => m.battleHp <= 0)
+      : activeMon;
+
+    if (!target) { showToast('No valid target!', 'warning'); return; }
+
+    const ef = item.effect;
+    if (ef.healPercent) {
+      const heal = Math.floor(target.maxBattleHp * ef.healPercent);
+      target.battleHp = Math.min(target.maxBattleHp, target.battleHp + heal);
+      if (logEl) this.addLog(logEl, { text: `Used ${item.name} on ${target.displayName}! (+${heal} HP)`, type: 'system' });
+    } else if (ef.healAmount) {
+      target.battleHp = Math.min(target.maxBattleHp, target.battleHp + ef.healAmount);
+      if (logEl) this.addLog(logEl, { text: `Used ${item.name} on ${target.displayName}! (+${ef.healAmount} HP)`, type: 'system' });
+    } else if (item.id === 'full_restore') {
+      target.battleHp = target.maxBattleHp;
+      target.battleStatus = null;
+      if (logEl) this.addLog(logEl, { text: `Used ${item.name} on ${target.displayName}! Full HP restored!`, type: 'system' });
+    } else if (isRevive) {
+      target.battleHp = item.id === 'max_revive' ? target.maxBattleHp : Math.floor(target.maxBattleHp / 2);
+      if (logEl) this.addLog(logEl, { text: `${target.displayName} was revived!`, type: 'system' });
+    }
+    if (ef.curesStatus) { target.battleStatus = null; }
+
+    // Consume from inventory
+    const invIdx = this.state.inventory.findIndex(i => i.item.id === item.id);
+    if (invIdx >= 0) {
+      this.state.inventory[invIdx].quantity--;
+      if (this.state.inventory[invIdx].quantity <= 0) this.state.inventory.splice(invIdx, 1);
+    }
+
+    this.updateHPDisplay(target, bs);
+    this.renderTeamPortraits();
+    this.renderMoveButtons();
+  }
+
+  /** Post-battle XP recap — focuses each Pokémon, animates its EP bar from
+   *  pre-battle XP to post-battle XP, flashes level-ups. Click to skip. */
+  private async showXpRecap(): Promise<void> {
+    const bs = this.state.battleState;
+    if (!bs) return;
+    const team = bs.playerTeam;
+    // Compute total xp gained across the team — bail if nothing to show
+    const gained = team.map((m, i) => {
+      const start = this.xpStart[i];
+      if (!start) return 0;
+      if (m.level > start.level) return 1;
+      return Math.max(0, m.xp - start.xp);
+    });
+    if (gained.every(g => g === 0)) return;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'xp-recap-overlay';
+    overlay.innerHTML = `
+      <div class="xpr-card">
+        <div class="xpr-kicker">◆ Battle Recap ◆</div>
+        <div class="xpr-title">Experience gained</div>
+        <div class="xpr-list" id="xpr-list">
+          ${team.map((m, i) => {
+            const start = this.xpStart[i] ?? { level: m.level, xp: m.xp, xpToNextLevel: m.xpToNextLevel };
+            const fainted = m.battleHp <= 0;
+            return `
+              <div class="xpr-row ${fainted ? 'fainted' : ''}" data-xpr-row="${i}">
+                <img class="xpr-sprite" src="${m.sprite}" alt="${m.displayName}" draggable="false" />
+                <div class="xpr-mid">
+                  <div class="xpr-name">
+                    <span>${m.displayName}</span>
+                    <span class="xpr-lvl" data-xpr-lvl="${i}">Lv.${start.level}</span>
+                  </div>
+                  <div class="xpr-bar-track">
+                    <div class="xpr-bar-fill" data-xpr-fill="${i}" style="width:${(start.xp / Math.max(1, start.xpToNextLevel)) * 100}%"></div>
+                  </div>
+                  <div class="xpr-meta" data-xpr-meta="${i}">
+                    +${gained[i]} XP
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+        <div class="xpr-skip">Click to continue</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    let dismissed = false;
+    const dismiss = () => {
+      if (dismissed) return;
+      dismissed = true;
+      gsap.to(overlay, {
+        opacity: 0, duration: 0.2, ease: 'power2.in',
+        onComplete: () => overlay.remove(),
+      });
+    };
+    overlay.addEventListener('click', dismiss);
+
+    requestAnimationFrame(() => overlay.classList.add('active'));
+    // Pause: let the panel settle before the bars start filling
+    await new Promise(r => setTimeout(r, 700));
+
+    // Animate each Pokémon sequentially: focus → fill bar → level-up flash if any
+    for (let i = 0; i < team.length; i++) {
+      if (dismissed) break;
+      if (gained[i] === 0) continue;
+      const row = overlay.querySelector<HTMLElement>(`[data-xpr-row="${i}"]`);
+      const fill = overlay.querySelector<HTMLElement>(`[data-xpr-fill="${i}"]`);
+      const lvl = overlay.querySelector<HTMLElement>(`[data-xpr-lvl="${i}"]`);
+      const meta = overlay.querySelector<HTMLElement>(`[data-xpr-meta="${i}"]`);
+      if (!row || !fill || !lvl || !meta) continue;
+
+      const start = this.xpStart[i] ?? { level: team[i].level, xp: team[i].xp, xpToNextLevel: team[i].xpToNextLevel };
+      const finalLevel = team[i].level;
+      const finalXp = team[i].xp;
+      const finalCap = team[i].xpToNextLevel;
+
+      row.classList.add('active');
+      await new Promise(r => setTimeout(r, 260));
+
+      // Animate level-by-level if multiple level-ups happened
+      let curLevel = start.level;
+      let curCap = start.xpToNextLevel;
+      let curStart = start.xp;
+      while (curLevel < finalLevel && !dismissed) {
+        // Fill from curStart → curCap (full bar)
+        await new Promise<void>(resolve => {
+          gsap.to(fill, {
+            width: '100%',
+            duration: 0.85,
+            ease: 'power2.out',
+            onComplete: () => resolve(),
+          });
+        });
+        if (dismissed) break;
+        // Level-up flash
+        curLevel += 1;
+        lvl.textContent = `Lv.${curLevel}`;
+        lvl.classList.remove('flash');
+        void lvl.offsetWidth;
+        lvl.classList.add('flash');
+        // Snap bar to 0 and continue
+        gsap.set(fill, { width: '0%' });
+        // Approximate cap progression
+        curStart = 0;
+        curCap = Math.floor(Math.pow(curLevel, 1.5) * 10);
+        await new Promise(r => setTimeout(r, 320));
+      }
+      if (dismissed) break;
+      // Final partial fill
+      const finalPct = (finalXp / Math.max(1, finalCap)) * 100;
+      const startPct = (curStart / Math.max(1, curCap)) * 100;
+      gsap.set(fill, { width: `${startPct}%` });
+      await new Promise<void>(resolve => {
+        gsap.to(fill, {
+          width: `${finalPct}%`,
+          duration: 0.7,
+          ease: 'power2.out',
+          onComplete: () => resolve(),
+        });
+      });
+      meta.textContent = `+${gained[i]} XP · Lv.${finalLevel}`;
+      row.classList.remove('active');
+      row.classList.add('done');
+      await new Promise(r => setTimeout(r, 260));
+    }
+
+    if (!dismissed) {
+      await new Promise(r => setTimeout(r, 1500));
+      dismiss();
+    }
   }
 
   private async endBattle(playerWon: boolean): Promise<void> {
@@ -742,7 +1438,11 @@ export class BattleScreen {
       }
     }
 
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise(r => setTimeout(r, 1200));
+
+    if (playerWon) {
+      await this.showXpRecap();
+    }
 
     this.state.battleState!.phase = 'finished';
     this.state.battleState!.winner = playerWon ? 'player' : 'enemy';
@@ -764,14 +1464,58 @@ export class BattleScreen {
       this.state.team[i].battleHp = battleMon.battleHp;
       this.state.team[i].maxBattleHp = battleMon.maxBattleHp;
       this.state.team[i].effectiveStats = battleMon.effectiveStats;
+      // Sync unlock state (auto-unlocks from level-ups)
+      if (battleMon.itemSlots && this.state.team[i].itemSlots) {
+        battleMon.itemSlots.forEach((s, si) => {
+          const target = this.state.team[i].itemSlots?.[si];
+          if (target && s.unlocked) target.unlocked = true;
+        });
+      }
     }
 
     this.onBattleEnd(this.state);
   }
 
-  private addLog(logEl: HTMLElement, entry: BattleLogEntry): void {
-    appendLogEntry(logEl, entry);
+  private addLog(logEl: HTMLElement | null, entry: BattleLogEntry): void {
+    if (logEl) appendLogEntry(logEl, entry);
     this.state.battleState?.log.push(entry);
+    this.refreshTicker();
+  }
+
+  private refreshTicker(): void {
+    const tickerEl = this.container.querySelector<HTMLElement>('#battle-ticker');
+    const bs = this.state.battleState;
+    if (!tickerEl || !bs) return;
+    tickerEl.innerHTML = this.renderTicker(bs.log);
+  }
+
+  private manualSwitchTo(idx: number): void {
+    const bs = this.state.battleState;
+    if (!bs) return;
+    if (idx === bs.activePlayerIndex) return;
+    const target = bs.playerTeam[idx];
+    if (!target || target.battleHp <= 0) return;
+    const logEl = this.container.querySelector<HTMLElement>('#battle-log');
+    const oldMon = bs.playerTeam[bs.activePlayerIndex];
+    bs.activePlayerIndex = idx;
+    target.choiceLockedMove = null;
+    target.turnsInBattle = 0;
+    this.addLog(logEl, { text: `${oldMon?.displayName} retreats. Go, ${target.displayName}!`, type: 'system' });
+
+    // Pivot Tactics perk
+    const pivotPerk = this.state.activePerks.find(p => p.id === 'pivot_tactics');
+    if (pivotPerk?.effect.pivotBoost) {
+      const { atk, speed } = pivotPerk.effect.pivotBoost;
+      target.statStages.attack = Math.min(6, target.statStages.attack + atk);
+      target.statStages.speed = Math.min(6, target.statStages.speed + speed);
+    }
+
+    this.rerenderBattleSprites();
+    this.renderTeamPortraits();
+    this.renderBattleTeamStrip();
+    this.refreshSynergyBar();
+    const spriteEl = this.container.querySelector<HTMLElement>('#player-active-sprite');
+    if (spriteEl) enterAnimation(spriteEl, true);
   }
 
   private async activateGodMode(): Promise<void> {
@@ -786,7 +1530,7 @@ export class BattleScreen {
 
     this.rerenderBattleSprites();
     this.renderTeamPortraits();
-    showToast('⚡ GOD MODE ACTIVATED! Team fully restored!', 'success');
+    showToast('↯ GOD MODE ACTIVATED! Team fully restored!', 'success');
 
     // Remove god mode button
     const btn = this.container.querySelector('#god-mode-btn');
@@ -795,6 +1539,7 @@ export class BattleScreen {
 
   unmount(): void {
     this.stopAutoMode();
+    document.body.classList.remove('battle-active');
     this.container.style.display = 'none';
     this.container.innerHTML = '';
   }

@@ -1,10 +1,16 @@
 import type {
   BattlePokemon, Move, Perk, DamageResult, BattleLogEntry,
-  StatusEffect, StatStages, BaseStats, PokemonType, Item, ItemSlot,
+  StatusEffect, StatStages, BaseStats, PokemonType, Item, ItemSlot, BattleState,
 } from '../types';
 import { defaultItemSlots } from '../types';
+import { evaluateSynergies } from './synergies';
 import { getTypeEffectiveness } from '../data/typeChart';
 import { calcStat } from '../api/pokeapi';
+import {
+  blindDisablesSynergies,
+  blindDisablesStab,
+  blindDisablesItems,
+} from '../data/bossBlinds';
 
 // ============================================================
 // Item Slot Helpers
@@ -72,9 +78,20 @@ export function calculateDamage(
   defender: BattlePokemon,
   move: Move,
   perks: Perk[],
-  isFirstMove: boolean = false
+  isFirstMove: boolean = false,
+  teamCtx?: { team: BattlePokemon[]; slotIndex: number },
+  battleCtx?: {
+    bossBlind: import('../data/bossBlinds').BossBlindId | null;
+    isPlayerAttacker: boolean;
+    typeLevels?: Partial<Record<PokemonType, number>>;
+  }
 ): DamageResult {
   if (move.power === 0 || move.category === 'status') {
+    return { damage: 0, effectiveness: 1, isCritical: false, isImmune: false };
+  }
+
+  // Boss-Blind: The Ox — first player attack deals 0
+  if (battleCtx?.isPlayerAttacker && battleCtx.bossBlind === 'the_ox' && isFirstMove) {
     return { damage: 0, effectiveness: 1, isCritical: false, isImmune: false };
   }
 
@@ -136,11 +153,19 @@ export function calculateDamage(
   if (perks.some(p => p.id === 'adrenaline_rush') && isFirstMove) critChance = 1;
   if (monHasItem(attacker, 'scope_lens')) critChance = 0.125;
   const isCritical = Math.random() < critChance;
-  if (isCritical) damage = Math.floor(damage * 1.5);
+  const critMult = battleCtx?.bossBlind === 'the_needle' ? 3 : 1.5;
+  if (isCritical) damage = Math.floor(damage * critMult);
 
-  // STAB
+  // STAB (disabled by The Serpent)
   let stab = 1;
-  if (attacker.types.includes(move.type)) {
+  const stabActive = !blindDisablesStab(battleCtx?.bossBlind);
+  // Type Lens — secondary type also gets STAB
+  const hasTypeLens = monHasItem(attacker, 'type_lens') && !blindDisablesItems(battleCtx?.bossBlind);
+  const stabMatches = stabActive && (
+    attacker.types.includes(move.type) ||
+    (hasTypeLens && attacker.types.length >= 2 && attacker.types[1] === move.type)
+  );
+  if (stabMatches) {
     if (perks.some(p => p.id === 'adaptability')) {
       stab = 2.0;
     } else {
@@ -148,6 +173,11 @@ export function calculateDamage(
     }
   }
   damage = Math.floor(damage * stab);
+
+  // The Needle — base damage ×0.5 (crit makes up for it via critMult above)
+  if (battleCtx?.bossBlind === 'the_needle') {
+    damage = Math.floor(damage * 0.5);
+  }
 
   // Type effectiveness
   damage = Math.floor(damage * effectiveness);
@@ -157,22 +187,51 @@ export function calculateDamage(
   damage = Math.floor(damage * random);
 
   // === Item Effects (all unlocked slots) ===
+  // The Fish disables all held items
+  const itemsDisabled = blindDisablesItems(battleCtx?.bossBlind);
 
-  if (monHasItem(attacker, 'life_orb')) damage = Math.floor(damage * 1.3);
-  if (monHasItem(attacker, 'expert_belt') && effectiveness > 1) damage = Math.floor(damage * 1.2);
-  if (monHasItem(attacker, 'muscle_band') && move.category === 'physical') damage = Math.floor(damage * 1.1);
-  if (monHasItem(attacker, 'wise_glasses') && move.category === 'special') damage = Math.floor(damage * 1.1);
-  if (monHasItem(attacker, 'mega_stone')) damage = Math.floor(damage * 1.3);
+  if (!itemsDisabled) {
+    if (monHasItem(attacker, 'life_orb')) damage = Math.floor(damage * 1.3);
+    if (monHasItem(attacker, 'expert_belt') && effectiveness > 1) damage = Math.floor(damage * 1.2);
+    if (monHasItem(attacker, 'muscle_band') && move.category === 'physical') damage = Math.floor(damage * 1.1);
+    if (monHasItem(attacker, 'wise_glasses') && move.category === 'special') damage = Math.floor(damage * 1.1);
+    if (monHasItem(attacker, 'mega_stone')) damage = Math.floor(damage * 1.3);
 
-  // Type-boosting items — check all slots
-  for (const item of getSlotItems(attacker)) {
-    if (item.effect.typePowerBoost) {
-      const { type, multiplier } = item.effect.typePowerBoost;
-      if (move.type === type) damage = Math.floor(damage * multiplier);
+    // Type-boosting items — check all slots
+    for (const item of getSlotItems(attacker)) {
+      if (item.effect.typePowerBoost) {
+        const { type, multiplier } = item.effect.typePowerBoost;
+        if (move.type === type) damage = Math.floor(damage * multiplier);
+      }
+    }
+  }
+
+  // Planet Card — +10% per type level on matching move type
+  if (battleCtx?.typeLevels || perks.some(p => p.id === 'type_mastery')) {
+    let tl = battleCtx?.typeLevels?.[move.type] ?? 0;
+    // Type Mastery perk — +1 type level when 2+ teammates share primary type
+    const tmPerk = perks.find(p => p.id === 'type_mastery');
+    if (tmPerk?.effect.typeMasteryBonus && teamCtx) {
+      const primary = attacker.types[0];
+      if (primary === move.type) {
+        const sharers = teamCtx.team.filter(p =>
+          p.battleHp > 0 && p.types.includes(primary)).length;
+        if (sharers >= 2) tl += tmPerk.effect.typeMasteryBonus;
+      }
+    }
+    if (tl > 0) {
+      damage = Math.floor(damage * (1 + tl * 0.1));
     }
   }
 
   // Z-Crystal (handled separately via z-move UI)
+
+  // === Perk: typeBoost (per-type damage perks like Burn Cascade) ===
+  for (const perk of perks) {
+    if (perk.effect.typeBoost && perk.effect.typeBoost.type === move.type) {
+      damage = Math.floor(damage * perk.effect.typeBoost.multiplier);
+    }
+  }
 
   // === Perk Effects ===
 
@@ -222,8 +281,32 @@ export function calculateDamage(
     damage = Math.floor(damage * 1.15);
   }
 
+  // Backline Burner — slots 4 & 5 deal +30%
+  if (teamCtx && teamCtx.slotIndex >= 3) {
+    const blPerk = perks.find(p => p.id === 'backline_burner');
+    if (blPerk?.effect.backlineDamageBonus) {
+      damage = Math.floor(damage * blPerk.effect.backlineDamageBonus);
+    }
+  }
+
   // Type Coverage (6+ types)
   // Handled in main.ts when applying the perk
+
+  // === Synergy Bonuses (player side only — teamCtx not passed for enemy) ===
+  // The Mouth disables synergies entirely.
+  if (teamCtx && !blindDisablesSynergies(battleCtx?.bossBlind)) {
+    const { totalMultiplier, activeSynergies } = evaluateSynergies({
+      attacker,
+      team: teamCtx.team,
+      slotIndex: teamCtx.slotIndex,
+      moveType: move.type,
+    });
+    damage = Math.floor(damage * totalMultiplier);
+    // Stash for UI display — clears each turn
+    (attacker as any)._activeSynergies = activeSynergies;
+  } else if (teamCtx) {
+    (attacker as any)._activeSynergies = [];
+  }
 
   // Minimum 1 damage
   return {
@@ -248,6 +331,12 @@ export function checkMoveHits(attacker: BattlePokemon, move: Move, perks: Perk[]
 
   // Sharp Senses perk
   if (perks.some(p => p.id === 'sharp_senses')) accuracy *= 1.05;
+
+  // Status Stacker perk — +20% accuracy on status moves
+  if (move.category === 'status') {
+    const ssPerk = perks.find(p => p.id === 'status_stacker');
+    if (ssPerk?.effect.statusStacker) accuracy *= ssPerk.effect.statusStacker.accuracyMult;
+  }
 
   // Accuracy stage
   const accStage = attacker.statStages.accuracy ?? 0;
@@ -302,12 +391,36 @@ export function aiSelectMove(
     return attacker.choiceLockedMove;
   }
 
-  // Score each move
+  // Status-move opportunism: if the defender has no major status,
+  // there's a 28% chance the AI picks a status move (if it has one that inflicts one).
+  const defenderHasStatus = defender.battleStatus !== null;
+  const statusInflictingMoves = usableMoves.filter(m => {
+    if (m.category !== 'status' && m.power > 0) return false;
+    const e = (m.effect ?? '').toLowerCase();
+    return e.includes('burn') || e.includes('paralyz') || e.includes('poison') ||
+           e.includes('sleep') || e.includes('freeze') || e.includes('confus');
+  });
+  if (!defenderHasStatus && statusInflictingMoves.length > 0 && Math.random() < 0.28) {
+    // Pick a status move, preferring ones the defender isn't immune to
+    const pool = statusInflictingMoves.filter(m => {
+      const e = (m.effect ?? '').toLowerCase();
+      // Basic type immunities
+      if (e.includes('poison') && (defender.types.includes('poison') || defender.types.includes('steel'))) return false;
+      if (e.includes('burn') && defender.types.includes('fire')) return false;
+      if (e.includes('paralyz') && defender.types.includes('electric')) return false;
+      if (e.includes('freeze') && defender.types.includes('ice')) return false;
+      return true;
+    });
+    const src = pool.length > 0 ? pool : statusInflictingMoves;
+    return src[Math.floor(Math.random() * src.length)];
+  }
+
+  // Score each damaging move
   let bestMove = usableMoves[0];
   let bestScore = -Infinity;
 
   for (const move of usableMoves) {
-    if (move.power === 0) continue; // Skip status moves for AI simplicity
+    if (move.power === 0) continue; // Skip pure status for damage scoring
     const effectiveness = getTypeEffectiveness(move.type, defender.types);
     const stab = attacker.types.includes(move.type) ? 1.5 : 1;
     const score = move.power * effectiveness * stab;
@@ -318,6 +431,100 @@ export function aiSelectMove(
   }
 
   return bestMove;
+}
+
+/**
+ * Smart move selection for player auto-battle.
+ * Prefers most-effective damaging move (type, STAB, accuracy, atk/def stat ratio),
+ * but rotates among near-best candidates weighted by remaining PP fraction
+ * so PP doesn't deplete on a single move over a long run.
+ */
+export function playerAutoSelectMove(
+  attacker: BattlePokemon,
+  defender: BattlePokemon,
+  perks: Perk[],
+): Move {
+  const usableMoves = attacker.moves.filter(m => m.pp > 0);
+  if (usableMoves.length === 0) {
+    return {
+      id: -1, name: 'struggle', displayName: 'Struggle',
+      type: 'normal', category: 'physical', power: 50, accuracy: 100,
+      pp: 1, maxPp: 1, effect: '', effectChance: 0, priority: 0,
+      isContact: true, isSoundBased: false, isPowder: false, isTwoTurn: false,
+      target: 'selected-pokemon',
+    };
+  }
+
+  // Choice lock — forced
+  if (attacker.choiceLockedMove && usableMoves.find(m => m.id === attacker.choiceLockedMove!.id)) {
+    return attacker.choiceLockedMove;
+  }
+
+  void perks; // unused; kept for signature parity with aiSelectMove
+  const stabBoost = 1.5;
+
+  const atkStage = getStageMultiplier(attacker.statStages.attack ?? 0);
+  const spAtkStage = getStageMultiplier(attacker.statStages.spAtk ?? 0);
+  const defStage = getStageMultiplier(defender.statStages.defense ?? 0);
+  const spDefStage = getStageMultiplier(defender.statStages.spDef ?? 0);
+
+  const effAtk = (attacker.effectiveStats.attack ?? 1) * atkStage;
+  const effSpAtk = (attacker.effectiveStats.spAtk ?? 1) * spAtkStage;
+  const effDef = Math.max(1, (defender.effectiveStats.defense ?? 1) * defStage);
+  const effSpDef = Math.max(1, (defender.effectiveStats.spDef ?? 1) * spDefStage);
+
+  type Scored = { move: Move; score: number; effectiveness: number };
+  const damaging: Scored[] = [];
+  const statusMoves: Move[] = [];
+
+  for (const move of usableMoves) {
+    if (move.power <= 0) {
+      statusMoves.push(move);
+      continue;
+    }
+    const effectiveness = getTypeEffectiveness(move.type, defender.types);
+    if (effectiveness === 0) continue; // never pick zero-effect
+    const stab = attacker.types.includes(move.type) ? stabBoost : 1;
+    const acc = (move.accuracy ?? 100) / 100;
+    const ratio = move.category === 'special'
+      ? effSpAtk / effSpDef
+      : effAtk / effDef;
+    let score = move.power * effectiveness * stab * acc * ratio;
+    if (effectiveness >= 2) score *= 1.15; // mild SE bonus to break ties toward super-effective
+    damaging.push({ move, score, effectiveness });
+  }
+
+  if (damaging.length === 0) {
+    // No damaging hits land — fall back to any status/utility move, else first usable
+    if (statusMoves.length > 0) {
+      return statusMoves[Math.floor(Math.random() * statusMoves.length)];
+    }
+    return usableMoves[0];
+  }
+
+  // Find best, then candidates within 12% of best
+  damaging.sort((a, b) => b.score - a.score);
+  const best = damaging[0].score;
+  const cutoff = best * 0.88;
+  const candidates = damaging.filter(d => d.score >= cutoff);
+
+  // Weighted-random by PP-fraction × score-share so fresher moves rotate in
+  // but heavy underdogs don't sneak into a critical pick.
+  let totalWeight = 0;
+  const weights: number[] = candidates.map(c => {
+    const ppFrac = c.move.maxPp > 0 ? c.move.pp / c.move.maxPp : 1;
+    const scoreShare = c.score / best;
+    const w = Math.max(0.01, scoreShare * (0.25 + ppFrac));
+    totalWeight += w;
+    return w;
+  });
+
+  let r = Math.random() * totalWeight;
+  for (let i = 0; i < candidates.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return candidates[i].move;
+  }
+  return candidates[candidates.length - 1].move;
 }
 
 // ============================================================
@@ -342,8 +549,16 @@ export function determineTurnOrder(
   if (playerHasQuickClaw && Math.random() < 0.2) return 'player';
   if (enemyHasQuickClaw && Math.random() < 0.2) return 'enemy';
 
-  const playerSpeed = getEffectiveStat(playerMon, 'speed');
-  const enemySpeed = getEffectiveStat(enemyMon, 'speed');
+  let playerSpeed = getEffectiveStat(playerMon, 'speed');
+  let enemySpeed = getEffectiveStat(enemyMon, 'speed');
+
+  // Quick Powder — first turn only
+  if (monHasItem(playerMon, 'quick_powder') && (playerMon.turnsInBattle ?? 0) === 0) {
+    playerSpeed = Math.floor(playerSpeed * 1.25);
+  }
+  if (monHasItem(enemyMon, 'quick_powder') && (enemyMon.turnsInBattle ?? 0) === 0) {
+    enemySpeed = Math.floor(enemySpeed * 1.25);
+  }
 
   // Paralysis halves speed
   const pSpeed = playerMon.battleStatus === 'paralysis' ? Math.floor(playerSpeed * 0.5) : playerSpeed;
@@ -552,6 +767,61 @@ export function applyDamage(
 }
 
 // ============================================================
+// Boss-Blind Helpers
+// ============================================================
+
+/**
+ * The Tooth — heal enemy to 100% once when they cross 50% HP.
+ * Returns true if a heal occurred.
+ */
+export function applyToothHealCheck(
+  enemy: BattlePokemon,
+  enemyIdx: number,
+  bs: BattleState,
+): { healed: boolean; log: BattleLogEntry[] } {
+  const log: BattleLogEntry[] = [];
+  if (bs.bossBlind !== 'the_tooth') return { healed: false, log };
+  if (bs.toothHealedEnemies.includes(enemyIdx)) return { healed: false, log };
+  if (enemy.battleHp <= 0) return { healed: false, log };
+  const ratio = enemy.battleHp / enemy.maxBattleHp;
+  if (ratio > 0 && ratio <= 0.5) {
+    const heal = Math.floor(enemy.maxBattleHp * 0.5);
+    enemy.battleHp = Math.min(enemy.maxBattleHp, enemy.battleHp + heal);
+    bs.toothHealedEnemies.push(enemyIdx);
+    log.push({ text: `${enemy.displayName}'s tooth bites back! Healed ${heal} HP!`, type: 'heal' });
+    return { healed: true, log };
+  }
+  return { healed: false, log };
+}
+
+/**
+ * The Hook — remove one random item from a random player pokemon each turn.
+ */
+export function applyHookItemLoss(bs: BattleState): BattleLogEntry[] {
+  const log: BattleLogEntry[] = [];
+  if (bs.bossBlind !== 'the_hook') return log;
+  // Find players with items
+  const candidates = bs.playerTeam.filter(p =>
+    p.battleHp > 0 && p.itemSlots?.some(s => s.unlocked && s.item !== null)
+  );
+  if (candidates.length === 0) return log;
+  const target = candidates[Math.floor(Math.random() * candidates.length)];
+  const filledSlots = target.itemSlots
+    .map((s, i) => ({ s, i }))
+    .filter(x => x.s.unlocked && x.s.item !== null);
+  if (filledSlots.length === 0) return log;
+  const pick = filledSlots[Math.floor(Math.random() * filledSlots.length)];
+  const lostItem = pick.s.item!;
+  target.itemSlots[pick.i].item = null;
+  if (pick.i === 0) target.heldItem = null;
+  log.push({
+    text: `The Hook snatches ${lostItem.name} from ${target.displayName}!`,
+    type: 'system',
+  });
+  return log;
+}
+
+// ============================================================
 // Build BattlePokemon from base Pokemon
 // ============================================================
 
@@ -600,13 +870,14 @@ export function toBattlePokemon(pokemon: import('../types').Pokemon, perks: Perk
   // Eviolite — check all slots
   const evioliteActive = !pokemon.isFullyEvolved && monHasItem(withSlots, 'eviolite');
 
+  // All stats scale with level using the standard Pokemon formula (31 IVs, no EVs)
   const effectiveStats: BaseStats = {
-    hp: Math.floor(stats.hp * hpMult),
-    attack: Math.floor(stats.attack * allStatsMult),
-    defense: Math.floor(stats.defense * defMult * (evioliteActive ? 1.5 : 1)),
-    spAtk: Math.floor(stats.spAtk * allStatsMult),
-    spDef: Math.floor(stats.spDef * spDefMult * (evioliteActive ? 1.5 : 1)),
-    speed: Math.floor(stats.speed * speedMult),
+    hp:      Math.floor(calcStat(stats.hp,      pokemon.level, true)  * hpMult),
+    attack:  Math.floor(calcStat(stats.attack,  pokemon.level, false) * allStatsMult),
+    defense: Math.floor(calcStat(stats.defense, pokemon.level, false) * defMult    * (evioliteActive ? 1.5 : 1)),
+    spAtk:   Math.floor(calcStat(stats.spAtk,   pokemon.level, false) * allStatsMult),
+    spDef:   Math.floor(calcStat(stats.spDef,   pokemon.level, false) * spDefMult  * (evioliteActive ? 1.5 : 1)),
+    speed:   Math.floor(calcStat(stats.speed,   pokemon.level, false) * speedMult),
   };
 
   // Choice item boosts — check all slots
@@ -625,9 +896,30 @@ export function toBattlePokemon(pokemon: import('../types').Pokemon, perks: Perk
     effectiveStats.spDef = Math.floor(effectiveStats.spDef * 1.5);
   }
 
-  // Mega Stone HP boost
+  // Mega Stone HP boost (applied after level scaling)
   if (monHasItem(withSlots, 'mega_stone')) {
     effectiveStats.hp = Math.floor(effectiveStats.hp * 1.2);
+  }
+
+  // Light Ball — doubles Atk and SpAtk on weaker Pokémon (BST < 400)
+  if (monHasItem(withSlots, 'light_ball') && pokemon.bst < 400) {
+    effectiveStats.attack = effectiveStats.attack * 2;
+    effectiveStats.spAtk = effectiveStats.spAtk * 2;
+  }
+
+  // Item Maven perk — per held item, +5% to all stats of the holder
+  const mavenPerk = perks.find(p => p.id === 'item_maven');
+  if (mavenPerk?.effect.itemMaven) {
+    const heldCount = getSlotItems(withSlots).length;
+    if (heldCount > 0) {
+      const m = 1 + heldCount * mavenPerk.effect.itemMaven;
+      effectiveStats.hp      = Math.floor(effectiveStats.hp      * m);
+      effectiveStats.attack  = Math.floor(effectiveStats.attack  * m);
+      effectiveStats.defense = Math.floor(effectiveStats.defense * m);
+      effectiveStats.spAtk   = Math.floor(effectiveStats.spAtk   * m);
+      effectiveStats.spDef   = Math.floor(effectiveStats.spDef   * m);
+      effectiveStats.speed   = Math.floor(effectiveStats.speed   * m);
+    }
   }
 
   const maxHp = effectiveStats.hp;
@@ -663,6 +955,7 @@ export function toBattlePokemon(pokemon: import('../types').Pokemon, perks: Perk
     focusSashBroken: false,
     reviveHeartUsed: existingBattle.reviveHeartUsed ?? false,
     leechSeedActive: monHasItem(withSlots, 'leech_seed'),
+    momentumStacks: existingBattle.momentumStacks ?? 0,
   };
 
   // Battle-start self-inflicted status (Flame Orb → burn, Toxic Orb → badPoison)
@@ -671,6 +964,9 @@ export function toBattlePokemon(pokemon: import('../types').Pokemon, perks: Perk
   } else if (monHasItem(result, 'toxic_orb')) {
     result.battleStatus = 'badPoison';
   }
+
+  // Auto-unlock item slots based on current level
+  autoUnlockSlotsForLevel(result);
 
   return result;
 }
@@ -722,9 +1018,10 @@ export function xpForLevel(level: number): number {
   return Math.floor(Math.pow(level, 1.5) * 10);
 }
 
-/** XP awarded for defeating an enemy at the given level. */
+/** XP awarded for defeating an enemy at the given level.
+ * Buffed from 40→55 to accelerate move-learning progression. */
 export function xpFromKO(enemyLevel: number): number {
-  return Math.floor(enemyLevel * 15);
+  return Math.floor(enemyLevel * 55);
 }
 
 /**
@@ -767,7 +1064,29 @@ export function grantXP(
     pokemon.maxBattleHp = newStats.hp;
     // Current HP gains the same amount the max HP grew (Pokémon-style level-up heal)
     pokemon.battleHp = Math.min(pokemon.maxBattleHp, pokemon.battleHp + hpGain);
+
+    // Auto-unlock item slots at milestone levels — Lv.10/25/50/80
+    autoUnlockSlotsForLevel(pokemon);
   }
 
   return { leveledUp, newLevel: pokemon.level };
+}
+
+/**
+ * Unlocks item slots automatically as a Pokémon levels up.
+ * Slot 2 (index 1) at Lv.10, Slot 3 at Lv.25, Slot 4 at Lv.50, Slot 5 at Lv.80.
+ * Slot 1 (index 0) is always unlocked by default.
+ */
+export function autoUnlockSlotsForLevel(pokemon: BattlePokemon): number[] {
+  const thresholds = [0, 10, 25, 50, 80]; // per-slot level requirement (slot 0 = always)
+  const newlyUnlocked: number[] = [];
+  if (!pokemon.itemSlots) return newlyUnlocked;
+  for (let i = 0; i < pokemon.itemSlots.length && i < thresholds.length; i++) {
+    const slot = pokemon.itemSlots[i];
+    if (!slot.unlocked && pokemon.level >= thresholds[i]) {
+      slot.unlocked = true;
+      newlyUnlocked.push(i);
+    }
+  }
+  return newlyUnlocked;
 }

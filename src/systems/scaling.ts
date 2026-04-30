@@ -1,59 +1,85 @@
 import type { WaveConfig } from '../types';
 import { getEnemyPool, getBossPool, getRandomFromPool } from '../data/enemyPools';
 
-export function getWaveConfig(wave: number): WaveConfig {
-  const isBossWave = wave % 5 === 0;
+export function getWaveConfig(wave: number, isBossWave: boolean): WaveConfig {
 
   let enemyCount: number;
   let levelMin: number;
   let levelMax: number;
   let coinReward: number;
 
-  // Smooth difficulty ramp — player starts at level 5.
-  // Wave 1 is intentionally easy (single enemy slightly below player level).
+  // Difficulty ramp — player starts at level 8.
+  // Wave 1 is easy (single weak enemy). Ramp is gentle early, steeper mid/late.
   if (wave === 1) {
     enemyCount = 1;
-    levelMin = 3;
-    levelMax = 6;
-    coinReward = 40;
+    levelMin = 4;
+    levelMax = 7;
+    coinReward = 60;
+  } else if (wave === 2) {
+    enemyCount = 1;
+    levelMin = 7;
+    levelMax = 11;
+    coinReward = 70;
   } else if (wave <= 4) {
-    // Waves 2-4: two enemies, gentle ramp
+    // Waves 3-4: introduce a second enemy
     enemyCount = 2;
-    levelMin = 5 + (wave - 2) * 3;   // 5, 8
-    levelMax = 9 + (wave - 2) * 3;   // 9, 12
-    coinReward = 45 + wave * 8;
+    levelMin = 10 + (wave - 3) * 3;   // 10, 13
+    levelMax = 14 + (wave - 3) * 3;   // 14, 17
+    coinReward = 65 + wave * 6;
   } else if (wave <= 9) {
-    // Waves 5-9: three enemies, mid-game
-    enemyCount = 3;
-    levelMin = 12 + (wave - 5) * 3;  // 12, 15, 18, 21, 24
-    levelMax = 18 + (wave - 5) * 3;  // 18, 21, 24, 27, 30
-    coinReward = 60 + wave * 8;
+    // Waves 5-9: two–three enemies, mid-game ramp
+    enemyCount = wave <= 6 ? 2 : 3;
+    levelMin = 16 + (wave - 5) * 4;   // 16, 20, 24, 28, 32
+    levelMax = 22 + (wave - 5) * 4;   // 22, 26, 30, 34, 38
+    coinReward = 70 + wave * 7;
   } else if (wave <= 14) {
-    // Waves 10-14: four enemies
-    enemyCount = 4;
-    levelMin = 28 + (wave - 10) * 4; // 28, 32, 36, 40, 44
-    levelMax = 38 + (wave - 10) * 4; // 38, 42, 46, 50, 54
-    coinReward = 90 + wave * 7;
+    // Waves 10-14: three–four enemies
+    enemyCount = wave <= 11 ? 3 : 4;
+    levelMin = 36 + (wave - 10) * 5;  // 36, 41, 46, 51, 56
+    levelMax = 46 + (wave - 10) * 5;  // 46, 51, 56, 61, 66
+    coinReward = 100 + wave * 7;
   } else if (wave <= 19) {
-    // Waves 15-19: five enemies
-    enemyCount = 5;
-    levelMin = 50 + (wave - 15) * 4; // 50, 54, 58, 62, 66
-    levelMax = 63 + (wave - 15) * 4; // 63, 67, 71, 75, 79
-    coinReward = 120 + wave * 6;
+    // Waves 15-19: four–five enemies
+    enemyCount = wave <= 16 ? 4 : 5;
+    levelMin = 56 + (wave - 15) * 5;  // 56, 61, 66, 71, 76
+    levelMax = 68 + (wave - 15) * 5;  // 68, 73, 78, 83, 88
+    coinReward = 130 + wave * 6;
   } else {
-    // Wave 20+: six enemies, scaling to 100
-    enemyCount = 6;
-    levelMin = Math.min(95,  72 + (wave - 20) * 3);
-    levelMax = Math.min(100, 85 + (wave - 20) * 3);
-    coinReward = 160 + wave * 5;
+    // Wave 20+: five–six enemies, scaling to 100
+    enemyCount = wave <= 22 ? 5 : 6;
+    levelMin = Math.min(90,  80 + (wave - 20) * 2);
+    levelMax = Math.min(100, 92 + (wave - 20) * 2);
+    coinReward = 170 + wave * 5;
   }
 
-  // Boss waves: bump count floor to (regular+1) and add ~15% level, double coins
+  // ── Threat multiplier: Balatro-style exponential ramp ──
+  // Early waves stay close to 1.0; mid-game ramps steeply; late-game scales hard
+  // to match Balatro-style broken builds. Player MUST build properly or die.
+  //   wave 5  → ×1.16      wave 10 → ×1.57      wave 15 → ×2.28
+  //   wave 20 → ×3.31      wave 25 → ×4.67      wave 30 → ×6.36
+  //   wave 35 → ×8.38      wave 40 → ×10.74     wave 50 → ×16.50
+  // Softened ~15% to compensate for the weaker starting movesets in the
+  // move-learning progression — early waves are kinder, mid/late curve preserved.
+  let threatMultiplier = 1.0;
+  if (wave >= 4) {
+    threatMultiplier = 1.0 + Math.pow((wave - 2) / 10, 1.8) * 0.85;
+  }
+
+  // Boss waves: bump count, level, and coins. Threat scales with wave so late bosses are scarier.
   if (isBossWave) {
-    enemyCount = Math.max(enemyCount, wave === 5 ? 3 : enemyCount + 1);
-    levelMin = Math.min(100, Math.floor(levelMin * 1.12));
-    levelMax = Math.min(100, Math.floor(levelMax * 1.12));
+    if (wave <= 7) {
+      // First boss: 2 enemies, no level boost — challenging but winnable
+      enemyCount = 2;
+    } else {
+      enemyCount = enemyCount + 1;
+      levelMin = Math.min(100, Math.floor(levelMin * 1.10));
+      levelMax = Math.min(100, Math.floor(levelMax * 1.10));
+    }
     coinReward = Math.floor(coinReward * 2);
+
+    // Boss threat bonus scales with wave: early bosses ×1.08, late bosses ×1.35
+    const bossBonus = Math.min(1.35, 1.08 + (wave - 5) * 0.012);
+    threatMultiplier *= bossBonus;
   }
 
   return {
@@ -64,6 +90,7 @@ export function getWaveConfig(wave: number): WaveConfig {
     enemyPool: getEnemyPool(wave),
     bossPool: getBossPool(wave),
     coinReward,
+    threatMultiplier,
   };
 }
 
@@ -73,7 +100,6 @@ export function getEnemyLevel(config: WaveConfig): number {
 
 export function selectEnemyIds(config: WaveConfig): number[] {
   if (config.isBossWave) {
-    // Boss: mostly boss pool, 1-2 from regular pool
     const bossCount = Math.ceil(config.enemyCount / 2);
     const regularCount = config.enemyCount - bossCount;
     return [
@@ -84,22 +110,19 @@ export function selectEnemyIds(config: WaveConfig): number[] {
   return getRandomFromPool(config.enemyPool, config.enemyCount);
 }
 
-export function getWaveCoins(wave: number, perks: import('../types').Perk[]): number {
-  const config = getWaveConfig(wave);
+export function getWaveCoins(wave: number, isBossWave: boolean, perks: import('../types').Perk[]): number {
+  const config = getWaveConfig(wave, isBossWave);
   let coins = config.coinReward;
 
-  // Coin multiplier perks
   for (const perk of perks) {
     if (perk.effect.coinMultiplier) {
       coins = Math.floor(coins * perk.effect.coinMultiplier);
     }
   }
 
-  // Amulet Coin held by team members (handled in game state)
   return coins;
 }
 
-export function getWaveLabel(wave: number): string {
-  if (wave % 5 === 0) return `BOSS WAVE ${wave}`;
-  return `Wave ${wave}`;
+export function getWaveLabel(wave: number, isBossWave: boolean): string {
+  return isBossWave ? `BOSS WAVE ${wave}` : `Wave ${wave}`;
 }

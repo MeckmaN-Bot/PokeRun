@@ -52,11 +52,23 @@ function saveLocalLeaderboard(entries: LeaderboardEntry[]): void {
 
 function addLocalEntry(entry: LeaderboardEntry): LeaderboardEntry[] {
   const entries = getLocalLeaderboard();
-  entries.push({
-    ...entry,
-    id: crypto.randomUUID(),
-    created_at: new Date().toISOString(),
-  });
+  const existing = entries.find(e => e.name.toLowerCase() === entry.name.toLowerCase());
+
+  if (existing) {
+    // Only update if new score is better
+    if (entry.score_waves > existing.score_waves) {
+      existing.score_waves = entry.score_waves;
+      existing.score_details = entry.score_details;
+      existing.created_at = new Date().toISOString();
+    }
+  } else {
+    entries.push({
+      ...entry,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+    });
+  }
+
   entries.sort((a, b) => b.score_waves - a.score_waves);
   const trimmed = entries.slice(0, MAX_LOCAL_ENTRIES);
   saveLocalLeaderboard(trimmed);
@@ -73,14 +85,32 @@ export async function submitScore(entry: LeaderboardEntry): Promise<boolean> {
     return true;
   }
   try {
-    const { error } = await supabase.from('leaderboard').insert([{
-      name: entry.name.slice(0, 32),
-      score_waves: entry.score_waves,
-      score_details: entry.score_details,
-    }]);
-    if (error) {
-      console.warn('Supabase insert failed, using local fallback:', error.message);
-      addLocalEntry(entry);
+    // Check if player already has an entry
+    const { data: existing } = await supabase
+      .from('leaderboard')
+      .select('id, score_waves')
+      .ilike('name', entry.name.slice(0, 32))
+      .maybeSingle();
+
+    if (existing) {
+      // Only update if new score is better
+      if (entry.score_waves <= existing.score_waves) return true;
+      const { error } = await supabase
+        .from('leaderboard')
+        .update({
+          score_waves: entry.score_waves,
+          score_details: entry.score_details,
+          created_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id);
+      if (error) { addLocalEntry(entry); }
+    } else {
+      const { error } = await supabase.from('leaderboard').insert([{
+        name: entry.name.slice(0, 32),
+        score_waves: entry.score_waves,
+        score_details: entry.score_details,
+      }]);
+      if (error) { addLocalEntry(entry); }
     }
     return true;
   } catch (err) {
@@ -130,6 +160,6 @@ export function isLeaderboardEnabled(): boolean {
 }
 
 export function getLeaderboardStatusMessage(): string {
-  if (isConfigured) return '🌐 Connected to global leaderboard';
-  return '💾 Local leaderboard (set up Supabase for global scores)';
+  if (isConfigured) return '◉ Connected to global leaderboard';
+  return '◇ Local leaderboard (set up Supabase for global scores)';
 }

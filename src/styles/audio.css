@@ -1,0 +1,164 @@
+/* ============================================================
+   Audio settings — inline trigger + centered modal panel.
+   The trigger is an `.ink-btn ghost` button placed inline next to
+   Bag/PC/Leave-style neighbours and inherits its size from those
+   contexts. The modal mirrors the wave-EP / evolution post-screens.
+   ============================================================ */
+
+.audio-btn-slot {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.audio-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.audio-btn .aus-cog {
+  display: block;
+  color: var(--ink);
+}
+.audio-btn .aus-cog.is-muted { color: var(--oxblood); }
+
+/* ── Modal ───────────────────────────────────────────────── */
+
+.audio-modal-overlay {
+  z-index: 9100;
+}
+.audio-modal {
+  max-width: 460px;
+  width: 94%;
+  padding: 1.75rem 2rem 1.5rem;
+  font-family: var(--font-mono);
+}
+.audio-modal-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+  margin-bottom: 0.5rem;
+}
+.audio-modal .modal-title {
+  font-size: 32px;
+  line-height: 1.05;
+  margin-bottom: 1.25rem;
+}
+.audio-modal .modal-title em {
+  color: var(--oxblood);
+  font-style: italic;
+}
+
+.audio-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 0 4px;
+  border-top: 2px dashed var(--paper-edge, rgba(0, 0, 0, 0.2));
+  border-bottom: 2px dashed var(--paper-edge, rgba(0, 0, 0, 0.2));
+}
+
+.aus-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 36px;
+  align-items: center;
+  gap: 14px;
+}
+.aus-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.aus-label-name {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-style: italic;
+  font-size: 16px;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+.aus-label-sub {
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+}
+.aus-row input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: var(--paper-2, #ede4cd);
+  border: 1.5px solid var(--ink);
+  outline: none;
+  cursor: pointer;
+}
+.aus-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 22px;
+  background: var(--gold, #f5b400);
+  border: 2px solid var(--ink);
+  cursor: pointer;
+}
+.aus-row input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 22px;
+  background: var(--gold, #f5b400);
+  border: 2px solid var(--ink);
+  cursor: pointer;
+}
+.aus-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: right;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.audio-modal-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+.aus-mute,
+.aus-test {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  background: var(--paper-2, #ede4cd);
+  border: 1.5px solid var(--ink);
+  padding: 6px 12px;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--ink);
+  transition: transform 80ms ease, box-shadow 80ms ease;
+}
+.aus-mute:hover,
+.aus-test:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.aus-mute.is-muted {
+  background: var(--oxblood, #7a1e1e);
+  color: var(--paper);
+}
+.aus-hint {
+  margin-left: auto;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+}
+.aus-hint kbd {
+  font-family: var(--font-mono);
+  background: var(--paper-2, #ede4cd);
+  border: 1.5px solid var(--ink);
+  padding: 1px 6px;
+  font-size: 9px;
+}

@@ -8,15 +8,18 @@ export class LeaderboardScreen {
   private onBack: () => void;
   private activeFilter: 'all_time' | 'today' = 'all_time';
   private currentPlayerScore: number | null = null;
+  private currentPlayerName: string | null = null;
 
   constructor(
     container: HTMLElement,
     onBack: () => void,
-    currentPlayerScore?: number
+    currentPlayerScore?: number,
+    currentPlayerName?: string
   ) {
     this.container = container;
     this.onBack = onBack;
     this.currentPlayerScore = currentPlayerScore ?? null;
+    this.currentPlayerName = currentPlayerName ?? null;
   }
 
   async mount(): Promise<void> {
@@ -29,38 +32,42 @@ export class LeaderboardScreen {
 
   private renderShell(): string {
     return `
-      <div class="leaderboard-screen screen">
-        <div class="leaderboard-header">
-          <button class="btn btn-ghost btn-sm back-btn" id="lb-back-btn">← Back</button>
-          <h2 class="leaderboard-title">🏆 LEADERBOARD</h2>
-          <div class="lb-status">${getLeaderboardStatusMessage()}</div>
-        </div>
-
-        <div class="lb-tabs">
-          <button class="lb-tab active" data-filter="all_time">ALL TIME</button>
-          <button class="lb-tab" data-filter="today">TODAY</button>
-        </div>
-
-        <div class="lb-table-wrapper">
-          <div class="lb-loading" id="lb-loading">
-            <div class="pokeball-spin"></div>
-            <p>Loading scores...</p>
+      <div class="lb-full-wrap screen">
+        <div class="lb-full-head">
+          <div>
+            <div class="kicker">Field records · Global</div>
+            <h2 class="lb-full-title">Leader<em>board</em></h2>
           </div>
-          <table class="lb-table hidden" id="lb-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Trainer</th>
-                <th>Waves</th>
-                <th>Starter</th>
-                <th>KOs</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody id="lb-body"></tbody>
-          </table>
-          <div class="lb-empty hidden" id="lb-empty">
-            <p>No scores yet — be the first!</p>
+          <div class="lb-full-head-right">
+            <div class="lb-filter-strip" id="lb-filter-strip">
+              <button class="lb-filter active" data-filter="all_time">All time</button>
+              <button class="lb-filter" data-filter="today">Today</button>
+            </div>
+            <button class="ink-btn ghost sm" id="lb-back-btn">← Back</button>
+          </div>
+        </div>
+
+        <div class="lb-full-body">
+          <div class="lb-panel lb-full-panel">
+            <div class="h">
+              <span class="t" id="lb-panel-title">All-time top runs</span>
+              <span class="s" id="lb-status">${getLeaderboardStatusMessage()}</span>
+            </div>
+            <div class="lb-full-cols">
+              <div class="lb-col-head">
+                <span>#</span>
+                <span>Trainer</span>
+                <span>Waves</span>
+                <span>Starter</span>
+                <span>KOs</span>
+                <span>Date</span>
+              </div>
+              <div class="lb-list" id="lb-list">
+                <div class="lb-loading-row" id="lb-loading">
+                  <span style="font-family:var(--font-mono);font-size:11px;letter-spacing:.2em;color:var(--ink-3)">Loading scores…</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -68,63 +75,58 @@ export class LeaderboardScreen {
   }
 
   private async loadScores(): Promise<void> {
-    const loadingEl = this.container.querySelector<HTMLElement>('#lb-loading')!;
-    const tableEl = this.container.querySelector<HTMLElement>('#lb-table')!;
-    const emptyEl = this.container.querySelector<HTMLElement>('#lb-empty')!;
-    const tbody = this.container.querySelector<HTMLElement>('#lb-body')!;
+    const listEl = this.container.querySelector<HTMLElement>('#lb-list')!;
 
-    loadingEl.classList.remove('hidden');
-    tableEl.classList.add('hidden');
-    emptyEl.classList.add('hidden');
+    listEl.innerHTML = `<div class="lb-loading-row"><span style="font-family:var(--font-mono);font-size:11px;letter-spacing:.2em;color:var(--ink-3)">Loading scores…</span></div>`;
+
+    const titleEl = this.container.querySelector<HTMLElement>('#lb-panel-title');
+    if (titleEl) {
+      titleEl.textContent = this.activeFilter === 'today' ? "Today's top runs" : 'All-time top runs';
+    }
 
     try {
       const scores = await getTopScores(this.activeFilter, 20);
 
-      loadingEl.classList.add('hidden');
-
       if (scores.length === 0) {
-        emptyEl.classList.remove('hidden');
+        listEl.innerHTML = `<div class="lb-loading-row"><span style="font-family:var(--font-mono);font-size:11px;letter-spacing:.2em;color:var(--ink-3)">No scores yet — be the first!</span></div>`;
         return;
       }
 
-      tbody.innerHTML = scores.map((entry, i) =>
-        this.renderRow(entry, i + 1)
-      ).join('');
+      listEl.innerHTML = scores.map((entry, i) => this.renderRow(entry, i + 1)).join('');
 
-      tableEl.classList.remove('hidden');
-
-      // Animate rows in
-      const rows = Array.from(tbody.querySelectorAll<HTMLElement>('tr'));
+      // Stagger rows in
+      const rows = Array.from(listEl.querySelectorAll<HTMLElement>('.lb-row'));
       gsap.fromTo(rows,
-        { opacity: 0, x: -20 },
-        { opacity: 1, x: 0, duration: 0.3, stagger: 0.04, ease: 'power2.out' }
+        { opacity: 0, x: -16 },
+        { opacity: 1, x: 0, duration: 0.25, stagger: 0.035, ease: 'power2.out' }
       );
 
     } catch {
-      loadingEl.classList.add('hidden');
-      emptyEl.classList.remove('hidden');
-      emptyEl.querySelector('p')!.textContent = 'Failed to load scores.';
+      listEl.innerHTML = `<div class="lb-loading-row"><span style="font-family:var(--font-mono);font-size:11px;letter-spacing:.2em;color:var(--oxblood)">Failed to load scores.</span></div>`;
     }
   }
 
   private renderRow(entry: LeaderboardEntry, rank: number): string {
-    const isPlayerScore = this.currentPlayerScore !== null &&
-      entry.score_waves === this.currentPlayerScore;
+    const isMe = this.currentPlayerName != null &&
+      entry.name === this.currentPlayerName &&
+      (this.currentPlayerScore == null || entry.score_waves === this.currentPlayerScore);
 
-    const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
     const date = entry.created_at
       ? new Date(entry.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
       : '—';
 
     return `
-      <tr class="${isPlayerScore ? 'lb-row-highlight' : ''} ${rank <= 3 ? `lb-row-top-${rank}` : ''}">
-        <td class="lb-rank">${medal}</td>
-        <td class="lb-name">${escapeHtml(entry.name)}</td>
-        <td class="lb-waves">${entry.score_waves}</td>
-        <td class="lb-starter">${escapeHtml(entry.score_details?.starterName ?? '—')}</td>
-        <td class="lb-kos">${entry.score_details?.totalKOs ?? 0}</td>
-        <td class="lb-date">${date}</td>
-      </tr>
+      <div class="lb-row lb-full-row${isMe ? ' me' : ''}">
+        <div class="rank">${rank}.</div>
+        <div>
+          <div class="n">${escapeHtml(entry.name)}</div>
+          <div class="sub">Starter · ${escapeHtml(entry.score_details?.starterName ?? '—')}</div>
+        </div>
+        <div class="wv">W${entry.score_waves}</div>
+        <div class="lb-cell-starter">${escapeHtml(entry.score_details?.starterName ?? '—')}</div>
+        <div class="lb-cell-kos">${entry.score_details?.totalKOs ?? 0}</div>
+        <div class="lb-cell-date">${date}</div>
+      </div>
     `;
   }
 
@@ -133,12 +135,12 @@ export class LeaderboardScreen {
       this.onBack();
     });
 
-    this.container.querySelectorAll('.lb-tab').forEach(tab => {
-      tab.addEventListener('click', async () => {
-        const filter = (tab as HTMLElement).dataset['filter'] as 'all_time' | 'today';
+    this.container.querySelectorAll('.lb-filter').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const filter = (btn as HTMLElement).dataset['filter'] as 'all_time' | 'today';
         this.activeFilter = filter;
-        this.container.querySelectorAll('.lb-tab').forEach(t =>
-          t.classList.toggle('active', t === tab)
+        this.container.querySelectorAll('.lb-filter').forEach(b =>
+          b.classList.toggle('active', b === btn)
         );
         await this.loadScores();
       });

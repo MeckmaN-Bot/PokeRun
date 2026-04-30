@@ -1,0 +1,759 @@
+/* ============================================================
+   Path-Select Screen — Crossroads / field-guide aesthetic.
+   Three thematic node cards in the same paper/ink language as
+   the reward & shop screens.
+   ============================================================ */
+
+.path-screen {
+  display: grid;
+  grid-template-rows: 1fr;
+  padding: 24px 0;
+  background: transparent;
+  height: 100%;
+  overflow: hidden;
+}
+
+.path-content {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 36px;
+  padding: 0 40px;
+  width: 100%;
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+
+.path-header {
+  text-align: center;
+  padding-bottom: 8px;
+}
+.path-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+}
+.path-title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-style: italic;
+  font-size: clamp(38px, 5vw, 60px);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 6px 0 16px;
+  padding-bottom: 4px;
+}
+.path-title em {
+  color: var(--oxblood);
+  font-style: italic;
+}
+.path-sub {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+}
+
+/* ── Card grid ────────────────────────────────────────────── */
+
+.path-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 320px));
+  gap: 28px;
+  justify-content: center;
+  align-content: center;
+  min-height: 0;
+  padding: 16px 0;
+}
+
+/* Single-card layout for gym + league — bigger centered card, no faux choice. */
+.path-cards.single {
+  grid-template-columns: minmax(320px, 480px);
+  padding: 8px 0 24px;
+}
+.path-cards.single .path-card {
+  padding: 28px 28px 24px;
+  min-height: 360px;
+}
+.path-cards.single .path-card-portrait {
+  min-height: 168px;
+}
+.path-cards.single .path-card-sprite {
+  width: 168px;
+  height: 168px;
+}
+.path-cards.single .path-card-title {
+  font-size: 34px;
+}
+.path-cards.single .path-card-hint {
+  font-size: 13px;
+}
+
+.path-card {
+  position: relative;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  box-shadow: 8px 8px 0 var(--ink);
+  padding: 22px 20px 18px;
+  display: grid;
+  grid-template-rows: auto auto auto 1fr auto;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  color: var(--ink);
+  transform: rotate(var(--card-rot, 0deg));
+  transition: transform 140ms ease, box-shadow 140ms ease, opacity 200ms ease;
+  border-radius: 0;
+}
+.path-card::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border: 1px solid var(--ink);
+  pointer-events: none;
+}
+.path-card:hover:not(.dimmed):not(.chosen) {
+  transform: rotate(0deg) translate(-3px, -4px);
+  box-shadow: 12px 12px 0 var(--ink);
+}
+.path-card:active {
+  transform: rotate(0deg) translate(2px, 2px);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.path-card.dimmed {
+  opacity: 0.32;
+  filter: grayscale(0.4);
+}
+.path-card.chosen {
+  transform: rotate(0deg) scale(1.03);
+  box-shadow: 14px 14px 0 var(--card-accent, var(--ink));
+}
+
+.path-card-corner {
+  position: absolute;
+  width: 10px; height: 10px;
+  border: 2px solid var(--card-accent, var(--ink));
+  background: var(--paper);
+}
+.path-card-corner.tl { top: -2px; left: -2px; border-right: none; border-bottom: none; }
+.path-card-corner.tr { top: -2px; right: -2px; border-left: none; border-bottom: none; }
+.path-card-corner.bl { bottom: -2px; left: -2px; border-right: none; border-top: none; }
+.path-card-corner.br { bottom: -2px; right: -2px; border-left: none; border-top: none; }
+
+.path-card-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--card-accent, var(--ink-3));
+  font-weight: 700;
+}
+
+.path-card-icon {
+  font-size: 56px;
+  line-height: 1;
+  text-align: center;
+  margin: 4px 0 2px;
+  filter: url(#px-pixelate);
+}
+
+.path-card-portrait {
+  display: grid;
+  place-items: center;
+  margin: 4px 0 2px;
+  min-height: 96px;
+  position: relative;
+}
+.path-card-portrait::before {
+  content: '';
+  position: absolute;
+  inset: auto 18% -4px;
+  height: 6px;
+  background: var(--ink);
+  opacity: 0.18;
+  border-radius: 50%;
+  filter: blur(2px);
+}
+.path-card-sprite {
+  width: 96px;
+  height: 96px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  object-fit: contain;
+  display: block;
+  /* Subtle drop-shadow tints sprite to match the paper aesthetic. */
+  filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.18));
+}
+.path-card.has-sprite .path-card-eyebrow {
+  color: var(--card-accent, var(--ink-3));
+}
+
+.path-card-title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-style: italic;
+  font-size: 26px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0;
+  line-height: 1;
+}
+
+.path-card-hint {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-3, #6b5e44);
+  margin: 0;
+}
+
+.path-card-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 2px dashed var(--paper-edge, rgba(0, 0, 0, 0.2));
+  padding-top: 10px;
+  margin-top: 4px;
+  gap: 8px;
+}
+.path-card-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--card-accent, var(--ink));
+  padding: 3px 8px;
+  border: 1.5px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.path-card-cta {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+
+/* ── Footnote ────────────────────────────────────────────── */
+
+.path-footnote {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+}
+.path-footnote .kbd-hint {
+  display: inline-block;
+  border-top: 1px solid var(--paper-edge, rgba(0, 0, 0, 0.2));
+  border-bottom: 1px solid var(--paper-edge, rgba(0, 0, 0, 0.2));
+  padding: 6px 14px;
+}
+
+/* ── Stage progress (next-arena indicator, prominent) ──── */
+.stage-progress {
+  display: flex; align-items: stretch; gap: 14px;
+  max-width: 640px; margin: 14px auto 4px;
+  padding: 10px 14px 10px 10px;
+  background: var(--paper, #f4f1e8);
+  border: 2.5px solid var(--ink, #1a1a1a);
+  border-left: 8px solid var(--stage-color, #3a3a3a);
+  box-shadow: 5px 5px 0 var(--ink, #1a1a1a);
+  transform: rotate(-0.3deg);
+  text-align: left;
+}
+.stage-progress-portrait {
+  flex: 0 0 auto;
+  width: 64px; height: 64px;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--stage-color, #3a3a3a) 14%, var(--paper));
+  border: 1.5px solid var(--ink, #1a1a1a);
+  overflow: hidden;
+}
+.stage-progress-portrait img {
+  width: 100%; height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  object-fit: contain;
+  transform: scale(1.2) translateY(2px);
+  filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.18));
+}
+.stage-progress-body {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; flex-direction: column; justify-content: space-between;
+  gap: 4px;
+}
+.stage-progress-eyebrow {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.4em; text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+}
+.stage-progress-pips {
+  display: flex; align-items: center; gap: 4px;
+}
+.stage-pip-rail {
+  flex: 1 1 auto;
+  height: 2px;
+  background: repeating-linear-gradient(
+    to right,
+    var(--ink, #1a1a1a) 0 4px,
+    transparent 4px 8px
+  );
+  opacity: 0.45;
+}
+.stage-pip {
+  position: relative;
+  flex: 0 0 auto;
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border: 2px solid var(--ink, #1a1a1a);
+  background: var(--paper, #f4f1e8);
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--ink-3, #6b5e44);
+  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+}
+.stage-pip-label { line-height: 1; }
+.stage-pip.done {
+  background: var(--ink, #1a1a1a);
+  color: var(--paper, #f4f1e8);
+}
+.stage-pip.current {
+  background: var(--paper);
+  box-shadow: 2px 2px 0 var(--stage-color, #3a3a3a),
+              0 0 0 2px var(--stage-color, #3a3a3a) inset;
+  color: var(--stage-color, #3a3a3a);
+  animation: stage-pip-pulse 1.2s ease-in-out infinite;
+}
+.stage-pip.gym {
+  width: auto; min-width: 36px; padding: 0 8px;
+  background: var(--stage-color, #3a3a3a);
+  color: var(--paper, #f4f1e8);
+  font-weight: 800;
+  font-size: 9.5px; letter-spacing: 0.18em;
+}
+.stage-pip.gym.current {
+  background: var(--paper);
+  color: var(--stage-color);
+  box-shadow: 2px 2px 0 var(--stage-color),
+              0 0 0 2.5px var(--stage-color) inset;
+}
+@keyframes stage-pip-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.12); }
+}
+.stage-progress-cta {
+  font-family: var(--font-display); font-weight: 800; font-style: italic;
+  font-size: 14px; line-height: 1.05;
+  color: var(--stage-color, #3a3a3a);
+  letter-spacing: 0.06em;
+}
+
+@media (max-width: 600px) {
+  .stage-progress { gap: 10px; padding: 8px 10px 8px 8px; }
+  .stage-progress-portrait { width: 52px; height: 52px; }
+  .stage-progress-cta { font-size: 12px; }
+  .stage-pip { width: 22px; height: 22px; font-size: 9px; }
+}
+
+/* Wave-intro variant: tighter, sits inside the dark intro card */
+.wave-intro-stage {
+  margin-top: 14px;
+  background: color-mix(in srgb, var(--paper) 90%, var(--stage-color, #3a3a3a) 8%);
+}
+.wave-intro-card.boss .wave-intro-stage {
+  background: color-mix(in srgb, var(--stage-color, #3a3a3a) 22%, #160502);
+  box-shadow: 4px 4px 0 #0a0200;
+}
+.wave-intro-card.boss .wave-intro-stage .stage-progress-eyebrow,
+.wave-intro-card.boss .wave-intro-stage .stage-pip-rail { color: rgba(255,255,255,0.55); }
+.wave-intro-card.boss .wave-intro-stage .stage-pip {
+  background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7);
+}
+.wave-intro-card.boss .wave-intro-stage .stage-progress-cta { color: var(--stage-color, #f4f1e8); }
+
+/* ── Badge Row (8 pips, lit on earn) ────────────────────── */
+.badge-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.badge-pip {
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border: 2px solid var(--ink);
+  background: var(--paper-2, #f4ead2);
+  box-shadow: 2px 2px 0 var(--ink);
+  font-size: 14px;
+  filter: grayscale(0.85);
+  opacity: 0.45;
+  transform: rotate(-2deg);
+  transition: filter 200ms ease, opacity 200ms ease, transform 200ms ease,
+              background 200ms ease, box-shadow 200ms ease;
+}
+.badge-pip:nth-child(2n) { transform: rotate(2deg); }
+.badge-pip:nth-child(3n) { transform: rotate(-1deg); }
+.badge-pip.owned {
+  filter: none;
+  opacity: 1;
+  background: var(--badge-color, var(--gold, #d4a014));
+  color: var(--paper);
+  box-shadow: 2px 2px 0 var(--ink), 0 0 0 1px var(--paper) inset;
+}
+.badge-pip-icon {
+  line-height: 1;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.18);
+}
+/* "+N" pip for unearned badges, shown next to owned ones. */
+.badge-pip-more {
+  display: inline-grid; place-items: center;
+  height: 26px; min-width: 28px;
+  padding: 0 8px;
+  border: 2px dashed var(--ink, #1a1a1a);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-weight: 700; font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-3, #6b5e44);
+  border-radius: 4px;
+}
+.badge-pip-sprite {
+  width: 22px; height: 22px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(1px 1px 0 rgba(0,0,0,0.25));
+}
+.badge-pip:not(.owned) .badge-pip-sprite {
+  filter: grayscale(0.85) brightness(0.7) drop-shadow(1px 1px 0 rgba(0,0,0,0.18));
+}
+.badge-pip.owned {
+  /* on-earn the gold tint background can wash sprites — drop it when sprite present */
+  background: var(--paper);
+}
+.badge-pip.owned:has(.badge-pip-sprite) {
+  background: var(--paper);
+  box-shadow: 2px 2px 0 var(--ink), 0 0 0 2px var(--badge-color, var(--gold)) inset;
+}
+
+@media (max-width: 980px) {
+  .path-cards { grid-template-columns: 1fr; gap: 18px; padding: 0 12px; }
+  .path-card { padding: 18px 16px 14px; }
+}
+
+/* ============================================================
+   Pokémon Center — three healing choices, same card language
+   ============================================================ */
+
+.center-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 320px));
+  gap: 28px;
+  justify-content: center;
+  align-content: center;
+  min-height: 0;
+  padding: 8px 0;
+}
+
+.center-card .path-card-icon {
+  color: var(--card-accent, var(--ink));
+  font-size: 52px;
+  filter: none; /* glyph icons (✚, 🩹, 💰) read better unpixelated */
+}
+
+@media (max-width: 980px) {
+  .center-grid { grid-template-columns: 1fr; gap: 18px; padding: 0 12px; }
+}
+
+/* ============================================================
+   Mystery Event — single curtain card; tap to flip
+   ============================================================ */
+
+.mystery-stage {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  padding: 8px 0;
+}
+
+.mystery-card {
+  position: relative;
+  width: min(420px, 92vw);
+  min-height: 320px;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  box-shadow: 10px 10px 0 var(--ink);
+  padding: 26px 22px 22px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  color: var(--ink);
+  text-align: center;
+  display: grid;
+  align-items: center;
+  transform: rotate(-1deg);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+  border-radius: 0;
+}
+.mystery-card::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border: 1px solid var(--ink);
+  pointer-events: none;
+}
+.mystery-card:hover:not(.revealed) {
+  transform: rotate(0deg) translate(-3px, -4px);
+  box-shadow: 14px 14px 0 var(--ink);
+}
+.mystery-card:active {
+  transform: rotate(0deg) translate(2px, 2px);
+  box-shadow: 5px 5px 0 var(--ink);
+}
+.mystery-card.revealed {
+  transform: rotate(0.6deg);
+  box-shadow: 12px 12px 0 var(--oxblood, #6b1f1f);
+}
+
+.mystery-front,
+.mystery-back {
+  display: grid;
+  gap: 12px;
+  align-content: center;
+  justify-items: center;
+  padding: 8px 0;
+}
+.mystery-front .path-card-icon {
+  font-size: 84px;
+  margin: 8px 0 4px;
+}
+.mystery-back .path-card-icon {
+  font-size: 64px;
+  margin: 4px 0;
+}
+.mystery-sprite-wrap {
+  display: grid;
+  place-items: center;
+  margin: 6px 0 2px;
+  position: relative;
+}
+.mystery-sprite-wrap::before {
+  content: '';
+  position: absolute;
+  inset: auto 22% -4px;
+  height: 6px;
+  background: var(--ink);
+  opacity: 0.16;
+  border-radius: 50%;
+  filter: blur(2px);
+}
+.mystery-sprite {
+  width: 112px;
+  height: 112px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.18));
+}
+.mystery-back .mystery-sprite {
+  width: 92px;
+  height: 92px;
+}
+.mystery-back .path-card-title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-style: italic;
+  font-size: 28px;
+  margin: 0;
+  color: var(--ink);
+}
+.mystery-back .path-card-hint {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-3, #6b5e44);
+  margin: 0;
+  max-width: 32ch;
+}
+
+.mystery-cta {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-style: italic;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: var(--oxblood, #6b1f1f);
+  margin-top: 8px;
+}
+
+.hidden { display: none !important; }
+
+/* ============================================================
+   Forage Modal — small drop reward, no combat
+   ============================================================ */
+
+/* Scoped overlays for path-spawned modals (forage, gen-gate). The global
+   `.modal-overlay` in main.css is used by ShopScreen / catch / etc. — we
+   must not redefine it here, only piggy-back via these local classes. */
+.path-overlay {
+  position: fixed; inset: 0;
+  background: rgba(20, 14, 8, 0.62);
+  display: grid; place-items: center;
+  z-index: 80;
+  animation: forage-fade 220ms ease both;
+  padding: 20px;
+}
+.path-modal-card {
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  box-shadow: 10px 10px 0 var(--ink);
+  padding: 24px 26px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  font-family: var(--font-mono);
+  color: var(--ink);
+  display: grid;
+  gap: 10px;
+  position: relative;
+}
+.path-modal-card::before {
+  content: '';
+  position: absolute; inset: 6px;
+  border: 1px solid var(--ink);
+  pointer-events: none;
+}
+.forage-modal .path-card-icon {
+  font-size: 64px;
+  margin: 4px 0;
+}
+.forage-sprite-wrap {
+  display: grid;
+  place-items: center;
+  margin: 6px 0 4px;
+  position: relative;
+}
+.forage-sprite-wrap::before {
+  content: '';
+  position: absolute;
+  inset: auto 28% -4px;
+  height: 6px;
+  background: var(--ink);
+  opacity: 0.18;
+  border-radius: 50%;
+  filter: blur(2px);
+}
+.forage-sprite {
+  width: 96px;
+  height: 96px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.18));
+}
+.forage-cta {
+  margin-top: 8px;
+  align-self: center;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-style: italic;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  background: var(--ink);
+  color: var(--paper);
+  border: 2px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--oxblood, #6b1f1f);
+  padding: 10px 22px;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.forage-cta:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--oxblood, #6b1f1f); }
+.forage-cta:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--oxblood, #6b1f1f); }
+@keyframes forage-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ============================================================
+   Generation Gate — post-Champion fork
+   ============================================================ */
+
+.gen-gate-overlay .path-modal-card.gen-gate {
+  max-width: 760px;
+  padding: 28px 32px;
+}
+.gen-gate-title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-style: italic;
+  font-size: clamp(34px, 4.5vw, 52px);
+  margin: 4px 0 0;
+  color: var(--ink);
+}
+.gen-gate-title em { color: var(--oxblood); }
+.gen-gate-sub {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+  margin: 6px 0 14px;
+}
+.gen-gate-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+  text-align: left;
+}
+.gen-gate-card {
+  font-family: var(--font-mono);
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  padding: 18px 16px 14px;
+  cursor: pointer;
+  transform: rotate(-0.6deg);
+  box-shadow: 8px 8px 0 var(--ink);
+  display: grid;
+  grid-template-rows: auto auto auto 1fr auto;
+  gap: 8px;
+  transition: transform 140ms ease, box-shadow 140ms ease;
+  color: var(--ink);
+}
+.gen-gate-card:nth-child(2) { transform: rotate(0.8deg); }
+.gen-gate-card:hover {
+  transform: rotate(0deg) translate(-3px, -4px);
+  box-shadow: 12px 12px 0 var(--ink);
+}
+@media (max-width: 720px) {
+  .gen-gate-cards { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   Gym / League badge tint for the wave intro
+   ============================================================ */
+.wave-intro-card.gym {
+  border-color: #6a4525;
+  box-shadow: 8px 8px 0 #3b2715;
+}
+.wave-intro-card.league {
+  background: #1a0f1f;
+  color: var(--paper);
+  border-color: #0c0512;
+  box-shadow: 8px 8px 0 #0c0512;
+}
+.wave-intro-card.league .eyebrow,
+.wave-intro-card.league .sub,
+.wave-intro-card.league .hint { color: var(--paper-2, #d8c9a8); }
+.wave-intro-card.league .wn { color: var(--paper); }
+.wave-intro-card.league .wn em { color: var(--gold, #d4a014); }
+
+@media (max-width: 980px) {
+  .mystery-card { padding: 22px 18px 18px; min-height: 280px; }
+  .mystery-front .path-card-icon { font-size: 68px; }
+}

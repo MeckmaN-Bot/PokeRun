@@ -45,16 +45,22 @@ function cacheSet<T>(key: string, data: T): void {
   }
 }
 
-async function apiFetch<T>(url: string): Promise<T> {
+async function apiFetch<T>(url: string, timeoutMs = 8000): Promise<T> {
   const cacheKey = url.replace(API_BASE, '').replace(/\//g, '_');
   const cached = cacheGet<T>(cacheKey);
   if (cached) return cached;
 
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`API fetch failed: ${url} (${resp.status})`);
-  const data: T = await resp.json();
-  cacheSet(cacheKey, data);
-  return data;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const resp = await fetch(url, { signal: controller.signal });
+    if (!resp.ok) throw new Error(`API fetch failed: ${url} (${resp.status})`);
+    const data: T = await resp.json();
+    cacheSet(cacheKey, data);
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Map PokeAPI stat names to our stat keys
@@ -137,55 +143,119 @@ export async function fetchMove(nameOrId: string | number): Promise<Move | null>
   }
 }
 
-// Select up to 4 good moves for a Pokemon from its learnset
-async function selectMoves(apiMoves: PokeAPIResponse['moves'], types: PokemonType[]): Promise<Move[]> {
-  // Filter to level-up moves only
-  const levelUpMoves = apiMoves
+interface BuildMovesResult {
+  moves: Move[];
+  learnsetPool: { name: string; level: number }[];
+}
+
+/**
+ * Build initial moveset (2 weak moves) + learnset pool.
+ * Pokemon start with limited weak moves and learn stronger ones over the run.
+ */
+async function buildMovesAndLearnset(
+  apiMoves: PokeAPIResponse['moves'],
+  types: PokemonType[],
+  level: number,
+): Promise<BuildMovesResult> {
+  // Build full level-up learnset (used to learn moves later)
+  const levelUpEntries = apiMoves
     .filter(m => m.version_group_details.some(
-      vg => vg.move_learn_method.name === 'level-up' && vg.level_learned_at <= 60
+      vg => vg.move_learn_method.name === 'level-up' && vg.level_learned_at > 0 && vg.level_learned_at <= 60
     ))
     .map(m => ({
       name: m.move.name,
-      level: Math.max(...m.version_group_details
-        .filter(vg => vg.move_learn_method.name === 'level-up')
+      level: Math.min(...m.version_group_details
+        .filter(vg => vg.move_learn_method.name === 'level-up' && vg.level_learned_at > 0)
         .map(vg => vg.level_learned_at)),
     }))
-    .sort((a, b) => b.level - a.level)
-    .slice(0, 20); // Fetch top 20 candidates
+    .sort((a, b) => a.level - b.level);
 
-  const fetchedMoves = await Promise.all(
-    levelUpMoves.map(m => fetchMove(m.name))
-  );
+  // Initial moveset: only moves learned at or before current level, capped to 2 slots, prefer weak/STAB
+  const initialEligible = levelUpEntries.filter(e => e.level <= Math.max(level, 1));
+  const fetched = await Promise.all(initialEligible.slice(0, 12).map(e => fetchMove(e.name)));
+  const validMoves = fetched.filter((m): m is Move => m !== null);
 
-  const validMoves = fetchedMoves.filter((m): m is Move => m !== null);
-
-  // Prioritize: STAB moves with power > 60, then other damaging moves, then status
-  const stabDamaging = validMoves.filter(m => m.power > 60 && types.includes(m.type));
-  const otherDamaging = validMoves.filter(m => m.power > 60 && !types.includes(m.type));
-  const weakDamaging = validMoves.filter(m => m.power > 0 && m.power <= 60);
-  const statusMoves = validMoves.filter(m => m.category === 'status' && m.power === 0);
+  // Cap power for starting moves so Pokémon must grow into their kit
+  const STARTING_POWER_CAP = 60;
+  const weakStab = validMoves.filter(m => m.power > 0 && m.power <= STARTING_POWER_CAP && types.includes(m.type));
+  const weakAny = validMoves.filter(m => m.power > 0 && m.power <= STARTING_POWER_CAP && !types.includes(m.type));
+  const weakStatus = validMoves.filter(m => m.category === 'status' && m.power === 0);
 
   const selected: Move[] = [];
-  const addUnique = (moves: Move[]) => {
-    for (const m of moves) {
-      if (selected.length >= 4) break;
+  const addUnique = (arr: Move[], limit: number) => {
+    for (const m of arr) {
+      if (selected.length >= limit) break;
       if (!selected.find(s => s.id === m.id)) selected.push(m);
     }
   };
+  addUnique(weakStab, 1);
+  addUnique(weakAny, 2);
+  addUnique(weakStatus, 2);
 
-  addUnique(stabDamaging.slice(0, 2));
-  addUnique(otherDamaging);
-  addUnique(weakDamaging);
-  addUnique(statusMoves.slice(0, 1));
-
-  // Ensure at least 1 damaging move
-  if (selected.length === 0 || selected.every(m => m.power === 0)) {
-    // Add Tackle as fallback
+  // Hard fallback — Tackle if nothing fits
+  if (selected.length === 0) {
     const tackle = await fetchMove('tackle');
-    if (tackle) selected.unshift(tackle);
+    if (tackle) selected.push(tackle);
   }
 
-  return selected.slice(0, 4);
+  return {
+    moves: selected.slice(0, 2),
+    learnsetPool: levelUpEntries,
+  };
+}
+
+/**
+ * Learn moves a Pokémon now qualifies for via its level.
+ * Mutates pokemon.moves and pokemon.learnedMoveIds.
+ * If 4 move slots are full, replaces the weakest damaging move when the new one is stronger.
+ * Returns an array describing each learn event for log output.
+ */
+export interface LearnEvent {
+  newMove: Move;
+  replacedMove: Move | null;
+}
+
+export async function learnMovesForLevel(
+  pokemon: Pokemon,
+): Promise<LearnEvent[]> {
+  const events: LearnEvent[] = [];
+  if (!pokemon.learnsetPool || pokemon.learnsetPool.length === 0) return events;
+  const learned = new Set(pokemon.learnedMoveIds ?? []);
+
+  const eligible = pokemon.learnsetPool.filter(
+    e => e.level > 0 && e.level <= pokemon.level,
+  );
+
+  for (const entry of eligible) {
+    const move = await fetchMove(entry.name);
+    if (!move) continue;
+    if (learned.has(move.id)) continue;
+    learned.add(move.id);
+
+    if (pokemon.moves.length < 4) {
+      pokemon.moves.push(move);
+      events.push({ newMove: move, replacedMove: null });
+      continue;
+    }
+
+    // 4 slots full — only replace if new move is stronger than the weakest damaging move
+    let weakestIdx = -1;
+    let weakestPower = move.power;
+    pokemon.moves.forEach((m, i) => {
+      if (m.power > 0 && m.power < weakestPower) {
+        weakestPower = m.power;
+        weakestIdx = i;
+      }
+    });
+    if (weakestIdx >= 0 && move.power > 0) {
+      const replaced = pokemon.moves[weakestIdx];
+      pokemon.moves[weakestIdx] = move;
+      events.push({ newMove: move, replacedMove: replaced });
+    }
+  }
+
+  pokemon.learnedMoveIds = Array.from(learned);
+  return events;
 }
 
 // ============================================================
@@ -286,8 +356,8 @@ export async function fetchPokemon(idOrName: number | string, level: number): Pr
     .sort((a, b) => a.slot - b.slot)
     .map(t => t.type.name as PokemonType);
 
-  // Moves
-  const moves = await selectMoves(data.moves, types);
+  // Moves + learnset
+  const { moves, learnsetPool } = await buildMovesAndLearnset(data.moves, types, level);
 
   // Sprites
   const sprite = getStaticSprite(data.id);
@@ -319,8 +389,11 @@ export async function fetchPokemon(idOrName: number | string, level: number): Pr
     bst,
     abilities: data.abilities.map(a => a.ability.name),
     evolutionChainId: data.id,
+    heightDm: data.height,
     nextEvolutionId: evoInfo.nextEvolutionId,
     evolutionLevel: evoInfo.evolutionLevel,
+    learnsetPool,
+    learnedMoveIds: moves.map(m => m.id),
   };
 
   cacheSet(cacheKey, pokemon);

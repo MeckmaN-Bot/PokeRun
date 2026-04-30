@@ -70,21 +70,32 @@ export function generateRewards(
   wave: number,
   isBossWave: boolean,
   ownedPerkIds: string[],
-  pokemonChoices: Pokemon[]
+  pokemonChoices: Pokemon[],
+  options?: { minRarity?: Rarity; extraCard?: boolean }
 ): Reward[] {
   const rewards: Reward[] = [];
   const usedItemIds: string[] = [];
 
+  // Rarity floor from options (e.g. rare_tag, boss wave bonus)
+  const floor = options?.minRarity;
+  const upgrade = (r: Rarity): Rarity => {
+    if (!floor) return r;
+    const order: Rarity[] = ['common', 'rare', 'epic', 'legendary'];
+    return order[Math.max(order.indexOf(r), order.indexOf(floor))] ?? r;
+  };
+
+  const maxRewards = options?.extraCard ? 4 : 3;
+
   // Always include at least one Pokemon reward
   if (pokemonChoices.length > 0) {
     const pokemon = pokemonChoices[Math.floor(Math.random() * pokemonChoices.length)];
-    const rarity = rollRarity(wave, isBossWave);
+    const rarity = upgrade(rollRarity(wave, isBossWave));
     rewards.push({ type: 'pokemon', rarity, pokemon });
   }
 
   // Fill remaining slots with perks and items
-  while (rewards.length < 3) {
-    const rarity = rollRarity(wave, isBossWave);
+  while (rewards.length < maxRewards) {
+    const rarity = upgrade(rollRarity(wave, isBossWave));
     const rewardTypeRoll = Math.random();
 
     if (rewardTypeRoll < 0.4) {
@@ -110,7 +121,7 @@ export function generateRewards(
     }
   }
 
-  return rewards.slice(0, 3);
+  return rewards.slice(0, maxRewards);
 }
 
 // ============================================================

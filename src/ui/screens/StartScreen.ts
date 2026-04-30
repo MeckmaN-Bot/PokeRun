@@ -1,12 +1,22 @@
-import type { GameState } from '../../types';
+import type { GameState, TrainerGender } from '../../types';
 import { STARTERS } from '../../data/enemyPools';
 import { fetchPokemon } from '../../api/pokeapi';
 import { getStaticSprite } from '../../api/sprites';
-import { renderTypeBadges } from '../components/TypeBadge';
-import { fadeIn, showToast } from '../animations';
+import { fadeIn } from '../animations';
 import { toBattlePokemon } from '../../systems/battle';
+import { logout } from '../../systems/auth';
+import { getTrainerSprite, TRAINER_NAMES } from '../../data/trainers';
+import { mountAudioControls } from '../../audio/AudioSettingsPanel';
+import { escapeHtml, safeUrl } from '../../util/sanitize';
+import { hasSavedRun, loadRun, clearRun } from '../../systems/saveRun';
+import { loadSettings, saveSettings } from '../../systems/userSettings';
+import { BADGES } from '../../data/badges';
+import { badgeSprite, imgErrorFallback } from '../../data/sprites';
+import { wasSeen, markSeen, resetTutorial } from '../../systems/tutorial';
+import { startFirstRunTour } from '../../systems/runTour';
+import { resetTour } from '../../systems/tutorialTour';
 
-const STORAGE_KEY = 'pokerun_player_name';
+const DONATION_URL = 'https://ko-fi.com/pokerun';
 
 interface StarterDisplay {
   id: number;
@@ -20,6 +30,8 @@ interface StarterDisplay {
 export class StartScreen {
   private container: HTMLElement;
   private onStart: (state: GameState) => void;
+  private onLogout: () => void;
+  private onResume: (() => void) | null;
   private starterData: StarterDisplay[] = STARTERS.map(s => ({
     id: s.id,
     name: s.name,
@@ -28,27 +40,51 @@ export class StartScreen {
   }));
   private selectedStarterIndex = 0;
   private playerName = '';
+  private isGuest = false;
+  private trainerGender: TrainerGender = 'male';
+  private destroyAudioBtn: (() => void) | null = null;
 
-  constructor(container: HTMLElement, onStart: (state: GameState) => void) {
+  constructor(
+    container: HTMLElement,
+    onStart: (state: GameState) => void,
+    onLogout: () => void,
+    playerName: string,
+    isGuest = false,
+    onResume: (() => void) | null = null,
+  ) {
     this.container = container;
     this.onStart = onStart;
+    this.onLogout = onLogout;
+    this.playerName = playerName;
+    this.isGuest = isGuest;
+    this.onResume = onResume;
   }
 
   async mount(): Promise<void> {
-    // Restore saved name before rendering so the input can be pre-filled
-    this.playerName = localStorage.getItem(STORAGE_KEY) ?? '';
     this.container.innerHTML = this.renderHTML();
     this.container.style.display = '';
+    document.body.classList.add('start-active');
     fadeIn(this.container);
     this.attachEvents();
+    const audioSlot = this.container.querySelector<HTMLElement>('#settings-audio-slot');
+    if (audioSlot) this.destroyAudioBtn = mountAudioControls(audioSlot);
     this.loadStarterData();
+
+    // First-time launch: pop the How-to-Play modal once so brand-new players
+    // get the rules without hunting for the button. Cover page has a "Take the
+    // tour" CTA that kicks off the interactive walkthrough.
+    if (!wasSeen('intro_htp')) {
+      const modal = this.container.querySelector('#howtoplay-modal');
+      modal?.classList.remove('hidden');
+      markSeen('intro_htp');
+    }
   }
 
   private async loadStarterData(): Promise<void> {
     // Fetch starter data in background
     for (let i = 0; i < STARTERS.length; i++) {
       try {
-        const pokemon = await fetchPokemon(STARTERS[i].id, 5);
+        const pokemon = await fetchPokemon(STARTERS[i].id, 8);
         this.starterData[i] = {
           id: pokemon.id,
           name: pokemon.name,
@@ -63,10 +99,12 @@ export class StartScreen {
           const typeEl = card.querySelector('.starter-types');
           const bstEl = card.querySelector('.starter-bst');
           if (typeEl && pokemon.types) {
-            typeEl.innerHTML = renderTypeBadges(pokemon.types);
+            typeEl.innerHTML = pokemon.types
+              .map((t, j) => `<span class="type-stamp type-${t}" style="--rot:${j % 2 === 0 ? '-2' : '2'}deg">${t.toUpperCase()}</span>`)
+              .join('');
           }
           if (bstEl && pokemon.bst) {
-            bstEl.textContent = `BST: ${pokemon.bst}`;
+            bstEl.textContent = `BST ${pokemon.bst}`;
           }
         }
       } catch {
@@ -75,111 +113,466 @@ export class StartScreen {
     }
   }
 
+  private renderSettingsModal(): string {
+    const s = loadSettings();
+    const speedOption = (val: number, label: string) =>
+      `<button class="settings-pill${s.animationSpeed === val ? ' active' : ''}" data-speed="${val}" type="button">${label}</button>`;
+    return `
+      <div class="modal-overlay hidden" id="settings-modal">
+        <div class="modal htp-modal">
+          <button class="modal-close" id="close-settings">✕</button>
+          <div class="htp-eyebrow">Display · Motion · Audio</div>
+          <h2 class="modal-title">◈ <em>Settings</em></h2>
+
+          <div class="settings-row">
+            <div class="settings-row-label">
+              <div class="srl-title">Reduce Motion</div>
+              <div class="srl-sub">Mute non-essential animations and shakes.</div>
+            </div>
+            <label class="settings-toggle">
+              <input type="checkbox" id="setting-reduce-motion" ${s.reduceMotion ? 'checked' : ''} />
+              <span class="settings-toggle-track"><span class="settings-toggle-knob"></span></span>
+            </label>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-row-label">
+              <div class="srl-title">Animation Speed</div>
+              <div class="srl-sub">Speed up battle and intro flair.</div>
+            </div>
+            <div class="settings-pills" id="setting-speed">
+              ${speedOption(0.5, '0.5×')}
+              ${speedOption(1, '1×')}
+              ${speedOption(1.5, '1.5×')}
+              ${speedOption(2, '2×')}
+            </div>
+          </div>
+
+          <div class="settings-row" style="border-top:1.5px dashed var(--ink, #1a1a1a); padding-top:14px; flex-direction:column; align-items:stretch; gap:10px;">
+            <div class="settings-row-label">
+              <div class="srl-title">Sound &amp; Music</div>
+              <div class="srl-sub">Master · Music · SFX</div>
+            </div>
+            <div id="settings-audio-slot" class="settings-audio-slot"></div>
+          </div>
+
+          <div class="settings-row" style="border-top:1.5px dashed var(--ink, #1a1a1a); padding-top:14px;">
+            <div class="settings-row-label">
+              <div class="srl-title">Tutorial</div>
+              <div class="srl-sub">Replay the how-to-play overlay and contextual hints.</div>
+            </div>
+            <button class="ink-btn ghost sm" id="reset-tutorial-btn" type="button">Replay Tutorial</button>
+          </div>
+
+          <div class="settings-row" style="border-top:1.5px dashed var(--ink, #1a1a1a); padding-top:14px;">
+            <div class="settings-row-label">
+              <div class="srl-title">Saved trainer</div>
+              <div class="srl-sub">${escapeHtml(this.playerName || '—')}</div>
+            </div>
+            <button class="ink-btn ghost sm" id="clear-name-btn" type="button">Clear Saved Name</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderBadgeTrophyStrip(): string {
+    const saved = loadRun();
+    const earned = new Set(saved?.state.badges ?? []);
+    if (earned.size === 0) return '';
+    return `
+      <div class="trophy-strip" aria-label="Badges earned in saved run">
+        <div class="trophy-strip-eyebrow">— Badges earned · ${earned.size} of 8 —</div>
+        <div class="trophy-strip-row">
+          ${BADGES.map(b => {
+            const owned = earned.has(b.id);
+            const url = badgeSprite(b.id);
+            const inner = owned && url
+              ? `<img src="${url}" alt="${b.name}" onerror="${imgErrorFallback(b.icon)}" />`
+              : `<span class="trophy-pip-locked" aria-hidden="true"></span>`;
+            return `<span class="trophy-pip${owned ? ' owned' : ''}" title="${b.name}"
+              style="--badge-color:${b.color}">${inner}</span>`;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  private renderResumeBanner(): string {
+    if (!this.onResume || !hasSavedRun()) return '';
+    const saved = loadRun();
+    if (!saved) return '';
+    const ageMin = Math.max(1, Math.floor((Date.now() - saved.savedAt) / 60_000));
+    const wave = saved.state.wave;
+    const team = saved.state.team.length;
+    const act = saved.state.currentAct;
+    const ageLabel = ageMin < 60 ? `${ageMin} min ago` : `${Math.floor(ageMin / 60)}h ago`;
+    return `
+      <div class="resume-banner">
+        <div class="resume-banner-info">
+          <div class="resume-banner-eyebrow">Saved run · ${ageLabel}</div>
+          <div class="resume-banner-meta">Wave ${wave} · Act ${act} · ${team} mon</div>
+        </div>
+        <div class="resume-banner-actions">
+          <button class="ink-btn ghost sm" id="resume-discard" type="button">Discard</button>
+          <button class="ink-btn primary" id="resume-btn" type="button">↻ Resume run</button>
+        </div>
+      </div>
+    `;
+  }
+
+  private wireHtpPager(modalEl: HTMLElement): void {
+    const book = modalEl.querySelector<HTMLElement>('.htp-book');
+    if (!book) return;
+    const pages = Array.from(book.querySelectorAll<HTMLElement>('.htp-page'));
+    const pips = Array.from(book.querySelectorAll<HTMLButtonElement>('.htp-pip'));
+    const prev = book.querySelector<HTMLButtonElement>('#htp-prev')!;
+    const next = book.querySelector<HTMLButtonElement>('#htp-next')!;
+    const max = pages.length - 1;
+    const goto = (i: number) => {
+      const idx = Math.max(0, Math.min(max, i));
+      book.dataset.page = String(idx);
+      pages.forEach((p, k) => {
+        p.hidden = k !== idx;
+        if (k === idx) p.classList.add('htp-page-in'); else p.classList.remove('htp-page-in');
+      });
+      pips.forEach((p, k) => p.classList.toggle('active', k === idx));
+      prev.disabled = idx === 0;
+      next.textContent = idx === max ? 'Close' : 'Next ›';
+      book.scrollTop = 0;
+    };
+    prev.addEventListener('click', () => goto(Number(book.dataset.page ?? 0) - 1));
+    next.addEventListener('click', () => {
+      const cur = Number(book.dataset.page ?? 0);
+      if (cur === max) {
+        modalEl.classList.add('hidden');
+        goto(0);
+      } else {
+        goto(cur + 1);
+      }
+    });
+    pips.forEach(p => p.addEventListener('click', () => goto(Number(p.dataset.pip))));
+    // Reset to cover whenever modal opens
+    const observer = new MutationObserver(() => {
+      if (!modalEl.classList.contains('hidden')) goto(0);
+    });
+    observer.observe(modalEl, { attributes: true, attributeFilter: ['class'] });
+  }
+
   private renderHTML(): string {
     return `
       <div class="start-screen screen">
-        <div class="start-bg-particles"></div>
         <div class="start-content">
+
+          <!-- Headline: eyebrow + big title | side note -->
           <div class="game-logo">
-            <div class="logo-subtitle">⚔️ ROGUELITE WAVE SURVIVAL ⚔️</div>
-            <h1 class="logo-title">POKÉMON<br><span class="logo-gauntlet">GAUNTLET</span></h1>
-            <div class="logo-tagline">Survive the endless waves. Build the ultimate team.</div>
+            <div>
+              <div class="logo-subtitle">Issue 001 · Field Guide Edition</div>
+              <h1 class="logo-title">A <em>ROGUELIKE</em><br>GAUNTLET.</h1>
+            </div>
+            <div class="start-issue">
+              <b>How it works</b>
+              Choose a starter. Clear waves.<br>
+              Pick rewards. Survive longer than<br>
+              the last person who tried.
+            </div>
           </div>
 
-          <div class="start-form">
-            <div class="name-input-group">
-              <label for="player-name" class="form-label">TRAINER NAME</label>
-              <input
-                id="player-name"
-                type="text"
-                class="name-input"
-                placeholder="Enter your name..."
-                maxlength="20"
-                autocomplete="off"
-                value="${this.playerName}"
-              />
+          <!-- Logged-in user banner -->
+          <div class="start-user-banner">
+            <div class="start-user-name">
+              <span class="kicker">${this.isGuest ? 'Playing as guest' : 'Logged in as'}</span>
+              ${escapeHtml(this.playerName)}
             </div>
-
-            <div class="starter-section">
-              <h2 class="starter-heading">CHOOSE YOUR STARTER</h2>
-              <div class="starter-grid">
-                ${this.starterData.map((s, i) => `
-                  <div
-                    class="starter-card ${i === this.selectedStarterIndex ? 'selected' : ''}"
-                    data-starter="${i}"
-                    role="button"
-                    tabindex="0"
-                  >
-                    <img class="starter-sprite" src="${s.sprite}" alt="${s.displayName}" />
-                    <div class="starter-name">${s.displayName}</div>
-                    <div class="starter-types"><!-- loaded async --></div>
-                    <div class="starter-bst">Loading...</div>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-
-            <button class="btn btn-primary btn-start" id="start-btn" ${this.playerName.length > 0 ? '' : 'disabled'}>
-              START GAUNTLET
+            <button class="trainer-chip" id="trainer-chip" type="button" title="Click to switch trainer">
+              <span class="tc-sprite-wrap">
+                <img class="tc-sprite" src="${getTrainerSprite(this.trainerGender)}" alt="" draggable="false" />
+              </span>
+              <span class="tc-meta">
+                <span class="tc-kicker">Trainer</span>
+                <span class="tc-name">${TRAINER_NAMES[this.trainerGender]} ${this.trainerGender === 'male' ? '♂' : '♀'}</span>
+              </span>
+              <span class="tc-swap" aria-hidden="true">↻</span>
+            </button>
+            <button class="ink-btn ghost sm" id="logout-btn" style="font-size:11px">
+              ${this.isGuest ? '← Back' : 'Log out'}
             </button>
           </div>
 
-          <div class="start-footer">
-            <button class="btn btn-ghost" id="leaderboard-btn">🏆 LEADERBOARD</button>
-            <button class="btn btn-ghost" id="howtoplay-btn">❓ HOW TO PLAY</button>
-            <button class="btn btn-ghost" id="settings-btn">⚙️ SETTINGS</button>
+          ${this.renderResumeBanner()}
+          ${this.renderBadgeTrophyStrip()}
+
+          <!-- Starter selection -->
+          <div class="starter-section">
+            <div class="starter-heading">
+              <div class="h">Choose your starter</div>
+              <div class="s">${this.starterData.length} available · press A to confirm</div>
+            </div>
+            <div class="starter-carousel">
+              <button class="starter-nav prev" id="starter-prev" type="button" aria-label="Previous starter">‹</button>
+              <div class="starter-grid" id="starter-grid">
+                ${this.starterData.map((s, i) => `
+                  <div
+                    class="creature-card ${i === this.selectedStarterIndex ? 'selected' : ''}"
+                    data-starter="${i}"
+                    role="button"
+                    tabindex="0"
+                    style="--card-hover-rot:${i % 2 === 0 ? '1.2' : '-1.2'}deg"
+                  >
+                    <div class="card-head">
+                      <span class="dex">№ ${String(s.id).padStart(3,'0')}</span>
+                      <span class="bst starter-bst">BST …</span>
+                    </div>
+                    <div class="sprite-frame">
+                      <img src="${s.sprite}" alt="${s.displayName}" />
+                    </div>
+                    <div class="card-foot">
+                      <div class="name">${s.displayName}</div>
+                      <div class="types starter-types"><!-- loaded async --></div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+              <button class="starter-nav next" id="starter-next" type="button" aria-label="Next starter">›</button>
+            </div>
+            <div class="starter-dots" id="starter-dots" role="tablist">
+              ${this.starterData.map((_, i) => `
+                <button class="starter-dot ${i === this.selectedStarterIndex ? 'active' : ''}"
+                        data-dot="${i}" type="button" aria-label="Select starter ${i + 1}"></button>
+              `).join('')}
+            </div>
           </div>
+
+          <!-- Footer -->
+          <div class="start-footer">
+            <div class="logo-subtitle kb-hints" style="text-transform:uppercase;letter-spacing:.08em">
+              ► D-pad select<br>► Start begins run
+            </div>
+            <div style="display:flex;gap:10px;justify-self:center;flex-wrap:wrap;align-items:center">
+              <button class="ink-btn ghost" id="howtoplay-btn">How to play</button>
+              <button class="ink-btn ghost" id="leaderboard-btn">Leaderboard</button>
+              <button class="ink-btn ghost" id="settings-btn" title="Display + audio settings">⚙ Settings</button>
+              <a class="ink-btn ghost donate-chip" id="donate-link" href="${safeUrl(DONATION_URL)}" target="_blank" rel="noopener noreferrer" title="Support server costs">♥ Support</a>
+              <button class="ink-btn primary" id="start-btn">Begin run →</button>
+            </div>
+            <div class="logo-subtitle" style="text-align:right;letter-spacing:.08em;text-transform:uppercase">
+              Trainer · ${escapeHtml(this.playerName)}<br>Wave — · —¢
+              <a href="#" id="legal-btn" class="footer-legal-link">Legal &amp; Disclaimer</a>
+            </div>
+          </div>
+
         </div>
 
         <!-- Settings Modal -->
-        <div class="modal-overlay hidden" id="settings-modal">
-          <div class="modal">
-            <button class="modal-close" id="close-settings">✕</button>
-            <h2 class="modal-title">⚙️ SETTINGS</h2>
-            <div style="padding: 0.5rem 0 1rem;">
-              <p style="color: var(--text-muted); margin-bottom: 1rem; font-size: 0.9rem;">
-                Saved trainer: <strong style="color: var(--text)">${this.playerName || '—'}</strong>
-              </p>
-              <button class="btn btn-secondary btn-sm" id="clear-name-btn">
-                🚪 Clear Saved Name
-              </button>
+        ${this.renderSettingsModal()}
+
+        <!-- Legal / Disclaimer Modal -->
+        <div class="modal-overlay hidden" id="legal-modal">
+          <div class="modal htp-modal">
+            <button class="modal-close" id="close-legal">✕</button>
+            <div class="htp-eyebrow">Fan Project · Non-Commercial</div>
+            <h2 class="modal-title">Legal &amp;<br><em>Disclaimer</em></h2>
+            <div class="htp-block" style="margin-top:12px">
+              <p>PokéRun is a free, fan-made tribute. <b>Pokémon</b> and all associated names, sprites, and trademarks are property of <b>Nintendo</b>, <b>Game Freak</b>, and <b>The Pokémon Company</b>. This project is not affiliated with, endorsed, or sponsored by them.</p>
+              <p>Sprites are loaded from public APIs (PokéAPI). No copyrighted assets are bundled. No money is made from this game.</p>
+              <p>If you are a rights-holder and want this taken down — please reach out via the donation page. We will comply.</p>
+            </div>
+            <div class="htp-tips">
+              <div class="htp-label">Donations</div>
+              <p>Donations cover server costs only and grant no in-game advantage. They are voluntary tips and not a purchase of any product or licence.</p>
             </div>
           </div>
         </div>
 
         <!-- How to Play Modal -->
         <div class="modal-overlay hidden" id="howtoplay-modal">
-          <div class="modal">
+          <div class="modal htp-modal htp-book" data-page="0">
             <button class="modal-close" id="close-howtoplay">✕</button>
-            <h2 class="modal-title">HOW TO PLAY</h2>
-            <div class="howtoplay-content">
-              <div class="howtoplay-section">
-                <h3>🎮 Objective</h3>
-                <p>Survive as many waves of enemy Pokémon as possible. Your score = waves cleared.</p>
+
+            <!-- Page 0 — Cover -->
+            <div class="htp-page htp-cover" data-page="0">
+              <div class="htp-cover-stamp">Vol. 01</div>
+              <div class="htp-eyebrow">Field Manual · Issue 001</div>
+              <h2 class="modal-title">How to<br><em>Play</em></h2>
+              <div class="htp-cover-meta">
+                <span>6 chapters</span>
+                <span class="htp-cover-dot">·</span>
+                <span>~ 4 min read</span>
+                <span class="htp-cover-dot">·</span>
+                <span>Trainer-grade</span>
               </div>
-              <div class="howtoplay-section">
-                <h3>⚔️ Battle</h3>
-                <p>Turn-based battles. Choose a move or enable Auto-Battle. Type effectiveness matters!</p>
-                <p>Turn order is determined by Speed. Faster Pokémon moves first.</p>
+              <p class="htp-cover-blurb">A pocket guide to surviving Kanto's longest gauntlet. Read it, fold it, lose it in your bag — works either way.</p>
+              <button class="ink-btn primary htp-tour-cta" id="htp-take-tour" type="button">▶ Take the interactive tour</button>
+              <div class="htp-cover-toc">
+                <div class="htp-label">Contents</div>
+                <ol>
+                  <li><span>01</span> The Run</li>
+                  <li><span>02</span> Battle Basics</li>
+                  <li><span>03</span> Rewards &amp; Path</li>
+                  <li><span>04</span> Items &amp; Bag</li>
+                  <li><span>05</span> Arenas &amp; Badges</li>
+                  <li><span>06</span> Field Notes</li>
+                </ol>
               </div>
-              <div class="howtoplay-section">
-                <h3>🎁 Rewards</h3>
-                <p>After each wave, choose 1 of 3 rewards: new Pokémon, team perk, or item.</p>
-                <p>Rarities: Common → Rare → Epic → Legendary. Every 5 waves is a Boss Wave with better loot!</p>
+            </div>
+
+            <!-- Page 1 — The Run -->
+            <div class="htp-page" data-page="1" hidden>
+              <div class="htp-eyebrow">Chapter 01</div>
+              <h3 class="htp-chapter-title">The <em>Run</em></h3>
+              <p class="htp-lede">A run is a single life. Survive waves, clear three acts, capture badges. When your team faints — that's the run.</p>
+              <ul class="htp-flow">
+                <li><b>Pick a starter.</b> One mon, level 5. Your seed.</li>
+                <li><b>Walk a path.</b> Each act branches: battles, shops, arenas, events.</li>
+                <li><b>Clear waves.</b> Win fights, earn coins &amp; rewards.</li>
+                <li><b>Beat arenas.</b> Eight gym leaders gate the acts. Win → badge.</li>
+                <li><b>Face the Elite.</b> Final 4 + Champion close the run.</li>
+              </ul>
+              <div class="htp-tips">
+                <div class="htp-label">Score</div>
+                <p>Run score = waves cleared. Badges add a multiplier. Leaderboard ranks your best.</p>
               </div>
-              <div class="howtoplay-section">
-                <h3>🛒 Shop</h3>
-                <p>Spend coins earned from waves. Buy held items and consumables to strengthen your team.</p>
+            </div>
+
+            <!-- Page 2 — Battle Basics -->
+            <div class="htp-page" data-page="2" hidden>
+              <div class="htp-eyebrow">Chapter 02</div>
+              <h3 class="htp-chapter-title">Battle <em>Basics</em></h3>
+              <div class="htp-grid htp-grid-2">
+                <div class="htp-block">
+                  <div class="htp-label">Turn order</div>
+                  <p>Speed decides who strikes first. Priority moves cut the line.</p>
+                </div>
+                <div class="htp-block">
+                  <div class="htp-label">Type chart</div>
+                  <p>Super-effective hits do <b>2×</b>. Resisted hits do <b>½×</b>. Stack types — coverage wins fights.</p>
+                </div>
+                <div class="htp-block">
+                  <div class="htp-label">Status</div>
+                  <p>Burn, poison, sleep, paralyse, freeze. Cure with items or switch out.</p>
+                </div>
+                <div class="htp-block">
+                  <div class="htp-label">Auto-Battle</div>
+                  <p>Toggle <kbd>A</kbd> in battle. AI picks moves &amp; items. Faster but blind to setups.</p>
+                </div>
               </div>
-              <div class="howtoplay-section">
-                <h3>💡 Tips</h3>
+              <div class="htp-tips">
+                <div class="htp-label">Switching</div>
+                <p>You can switch on any turn. The incoming mon eats one hit before acting — switch on a resist.</p>
+              </div>
+            </div>
+
+            <!-- Page 3 — Rewards & Path -->
+            <div class="htp-page" data-page="3" hidden>
+              <div class="htp-eyebrow">Chapter 03</div>
+              <h3 class="htp-chapter-title">Rewards &amp; <em>Path</em></h3>
+              <p class="htp-lede">After every fight: pick one of three cards — or skip for coins.</p>
+              <div class="htp-cardrow">
+                <div class="htp-card-mock"><div class="htp-cm-label">Mon</div><div class="htp-cm-tag">+1 to team</div></div>
+                <div class="htp-card-mock"><div class="htp-cm-label">Perk</div><div class="htp-cm-tag">Team buff</div></div>
+                <div class="htp-card-mock"><div class="htp-cm-label">Item</div><div class="htp-cm-tag">Bag &amp; held</div></div>
+              </div>
+              <div class="htp-grid htp-grid-2">
+                <div class="htp-block">
+                  <div class="htp-label">Skip</div>
+                  <p>Take no card → <b>+60¢</b>. Build a war chest for the shop.</p>
+                </div>
+                <div class="htp-block">
+                  <div class="htp-label">Boss waves</div>
+                  <p>Wave 5, 10, 15… higher rarity drops. Save your skips for normal waves.</p>
+                </div>
+                <div class="htp-block">
+                  <div class="htp-label">Path nodes</div>
+                  <p>Battle · Elite · Shop · Event · Heal · Arena. Plan two steps ahead.</p>
+                </div>
+                <div class="htp-block">
+                  <div class="htp-label">Events</div>
+                  <p>Random encounters: gambles, gifts, dilemmas. Read carefully.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Page 4 — Items & Bag -->
+            <div class="htp-page" data-page="4" hidden>
+              <div class="htp-eyebrow">Chapter 04</div>
+              <h3 class="htp-chapter-title">Items &amp; <em>Bag</em></h3>
+              <p class="htp-lede">Your bag holds <b>5 consumables</b>. Use them mid-battle. Held items live on a Pokémon and trigger automatically.</p>
+              <div class="htp-bag-mock" aria-hidden="true">
+                <span class="htp-slot filled">Potion</span>
+                <span class="htp-slot filled">Revive</span>
+                <span class="htp-slot filled">X-Atk</span>
+                <span class="htp-slot">·</span>
+                <span class="htp-slot">·</span>
+              </div>
+              <div class="htp-grid htp-grid-2">
+                <div class="htp-block">
+                  <div class="htp-label">Consumables</div>
+                  <p>Potions, Revives, status cures, X-stat boosters, Berries. One-shot — once spent, gone.</p>
+                </div>
+                <div class="htp-block">
+                  <div class="htp-label">Held items</div>
+                  <p>Leftovers, Choice Band, Focus Sash, type plates. Equip via menu — one per mon.</p>
+                </div>
+                <div class="htp-block">
+                  <div class="htp-label">Perks</div>
+                  <p>Team-wide passives. Stack with held items. Picked from rewards.</p>
+                </div>
+                <div class="htp-block">
+                  <div class="htp-label">Shop</div>
+                  <p>Between waves. Consumables, held items, sometimes a rare mon. Coins only.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Page 5 — Arenas -->
+            <div class="htp-page" data-page="5" hidden>
+              <div class="htp-eyebrow">Chapter 05</div>
+              <h3 class="htp-chapter-title">Arenas &amp; <em>Badges</em></h3>
+              <p class="htp-lede">An arena is a four-stage gauntlet. Heal between fights, but coins are tight.</p>
+              <ol class="htp-gauntlet">
+                <li><b>Junior trainer</b> — warm-up</li>
+                <li><b>Restock shop</b> — discounted consumables</li>
+                <li><b>Senior trainer</b> — same type, bigger team</li>
+                <li><b>Gym leader</b> — boss fight, type-locked</li>
+              </ol>
+              <div class="htp-tips">
+                <div class="htp-label">Badges</div>
+                <p>Eight leaders, eight badges. Each unlocks a permanent perk (level cap, evolution, status res). Badges persist on your run-save until the run ends.</p>
+              </div>
+            </div>
+
+            <!-- Page 6 — Field Notes -->
+            <div class="htp-page" data-page="6" hidden>
+              <div class="htp-eyebrow">Chapter 06</div>
+              <h3 class="htp-chapter-title">Field <em>Notes</em></h3>
+              <div class="htp-tips">
+                <div class="htp-label">Pro tips · learned the hard way</div>
                 <ul>
-                  <li>Type matchups are crucial — build a diverse team</li>
-                  <li>Held items stack with team perks for powerful combos</li>
-                  <li>Save Full Restores and Revives for boss waves</li>
-                  <li>Auto-Battle is good, but manual play lets you use Z-moves strategically</li>
+                  <li>Type diversity beats raw stats — always have an answer</li>
+                  <li>Held items stack with perks. Combine deliberately</li>
+                  <li>Hoard Revives &amp; Full Restores for bosses</li>
+                  <li>Manual play unlocks Z-moves &amp; mid-fight switches</li>
+                  <li>Skip early waves for coins · spend before arenas</li>
+                  <li>Read the leader's type before walking in — counter-build</li>
+                  <li>Lose a mon? Don't panic. The bag is your second team</li>
                 </ul>
               </div>
+              <div class="htp-end">— end of manual —<br>good luck out there.</div>
+            </div>
+
+            <!-- Pager -->
+            <div class="htp-pager">
+              <button class="ink-btn ghost sm" id="htp-prev" type="button" disabled>‹ Prev</button>
+              <div class="htp-pips" id="htp-pips" role="tablist" aria-label="Chapters">
+                <button class="htp-pip active" data-pip="0" type="button" aria-label="Cover"></button>
+                <button class="htp-pip" data-pip="1" type="button" aria-label="The Run"></button>
+                <button class="htp-pip" data-pip="2" type="button" aria-label="Battle"></button>
+                <button class="htp-pip" data-pip="3" type="button" aria-label="Rewards"></button>
+                <button class="htp-pip" data-pip="4" type="button" aria-label="Items"></button>
+                <button class="htp-pip" data-pip="5" type="button" aria-label="Arenas"></button>
+                <button class="htp-pip" data-pip="6" type="button" aria-label="Notes"></button>
+              </div>
+              <button class="ink-btn primary sm" id="htp-next" type="button">Next ›</button>
             </div>
           </div>
         </div>
@@ -188,44 +581,86 @@ export class StartScreen {
   }
 
   private attachEvents(): void {
-    const nameInput = this.container.querySelector<HTMLInputElement>('#player-name')!;
-    const startBtn = this.container.querySelector<HTMLButtonElement>('#start-btn')!;
+    const startBtn       = this.container.querySelector<HTMLButtonElement>('#start-btn')!;
     const leaderboardBtn = this.container.querySelector('#leaderboard-btn')!;
-    const howtoplayBtn = this.container.querySelector('#howtoplay-btn')!;
+    const howtoplayBtn   = this.container.querySelector('#howtoplay-btn')!;
     const howtoplayModal = this.container.querySelector('#howtoplay-modal')!;
     const closeHowtoplay = this.container.querySelector('#close-howtoplay')!;
-    const settingsBtn = this.container.querySelector('#settings-btn')!;
-    const settingsModal = this.container.querySelector('#settings-modal')!;
-    const closeSettings = this.container.querySelector('#close-settings')!;
-    const clearNameBtn = this.container.querySelector('#clear-name-btn')!;
+    const logoutBtn      = this.container.querySelector('#logout-btn');
 
-    nameInput.addEventListener('input', () => {
-      this.playerName = nameInput.value.trim();
-      startBtn.disabled = this.playerName.length === 0;
+    // Trainer chip — click cycles gender
+    const trainerChip = this.container.querySelector<HTMLButtonElement>('#trainer-chip');
+    trainerChip?.addEventListener('click', () => {
+      this.trainerGender = this.trainerGender === 'male' ? 'female' : 'male';
+      const img = trainerChip.querySelector<HTMLImageElement>('.tc-sprite');
+      const name = trainerChip.querySelector<HTMLElement>('.tc-name');
+      if (img) img.src = getTrainerSprite(this.trainerGender);
+      if (name) name.textContent = `${TRAINER_NAMES[this.trainerGender]} ${this.trainerGender === 'male' ? '♂' : '♀'}`;
+      trainerChip.classList.remove('pulse');
+      void trainerChip.offsetWidth;
+      trainerChip.classList.add('pulse');
     });
 
-    nameInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && this.playerName.length > 0) startBtn.click();
-    });
-
-    // Starter selection
+    // Starter selection (cards + dots + nav buttons)
+    const grid = this.container.querySelector<HTMLElement>('#starter-grid');
+    const setSelected = (idx: number, scroll = false) => {
+      idx = Math.max(0, Math.min(this.starterData.length - 1, idx));
+      this.selectedStarterIndex = idx;
+      this.container.querySelectorAll('[data-starter]').forEach((c, i) => {
+        c.classList.toggle('selected', i === idx);
+      });
+      this.container.querySelectorAll('[data-dot]').forEach((d, i) => {
+        d.classList.toggle('active', i === idx);
+      });
+      if (scroll && grid) {
+        const card = grid.querySelector<HTMLElement>(`[data-starter="${idx}"]`);
+        card?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+    };
     this.container.querySelectorAll('[data-starter]').forEach(card => {
       card.addEventListener('click', () => {
         const idx = parseInt((card as HTMLElement).dataset['starter'] ?? '0');
-        this.selectedStarterIndex = idx;
-        this.container.querySelectorAll('[data-starter]').forEach((c, i) => {
-          c.classList.toggle('selected', i === idx);
-        });
+        setSelected(idx, true);
       });
       card.addEventListener('keydown', e => {
         if ((e as KeyboardEvent).key === 'Enter') (card as HTMLElement).click();
       });
     });
+    this.container.querySelectorAll<HTMLElement>('[data-dot]').forEach(dot => {
+      dot.addEventListener('click', () => {
+        const idx = parseInt(dot.dataset['dot'] ?? '0');
+        setSelected(idx, true);
+      });
+    });
+    this.container.querySelector<HTMLElement>('#starter-prev')?.addEventListener('click', () => {
+      setSelected(this.selectedStarterIndex - 1, true);
+    });
+    this.container.querySelector<HTMLElement>('#starter-next')?.addEventListener('click', () => {
+      setSelected(this.selectedStarterIndex + 1, true);
+    });
+    // Sync selection on swipe (scroll-snap finished)
+    if (grid) {
+      let scrollTimer: number | null = null;
+      grid.addEventListener('scroll', () => {
+        if (scrollTimer != null) window.clearTimeout(scrollTimer);
+        scrollTimer = window.setTimeout(() => {
+          const cards = Array.from(grid.querySelectorAll<HTMLElement>('[data-starter]'));
+          if (cards.length === 0) return;
+          const center = grid.scrollLeft + grid.clientWidth / 2;
+          let bestI = 0; let bestDist = Infinity;
+          cards.forEach((c, i) => {
+            const cx = c.offsetLeft + c.offsetWidth / 2;
+            const d = Math.abs(cx - center);
+            if (d < bestDist) { bestDist = d; bestI = i; }
+          });
+          if (bestI !== this.selectedStarterIndex) setSelected(bestI, false);
+        }, 90) as unknown as number;
+      }, { passive: true });
+    }
 
     startBtn.addEventListener('click', () => this.handleStart());
 
     leaderboardBtn.addEventListener('click', () => {
-      // Signal to show leaderboard
       this.container.dispatchEvent(new CustomEvent('show-leaderboard'));
     });
 
@@ -234,48 +669,107 @@ export class StartScreen {
     howtoplayModal.addEventListener('click', e => {
       if (e.target === howtoplayModal) howtoplayModal.classList.add('hidden');
     });
+    this.wireHtpPager(howtoplayModal as HTMLElement);
 
-    // Settings
-    settingsBtn.addEventListener('click', () => settingsModal.classList.remove('hidden'));
-    closeSettings.addEventListener('click', () => settingsModal.classList.add('hidden'));
-    settingsModal.addEventListener('click', e => {
+    // "Take the tour" CTA on the cover page → close modal, start tour
+    const takeTourBtn = this.container.querySelector<HTMLButtonElement>('#htp-take-tour');
+    takeTourBtn?.addEventListener('click', () => {
+      howtoplayModal.classList.add('hidden');
+      resetTour();
+      window.setTimeout(() => startFirstRunTour(true), 220);
+    });
+
+    const legalBtn = this.container.querySelector('#legal-btn');
+    const legalModal = this.container.querySelector('#legal-modal');
+    const closeLegal = this.container.querySelector('#close-legal');
+    legalBtn?.addEventListener('click', e => {
+      e.preventDefault();
+      legalModal?.classList.remove('hidden');
+    });
+    closeLegal?.addEventListener('click', () => legalModal?.classList.add('hidden'));
+    legalModal?.addEventListener('click', e => {
+      if (e.target === legalModal) legalModal.classList.add('hidden');
+    });
+
+    logoutBtn?.addEventListener('click', () => {
+      logout();
+      this.onLogout();
+    });
+
+    // Settings modal
+    const settingsBtn = this.container.querySelector('#settings-btn');
+    const settingsModal = this.container.querySelector('#settings-modal');
+    const closeSettings = this.container.querySelector('#close-settings');
+    settingsBtn?.addEventListener('click', () => settingsModal?.classList.remove('hidden'));
+    closeSettings?.addEventListener('click', () => settingsModal?.classList.add('hidden'));
+    settingsModal?.addEventListener('click', e => {
       if (e.target === settingsModal) settingsModal.classList.add('hidden');
     });
-    clearNameBtn.addEventListener('click', () => {
-      localStorage.removeItem(STORAGE_KEY);
-      this.playerName = '';
-      nameInput.value = '';
-      startBtn.disabled = true;
-      settingsModal.classList.add('hidden');
-      showToast('Saved name cleared.', 'info');
+    const resetTutBtn = this.container.querySelector<HTMLButtonElement>('#reset-tutorial-btn');
+    resetTutBtn?.addEventListener('click', () => {
+      resetTutorial();
+      const howto = this.container.querySelector('#howtoplay-modal');
+      const settingsModalEl = this.container.querySelector('#settings-modal');
+      settingsModalEl?.classList.add('hidden');
+      howto?.classList.remove('hidden');
+    });
+
+    const reduceMotionCb = this.container.querySelector<HTMLInputElement>('#setting-reduce-motion');
+    reduceMotionCb?.addEventListener('change', () => {
+      const cur = loadSettings();
+      saveSettings({ ...cur, reduceMotion: !!reduceMotionCb.checked });
+    });
+    this.container.querySelectorAll<HTMLButtonElement>('#setting-speed [data-speed]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const v = parseFloat(btn.dataset['speed'] ?? '1');
+        const cur = loadSettings();
+        saveSettings({ ...cur, animationSpeed: v });
+        this.container.querySelectorAll('#setting-speed [data-speed]').forEach(b => b.classList.toggle('active', b === btn));
+      });
+    });
+
+    // Resume / discard saved run
+    const resumeBtn = this.container.querySelector<HTMLButtonElement>('#resume-btn');
+    const discardBtn = this.container.querySelector<HTMLButtonElement>('#resume-discard');
+    resumeBtn?.addEventListener('click', () => {
+      this.onResume?.();
+    });
+    discardBtn?.addEventListener('click', () => {
+      clearRun();
+      const banner = this.container.querySelector<HTMLElement>('.resume-banner');
+      banner?.remove();
     });
   }
 
   private async handleStart(): Promise<void> {
+    // Beginning a fresh run drops any existing save so resume-banner stays consistent.
+    clearRun();
     const starter = this.starterData[this.selectedStarterIndex];
     const startBtn = this.container.querySelector<HTMLButtonElement>('#start-btn')!;
     startBtn.disabled = true;
     startBtn.textContent = 'Loading...';
 
-    // Persist the trainer name so it survives page reloads / run resets
-    localStorage.setItem(STORAGE_KEY, this.playerName);
-
     try {
-      const pokemon = await fetchPokemon(starter.id, 5);
+      const pokemon = await fetchPokemon(starter.id, 8);
 
       const battlePokemon = toBattlePokemon(pokemon, []);
 
       const initialState: GameState = {
         phase: 'wave_intro',
         playerName: this.playerName,
+        trainerGender: this.trainerGender,
         wave: 1,
         coins: 100,
         team: [battlePokemon],
+        pc: [],
+        pendingCatch: null,
         inventory: [],
         activePerks: [],
         battleState: null,
         pendingRewards: [],
         shopItems: [],
+        shopPacks: [],
+        shopVouchers: [],
         runStats: {
           wavesCleared: 0,
           totalKOs: 0,
@@ -289,6 +783,21 @@ export class StartScreen {
         godModeAvailable: false,
         zMovesAvailable: 0,
         teamRewards: [],
+        nextBossWave: 5 + Math.floor(Math.random() * 3), // first boss: wave 5, 6, or 7
+        vouchers: [],
+        pendingWaveTag: null,
+        queuedTags: [],
+        investmentCoins: 0,
+        typeLevels: {},
+        totalCoinsEarned: 0,
+        currentAct: 1,
+        actStep: 0,
+        nodeOptions: [],
+        currentNode: null,
+        badges: [],
+        generation: 'gen1',
+        leagueStep: 0,
+        pendingGenGate: false,
       };
 
       this.onStart(initialState);
@@ -300,6 +809,9 @@ export class StartScreen {
   }
 
   unmount(): void {
+    this.destroyAudioBtn?.();
+    this.destroyAudioBtn = null;
+    document.body.classList.remove('start-active');
     this.container.style.display = 'none';
     this.container.innerHTML = '';
   }

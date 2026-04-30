@@ -1,0 +1,220 @@
+/* ============================================================
+   EVOLUTION OVERLAY — full-screen, hard-shadow aesthetic, no glow
+   ============================================================ */
+
+.evo-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: var(--paper);
+  background-image:
+    repeating-linear-gradient(
+      135deg,
+      transparent 0 22px,
+      rgba(26, 22, 18, 0.04) 22px 23px
+    );
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.evo-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── Top + bottom hatch bars ────────────────────────────── */
+.evo-bar {
+  position: absolute;
+  left: 0; right: 0;
+  height: 18px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--ink) 0 8px,
+    transparent 8px 16px
+  );
+}
+.evo-bar.top { top: 0; }
+.evo-bar.bot { bottom: 0; }
+
+/* ── Kicker labels above and below sprite ───────────────── */
+.evo-kicker {
+  position: absolute;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 4px 10px;
+  border: 2px solid var(--ink);
+  background: var(--paper-2);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.evo-kicker.top    { top: 60px;    left: 50%; transform: translateX(-50%); }
+.evo-kicker.bottom { bottom: 60px; left: 50%; transform: translateX(-50%); }
+
+/* ── Sprite stage ──────────────────────────────────────── */
+.evo-stage {
+  position: relative;
+  width: 320px;
+  height: 320px;
+  display: grid;
+  place-items: center;
+}
+
+.evo-stage::before {
+  /* hard ring frame */
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 4px solid var(--ink);
+  background: var(--paper-2);
+  box-shadow: 10px 10px 0 var(--ink);
+  z-index: 0;
+}
+
+.evo-stage::after {
+  /* corner ticks for measurement-style framing */
+  content: '';
+  position: absolute;
+  inset: -14px;
+  background:
+    linear-gradient(var(--ink), var(--ink)) top    left   / 22px 4px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) top    left   / 4px 22px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) top    right  / 22px 4px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) top    right  / 4px 22px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) bottom left   / 22px 4px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) bottom left   / 4px 22px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) bottom right  / 22px 4px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) bottom right  / 4px 22px no-repeat;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.evo-sprite-wrap {
+  position: relative;
+  z-index: 2;
+  width: 240px;
+  height: 240px;
+  display: grid;
+  place-items: center;
+}
+
+.evo-sprite {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.evo-sprite.silhouette {
+  filter: brightness(0) saturate(100%);
+}
+
+.evo-sprite.swap-out {
+  position: absolute;
+  inset: 0;
+}
+
+/* ── Vs-style flash bar (no blur, hard color slab) ───────── */
+.evo-flash {
+  position: absolute;
+  inset: 0;
+  background: var(--ink);
+  z-index: 3;
+  pointer-events: none;
+  transform: scaleY(0);
+  transform-origin: center;
+}
+
+/* ── Result card (slides in after morph) ───────────────── */
+.evo-result {
+  position: absolute;
+  bottom: 110px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  padding: 14px 28px;
+  border: 3px solid var(--ink);
+  background: var(--paper);
+  box-shadow: 6px 6px 0 var(--ink);
+  text-align: center;
+  opacity: 0;
+  min-width: 380px;
+}
+
+.evo-result .from-to {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 4px;
+}
+
+.evo-result .arrow {
+  display: inline-block;
+  margin: 0 6px;
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.evo-result .new-name {
+  font-family: 'Bungee', 'Space Grotesk', sans-serif;
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  text-shadow: 3px 3px 0 var(--paper-edge);
+}
+
+/* ── Move-learn list ────────────────────────────────────── */
+.evo-moves {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  opacity: 0;
+}
+
+.evo-move-row {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  padding: 4px 12px;
+  border: 2px solid var(--ink);
+  background: var(--paper-2);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.evo-move-row strong {
+  color: var(--ink);
+  font-weight: 900;
+}
+
+/* ── Skip hint ─────────────────────────────────────────── */
+.evo-skip {
+  position: absolute;
+  top: 36px;
+  right: 36px;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 4px 10px;
+  border: 2px solid var(--ink);
+  background: var(--paper-2);
+  box-shadow: 3px 3px 0 var(--ink);
+}

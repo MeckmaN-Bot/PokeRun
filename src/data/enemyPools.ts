@@ -44,17 +44,31 @@ export const POOL_WAVE_21_PLUS = [
   477, 478, 479, 480, 481, 482, 483, 484, 485, 486, 487,
 ];
 
-// Boss wave Pokemon (fully evolved, high BST)
+// Boss wave Pokemon — wave 5 first boss (mid-tier, BST 400-500)
+export const BOSS_POOL_WAVE_5 = [
+  67,  // Machoke  (Atk 100, BST 405)
+  93,  // Haunter  (SpAtk 115, BST 405, low def = fair)
+  57,  // Primeape (Atk 105, BST 455)
+  125, // Electabuzz (SpAtk 95, BST 490)
+  126, // Magmar    (SpAtk 95, BST 465)
+  123, // Scyther   (Atk 110, BST 500)
+  87,  // Dewgong   (balanced, BST 475)
+  55,  // Golduck   (SpAtk 95, BST 500)
+  28,  // Sandslash (Atk 100, BST 450)
+  97,  // Hypno     (SpAtk 73, tanky SpDef, BST 483)
+];
+
+// Boss wave Pokemon — wave 10 (strong fully evolved, BST 490-540)
 export const BOSS_POOL_EARLY = [
-  130, // Gyarados
-  142, // Aerodactyl
-  143, // Snorlax
-  94,  // Gengar
-  65,  // Alakazam
-  76,  // Golem
-  112, // Rhydon
-  131, // Lapras
-  149, // Dragonite
+  130, // Gyarados  (Atk 125)
+  94,  // Gengar    (SpAtk 130)
+  65,  // Alakazam  (SpAtk 135)
+  76,  // Golem     (Atk 120, Def 130)
+  112, // Rhydon    (Atk 130)
+  59,  // Arcanine  (Atk 110)
+  62,  // Poliwrath (Atk 95, balanced)
+  34,  // Nidoking  (Atk 102)
+  121, // Starmie   (SpAtk 100, fast)
 ];
 
 export const BOSS_POOL_MID = [
@@ -98,6 +112,7 @@ export function getEnemyPool(wave: number): number[] {
 }
 
 export function getBossPool(wave: number): number[] {
+  if (wave <= 5)  return BOSS_POOL_WAVE_5;
   if (wave <= 10) return BOSS_POOL_EARLY;
   if (wave <= 20) return BOSS_POOL_MID;
   return BOSS_POOL_LATE;

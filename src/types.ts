@@ -16,12 +16,69 @@ export type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
 export type GamePhase =
   | 'loading'
   | 'start'
+  | 'path_select'
   | 'wave_intro'
   | 'battle'
   | 'reward'
+  | 'catch'
   | 'shop'
   | 'gameover'
   | 'leaderboard';
+
+/**
+ * Run-graph node kinds — Phase A only emits `grass` (existing wave). Other
+ * kinds are stubs for Phase B+ (trainer NPCs, healing, mystery, gyms).
+ */
+export type NodeKind =
+  | 'grass'
+  | 'trainer'
+  | 'center'
+  | 'shop_mini'
+  | 'mystery'
+  | 'forage'
+  | 'gym'
+  | 'elite_four'
+  | 'champion';
+
+export interface NodeInstance {
+  kind: NodeKind;
+  title: string;
+  eyebrow: string;
+  hint: string;
+  /** Single emoji or short glyph; pixelated via SVG filter at render time. */
+  icon: string;
+  /** Optional accent colour for the card frame (hex). */
+  accent?: string;
+  /** Trainer archetype id when kind === 'trainer'. */
+  trainerArchetypeId?: string;
+  /** Trainer-sprite URL (PokeAPI) when kind === 'trainer'. */
+  spriteUrl?: string;
+  /** Mystery sub-flavour id when kind === 'mystery'. */
+  mysteryFlavourId?: string;
+  /** Gym leader id when kind === 'gym'. */
+  gymLeaderId?: string;
+  /** Elite Four step id when kind === 'elite_four' or 'champion'. */
+  eliteId?: string;
+  /** Habitat-bias type for grass nodes (single type bias from sub-choice). */
+  habitatBias?: PokemonType;
+  /** Marks the act-3 gym card as the entry to a multi-step arena gauntlet. */
+  arenaEntry?: boolean;
+  /** Arena sub-step rank label ("Junior", "Senior", "Restock", "Leader"). */
+  arenaRank?: string;
+  /** Cap the trainer team size for this node — used by early-act onboarding. */
+  teamSizeOverride?: number;
+}
+
+export interface ArenaState {
+  /** Gym leader id whose arena this is (matches gymLeaders.ts). */
+  gymId: string;
+  /** Pre-built sequence of sub-nodes (trainer → shop → trainer → leader). */
+  steps: NodeInstance[];
+  /** Index of the next step to execute. */
+  index: number;
+}
+
+export type Generation = 'gen1' | 'gen2' | 'endless';
 
 export type RewardType = 'pokemon' | 'perk' | 'item';
 
@@ -152,6 +209,16 @@ export interface ItemEffect {
   waveEndDestroy?: boolean;
   /** Protein/Iron/Carbos: permanent % stat boost */
   permanentStatBoost?: Partial<BaseStats>;
+  /** Planet Card: +1 level for this type's moves this run. */
+  planetCardType?: PokemonType;
+  /** Quick Powder: +25% Speed but only on first turn of battle. */
+  firstTurnSpeedBoost?: number;
+  /** Type Lens: secondary type also gets STAB. */
+  dualStab?: boolean;
+  /** Reset Pulse: clear enemy stat stages on switch-in (once per wave). */
+  resetPulse?: boolean;
+  /** Tag-Team Bell: when KO'd, next ally heals to full and gets +1 Atk. */
+  tagTeamRevive?: boolean;
 }
 
 export interface Item {
@@ -162,6 +229,9 @@ export interface Item {
   itemType: 'held' | 'consumable';
   effect: ItemEffect;
   icon: string;
+  sprite?: string;
+  /** PokeAPI item name (e.g. "choice-band") — used to load official sprites. */
+  pokeapiName?: string;
   /** If true, this item only appears in post-wave card rewards, never in the shop. */
   rewardOnly?: boolean;
 }
@@ -206,6 +276,20 @@ export interface PerkEffect {
   randomStatDouble?: keyof BaseStats;
   allStatsMultiplier?: number;
   allMovePowerBonus?: number;
+  /** Burn-cascade: chance to burn target with Fire moves. */
+  fireBurnChance?: number;
+  /** Master Ball Luck: extra reroll per shop. */
+  extraReroll?: number;
+  /** Type Mastery: extra type level when 2+ teammates share primary type. */
+  typeMasteryBonus?: number;
+  /** Backline Burner: damage bonus for Pokémon in slots 4-5. */
+  backlineDamageBonus?: number;
+  /** Pivot Tactics: stat-stage boost on switch-in. */
+  pivotBoost?: { atk: number; speed: number; turns: number };
+  /** Status Stacker: status-damage and status-accuracy bonus. */
+  statusStacker?: { damageMult: number; accuracyMult: number };
+  /** Item Maven: per-held-item stat % bonus. */
+  itemMaven?: number;
 }
 
 export interface Perk {
@@ -214,6 +298,7 @@ export interface Perk {
   description: string;
   rarity: Rarity;
   effect: PerkEffect;
+  icon?: string;
 }
 
 // ============================================================
@@ -238,10 +323,26 @@ export interface Pokemon {
   bst: number;
   abilities: string[];
   evolutionChainId: number;
+  /** Height in decimetres (PokeAPI native units). 1 dm = 0.1 m. Optional for legacy cache. */
+  heightDm?: number;
   /** Pokédex ID of the next evolution form, or null if fully evolved / evolves by other means. */
   nextEvolutionId: number | null;
   /** Minimum level at which this Pokémon evolves, or null if not level-based. */
   evolutionLevel: number | null;
+  /**
+   * Move-learning pool — full level-up learnset for this species.
+   * Pokémon learn moves from this pool as they level up.
+   */
+  learnsetPool?: LearnsetEntry[];
+  /** IDs of moves already taught (so we don't re-teach the same one). */
+  learnedMoveIds?: number[];
+}
+
+export interface LearnsetEntry {
+  /** Move name as used by PokéAPI (e.g. 'flame-thrower'). */
+  name: string;
+  /** Level at which this move is learned in the official games. */
+  level: number;
 }
 
 export interface BattlePokemon extends Pokemon {
@@ -276,6 +377,16 @@ export interface BattlePokemon extends Pokemon {
   reviveHeartUsed: boolean;
   /** Leech Seed is active (drains enemy each turn). */
   leechSeedActive: boolean;
+  /** Momentum Badge stacks (gained per wave won). */
+  momentumStacks: number;
+  /** Elite enemy flag — has a held item, drops double coins. */
+  isElite?: boolean;
+  /** Turns this Pokémon has been active in the current battle. */
+  turnsInBattle?: number;
+  /** Reset Pulse: tracked usage per wave. */
+  resetPulseUsedThisWave?: boolean;
+  /** Waves remaining until a fainted mon stored in the PC auto-revives. */
+  pcReviveCountdown?: number;
 }
 
 // ============================================================
@@ -285,6 +396,19 @@ export interface BattlePokemon extends Pokemon {
 export interface InventoryItem {
   item: Item;
   quantity: number;
+}
+
+export interface ShopPack {
+  packId: import('./data/boosterPacks').PackId;
+  price: number;
+  sold: boolean;
+  free?: boolean;
+}
+
+export interface ShopVoucher {
+  voucherId: import('./data/vouchers').VoucherId;
+  price: number;
+  sold: boolean;
 }
 
 export interface RunStats {
@@ -298,22 +422,82 @@ export interface RunStats {
   chainKOCount: number;
 }
 
+export const MAX_TEAM_SIZE = 5;
+
+export type TrainerGender = 'male' | 'female';
+
 export interface GameState {
   phase: GamePhase;
   playerName: string;
+  trainerGender: TrainerGender;
   wave: number;
   coins: number;
   team: BattlePokemon[];
+  /** Pokémon stored in the PC box (not in active battle team). */
+  pc: BattlePokemon[];
+  /** Pokémon awaiting the catch mini-game. */
+  pendingCatch: Pokemon | null;
   inventory: InventoryItem[];
   activePerks: Perk[];
   battleState: BattleState | null;
   pendingRewards: Reward[];
   shopItems: ShopItem[];
+  shopPacks: ShopPack[];
+  shopVouchers: ShopVoucher[];
+  /** Whether this shop's first reroll has been used (Reroll Surplus). */
+  freeRerollUsed?: boolean;
+  /** Free rerolls remaining in this shop (granted by perks like Master Ball Luck). */
+  freeRerollsLeft?: number;
   runStats: RunStats;
   godModeAvailable: boolean;
   zMovesAvailable: number;
   /** Active team-wide reward items (displayed in shop Team Rewards panel). */
   teamRewards: InventoryItem[];
+  /** Wave number of the next boss encounter (randomised each run). */
+  nextBossWave: number;
+  /** Owned vouchers (permanent run-upgrades). */
+  vouchers: import('./data/vouchers').VoucherId[];
+  /** Pre-battle wave tag for the current wave (consumed at battle end). */
+  pendingWaveTag: import('./data/tags').WaveTagId | null;
+  /** Tags queued for future waves (from skip-rewards). */
+  queuedTags: import('./data/tags').WaveTagId[];
+  /** Investment-tag accumulated coins (paid on next boss clear). */
+  investmentCoins: number;
+  /** Type level per Pokémon type (from Planet Cards). */
+  typeLevels: Partial<Record<PokemonType, number>>;
+  /** Wave coins earned to date — used for leaderboard calc. */
+  totalCoinsEarned: number;
+  /** Boss-Tag pending — next boss wave grants +1 reward card. */
+  pendingBossTagBonus?: boolean;
+  /** Charm-Tag pending — next shop grants a free Mega pack. */
+  pendingCharmPack?: boolean;
+  /** Voucher-Tag pending — next shop guarantees a voucher slot. */
+  pendingVoucherSlot?: boolean;
+  /** Rare-Tag marker for the upcoming reward pick. */
+  pendingRareFloor?: boolean;
+  /** Shops without healing in a row (pity counter). */
+  shopsWithoutHealing?: number;
+  /** Shops without an epic in a row (pity counter). */
+  shopsWithoutEpic?: number;
+  /** Last paid price per item id (for sell-value floor). */
+  lastPaidPrices?: Record<string, number>;
+  /** Run-graph: current act (1..8 for Gen 1) and step inside the act. */
+  currentAct: number;
+  actStep: number;
+  /** Three node options shown on the path-select screen. */
+  nodeOptions: NodeInstance[];
+  /** The node the player chose for the upcoming encounter, or null. */
+  currentNode: NodeInstance | null;
+  /** Earned gym badges (Gen 1+). */
+  badges: string[];
+  /** Active generation/track. */
+  generation: Generation;
+  /** League progress 0–5 (0 = not started; 1–4 = E4 step; 5 = champion done). */
+  leagueStep?: number;
+  /** Pending generation-gate prompt after the champion is defeated. */
+  pendingGenGate?: boolean;
+  /** Active arena gauntlet (multi-step gym sequence), or null if not in one. */
+  arenaState?: ArenaState | null;
 }
 
 // ============================================================
@@ -332,6 +516,20 @@ export interface BattleState {
   isBossWave: boolean;
   winner: 'player' | 'enemy' | null;
   pendingDamage: PendingDamage | null;
+  /** Boss-Blind modifier active this battle (only on boss waves). */
+  bossBlind: import('./data/bossBlinds').BossBlindId | null;
+  /** Track "first attack zero" for The Ox. */
+  hasUsedFirstAttack: boolean;
+  /** Track which moves have been used (for The Eye). */
+  usedMoveIds: number[];
+  /** Track enemies that already triggered The Tooth heal. */
+  toothHealedEnemies: number[];
+  /** Turn counter for The Hook item-drop. */
+  hookTurnCount: number;
+  /** Active wave-tag this battle. */
+  waveTag: import('./data/tags').WaveTagId | null;
+  /** Turn count at start (for Speed Tag). */
+  turnsUsed: number;
 }
 
 export interface BattleLogEntry {
@@ -432,6 +630,8 @@ export interface PokeAPIAbility {
 export interface PokeAPIResponse {
   id: number;
   name: string;
+  height: number;
+  weight: number;
   sprites: PokeAPISprite;
   stats: PokeAPIStat[];
   types: PokeAPIType[];
@@ -497,4 +697,6 @@ export interface WaveConfig {
   enemyPool: number[];
   bossPool: number[];
   coinReward: number;
+  /** Multiplier applied to enemy effective Atk/SpAtk and max HP for late-game threat scaling. */
+  threatMultiplier: number;
 }

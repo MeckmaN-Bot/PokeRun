@@ -1,0 +1,816 @@
+/* ============================================================
+   Mobile rework — single-source mobile layout
+   Active when:  body.is-mobile  (set by main.ts)
+   Fallback:     @media (max-width: 760px)
+   ------------------------------------------------------------
+   Goals
+   - Feel like a native mobile game.
+   - Eliminate scrolling on primary screens.
+   - Carousel + tap targets > 44px everywhere.
+   - Bottom-sheet modals.
+   - Stable viewport height via --app-vh (set in main.ts).
+   ============================================================ */
+
+:root {
+  --app-vh: 100vh;
+  --m-pad: 12px;
+  --m-gap: 8px;
+  --m-tap: 44px;
+  --m-radius: 0;        /* keep paper aesthetic */
+  --m-shadow: 3px 3px 0 var(--ink);
+  --m-safe-top: max(8px, env(safe-area-inset-top));
+  --m-safe-bot: max(10px, env(safe-area-inset-bottom));
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Activation guard — everything below applies only on mobile
+   ───────────────────────────────────────────────────────────── */
+body.is-mobile {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.is-mobile #app,
+body.is-mobile .screen-container {
+  height: var(--app-vh);
+  min-height: var(--app-vh);
+  max-height: var(--app-vh);
+  overflow: hidden;
+}
+
+body.is-mobile .screen {
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Disable rotation/hover transforms that misbehave on touch */
+body.is-mobile .creature-card:hover,
+body.is-mobile .reward-card:hover,
+body.is-mobile .shop-item:hover,
+body.is-mobile .path-card:hover {
+  transform: none;
+  box-shadow: var(--m-shadow);
+}
+
+/* Universal: every primary button is tap-friendly */
+body.is-mobile .ink-btn,
+body.is-mobile button:not(.modal-close):not(.starter-dot):not(.starter-nav) {
+  min-height: var(--m-tap);
+}
+
+/* ============================================================
+   START SCREEN — carousel-based starter selection
+   ============================================================ */
+body.is-mobile .start-screen.screen {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+body.is-mobile .start-content {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  height: 100%;
+  padding: var(--m-safe-top) 14px var(--m-safe-bot);
+  gap: 8px;
+  overflow: hidden;
+}
+body.is-mobile .game-logo {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+body.is-mobile .start-issue { display: none; }
+body.is-mobile .logo-title { font-size: 28px; line-height: 1; margin: 0; }
+body.is-mobile .logo-subtitle { font-size: 9px; letter-spacing: 0.18em; }
+
+body.is-mobile .start-user-banner {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  background: var(--paper-2);
+  border: 1.5px solid var(--ink);
+  box-shadow: var(--m-shadow);
+}
+body.is-mobile .start-user-name {
+  font-size: 13px; line-height: 1.05;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+body.is-mobile .start-user-name .kicker {
+  display: block; font-size: 8px; letter-spacing: 0.16em;
+}
+body.is-mobile #logout-btn { padding: 6px 10px; font-size: 11px; min-height: 36px; }
+
+/* Starter section fills middle area */
+body.is-mobile .starter-section {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 6px;
+  min-height: 0;
+}
+body.is-mobile .starter-heading .h { font-size: 18px; }
+body.is-mobile .starter-heading .s { display: none; }
+
+/* Carousel — horizontal scroll-snap */
+body.is-mobile .starter-carousel {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px 1fr 32px;
+  align-items: stretch;
+  min-height: 0;
+}
+body.is-mobile .starter-carousel .starter-grid {
+  grid-column: 1 / -1; /* span entire row, nav buttons overlay */
+  grid-template-columns: none !important;
+  display: flex !important;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  padding: 6px 22vw 10px;     /* peek of next/prev cards */
+  -webkit-overflow-scrolling: touch;
+}
+body.is-mobile .starter-carousel .starter-grid::-webkit-scrollbar { display: none; }
+body.is-mobile .creature-card {
+  flex: 0 0 56vw;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  min-width: 56vw;
+  max-width: 56vw;
+  transform: scale(0.92);
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
+  align-self: center;
+  padding: 10px 10px 12px;
+}
+body.is-mobile .creature-card.selected {
+  transform: scale(1);
+  box-shadow: 5px 5px 0 var(--cobalt);
+  background: #f4ecff;
+}
+body.is-mobile .creature-card .sprite-frame {
+  height: 32vw;
+  max-height: 200px;
+  min-height: 130px;
+}
+body.is-mobile .creature-card .name { font-size: 17px; }
+body.is-mobile .creature-card .dex,
+body.is-mobile .creature-card .bst { font-size: 9px; }
+
+/* Carousel nav buttons (tap zones overlaying the rail) */
+body.is-mobile .starter-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px; height: 56px;
+  border: 1.5px solid var(--ink);
+  background: var(--paper);
+  box-shadow: 2px 2px 0 var(--ink);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--ink);
+  z-index: 3;
+  cursor: pointer;
+  padding: 0;
+}
+body.is-mobile .starter-nav.prev { left: 4px; }
+body.is-mobile .starter-nav.next { right: 4px; }
+body.is-mobile .starter-nav:active { transform: translateY(-50%) translate(1px, 1px); box-shadow: 1px 1px 0 var(--ink); }
+
+/* Dot indicators */
+.starter-dots {
+  display: none;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 0 2px;
+}
+body.is-mobile .starter-dots { display: flex; }
+.starter-dot {
+  width: 9px; height: 9px;
+  border: 1.5px solid var(--ink);
+  background: var(--paper-3);
+  padding: 0;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+.starter-dot.active {
+  background: var(--cobalt);
+  transform: scale(1.25);
+}
+
+body.is-mobile .start-footer {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  border-top: 1.5px solid var(--ink);
+  padding-top: 8px;
+}
+body.is-mobile .start-footer > :first-child,
+body.is-mobile .start-footer > :last-child { display: none; }
+body.is-mobile .start-footer > :nth-child(2) {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  width: 100%;
+}
+body.is-mobile #start-btn {
+  grid-column: 1 / -1;
+  font-size: 16px;
+  min-height: 52px;
+  font-weight: 900;
+}
+
+/* Hide desktop-only carousel UI on bigger screens */
+@media (min-width: 761px) {
+  body:not(.is-mobile) .starter-carousel { display: contents; }
+  body:not(.is-mobile) .starter-nav,
+  body:not(.is-mobile) .starter-dots,
+  body:not(.is-mobile) .mobile-only-btn { display: none; }
+}
+body:not(.is-mobile) .mobile-only-btn { display: none; }
+
+/* ============================================================
+   BATTLE SCREEN — viewport-fit, no scroll
+   ============================================================ */
+body.is-mobile .battle-screen,
+body.is-mobile .battle-wrap {
+  height: 100%;
+  padding: 0;
+}
+body.is-mobile .topstrip {
+  padding: var(--m-safe-top) 12px 6px;
+  gap: 8px;
+}
+body.is-mobile .boss-blind-banner {
+  padding: 4px 10px;
+  gap: 8px;
+}
+body.is-mobile .boss-blind-banner .bb-icon { font-size: 22px; }
+body.is-mobile .boss-blind-banner .bb-name { font-size: 11px; }
+body.is-mobile .boss-blind-banner .bb-desc { font-size: 9px; }
+body.is-mobile .boss-blind-banner .bb-hint { display: none; }
+
+body.is-mobile .perks-strip {
+  padding: 3px 10px;
+  min-height: 26px;
+  gap: 4px;
+}
+body.is-mobile .ps-label { font-size: 8px; padding-right: 3px; margin-right: 3px; }
+body.is-mobile .ps-chip { padding: 2px 6px; font-size: 10px; }
+body.is-mobile .ps-icon { font-size: 11px; }
+
+body.is-mobile .synergy-bar { padding: 1px 10px; height: 22px; min-height: 22px; max-height: 22px; }
+body.is-mobile .syn-badge { font-size: 9px; padding: 1px 5px; }
+
+body.is-mobile .battle-field {
+  padding: 6px 10px 4px;
+  gap: 4px 8px;
+}
+body.is-mobile .battle-info-card {
+  padding: 5px 7px 8px;
+  width: auto;
+  min-width: 0;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+body.is-mobile .bic-name { font-size: 13px; }
+body.is-mobile .bic-level { font-size: 9px; }
+body.is-mobile .bic-types .bic-type,
+body.is-mobile .bic-type { font-size: 8px; padding: 1px 4px; }
+body.is-mobile .bic-hp-num { font-size: 9px; min-width: 38px; padding: 1px 3px; }
+body.is-mobile .battle-sprite { width: clamp(96px, 30vw, 150px); height: auto; }
+body.is-mobile .battle-sprite-slot { min-height: 120px; }
+
+body.is-mobile .battle-actions.auto {
+  padding: 6px 10px var(--m-safe-bot);
+  gap: 4px;
+  background: var(--paper);
+  border-top: 2px solid var(--ink);
+}
+body.is-mobile .battle-ticker {
+  font-size: 11px;
+  padding: 4px 6px;
+  min-height: 26px;
+}
+body.is-mobile .bt-msg { font-size: 11px; }
+
+/* Team-strip cards — dense but legible */
+body.is-mobile .battle-team-strip {
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  padding: 4px 4px 5px;
+  gap: 5px;
+}
+body.is-mobile .bts-card {
+  height: auto;
+  min-height: 60px;
+  flex: 0 0 calc((100% - 16px) / 5);
+  min-width: 0;
+  max-width: calc((100% - 16px) / 5);
+  grid-template-columns: 1fr;
+  grid-template-rows: 36px 1fr;
+  text-align: center;
+  padding: 3px 3px 4px;
+}
+body.is-mobile .bts-card .bts-sprite { width: 36px; height: 36px; margin: 0 auto; }
+body.is-mobile .bts-card .bts-name { font-size: 9.5px; line-height: 1; }
+body.is-mobile .bts-card .bts-types,
+body.is-mobile .bts-card .bts-hp-num { display: none; }
+body.is-mobile .bts-card .bts-hp-bar { height: 3px; }
+body.is-mobile .bts-card .bts-info { gap: 1px; padding: 0 2px; }
+body.is-mobile .bts-items { justify-content: center; gap: 2px; margin-top: 1px; }
+body.is-mobile .bts-slot { width: 13px; height: 13px; }
+body.is-mobile .bts-slot.filled .item-sprite { width: 11px; height: 11px; }
+body.is-mobile .bts-slot.filled .item-glyph { font-size: 8px; }
+body.is-mobile .bts-items.all-disabled::before { font-size: 7px; right: -2px; }
+
+/* Move grid — 2x2 dense, big tap targets */
+body.is-mobile .move-grid {
+  grid-template-columns: 1fr 1fr !important;
+  gap: 5px;
+}
+body.is-mobile .move-btn {
+  min-height: 48px;
+  padding: 6px 8px;
+}
+body.is-mobile .move-btn .mname { font-size: 12px; }
+body.is-mobile .move-btn .mmeta { font-size: 9px; }
+
+/* Bag row — horizontal scroll if many */
+body.is-mobile #battle-bag-row {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 5px;
+}
+body.is-mobile #battle-bag-row::-webkit-scrollbar { display: none; }
+body.is-mobile #battle-bag-row .ink-btn {
+  flex-shrink: 0;
+  min-height: 38px;
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+/* ============================================================
+   PATH SCREEN — single column, scroll-snap, no horizontal sprawl
+   ============================================================ */
+body.is-mobile .path-screen { padding: 0; }
+body.is-mobile .path-content {
+  padding: var(--m-safe-top) 12px var(--m-safe-bot);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 8px;
+  height: 100%;
+  overflow: hidden;
+}
+body.is-mobile .path-header { padding: 0; }
+body.is-mobile .path-eyebrow { font-size: 9px; letter-spacing: 0.18em; }
+body.is-mobile .path-title { font-size: 26px; line-height: 1.05; margin: 4px 0; }
+body.is-mobile .path-sub { font-size: 11px; }
+body.is-mobile .badge-row { gap: 4px; padding: 4px 0; flex-wrap: wrap; }
+body.is-mobile .badge-pip { width: 26px; height: 26px; }
+body.is-mobile .badge-pip-sprite { width: 18px; height: 18px; }
+
+/* Vertical stack with snap, fills available space */
+body.is-mobile .path-cards {
+  display: flex !important;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 4px 8px;
+  overflow-y: auto;
+  scroll-snap-type: y proximity;
+  -webkit-overflow-scrolling: touch;
+}
+body.is-mobile .path-card {
+  transform: rotate(0) !important;
+  scroll-snap-align: start;
+  width: 100%;
+  padding: 12px 14px 12px;
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  grid-template-areas:
+    "icon  eyebrow"
+    "icon  title"
+    "icon  hint"
+    "foot  foot";
+  gap: 4px 12px;
+}
+body.is-mobile .path-card .path-card-eyebrow { grid-area: eyebrow; font-size: 9px; }
+body.is-mobile .path-card .path-card-title   { grid-area: title;   font-size: 18px; margin: 0; }
+body.is-mobile .path-card .path-card-hint    { grid-area: hint;    font-size: 11px; line-height: 1.3; }
+body.is-mobile .path-card .path-card-foot    { grid-area: foot;    margin-top: 4px; }
+body.is-mobile .path-card-portrait,
+body.is-mobile .path-card .path-card-icon {
+  grid-area: icon;
+  width: 60px; height: 60px;
+  font-size: 36px;
+  align-self: center;
+}
+body.is-mobile .path-card-portrait .path-card-sprite { width: 60px; height: 60px; }
+body.is-mobile .path-footnote { font-size: 9px; text-align: center; padding: 2px 0; }
+
+/* Center, mystery, gen-gate use same compact card layout */
+body.is-mobile .center-grid {
+  grid-template-columns: 1fr;
+  gap: 10px;
+  padding: 4px 4px 8px;
+  overflow-y: auto;
+}
+body.is-mobile .gen-gate-cards { grid-template-columns: 1fr !important; gap: 12px; }
+body.is-mobile .gen-gate-card { transform: none !important; padding: 14px; }
+
+/* ============================================================
+   REWARD SCREEN — vertical stack with snap
+   ============================================================ */
+body.is-mobile .reward-screen {
+  padding: var(--m-safe-top) 12px var(--m-safe-bot);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 8px;
+  overflow: hidden;
+}
+body.is-mobile .reward-title { font-size: 24px; }
+body.is-mobile .reward-subtitle { font-size: 9px; }
+body.is-mobile .reward-cards {
+  grid-template-columns: 1fr !important;
+  gap: 8px;
+  overflow-y: auto;
+  scroll-snap-type: y proximity;
+  padding-bottom: 4px;
+}
+body.is-mobile .reward-card {
+  transform: rotate(0) !important;
+  scroll-snap-align: start;
+  min-height: 96px;
+  padding: 8px 10px;
+  grid-template-columns: 76px 1fr;
+}
+body.is-mobile .reward-footer { gap: 8px; padding-top: 4px; flex-wrap: wrap; }
+body.is-mobile #skip-reward-btn { min-height: 44px; flex: 1; min-width: 120px; }
+
+/* ============================================================
+   SHOP SCREEN — header / scrollable body / sticky footer
+   ============================================================ */
+body.is-mobile .shop-screen,
+body.is-mobile .shop-wrap {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  gap: 0;
+}
+
+/* Override the desktop rail padding (40px) on every shop row */
+body.is-mobile .shop-wrap > .shop-head,
+body.is-mobile .shop-wrap > .shop-status-strip,
+body.is-mobile .shop-wrap > .shop-body,
+body.is-mobile .shop-wrap > .shop-foot {
+  max-width: 100%;
+  padding-left: 12px;
+  padding-right: 12px;
+  margin: 0;
+}
+
+/* Compact two-row header — title row, then action chips row */
+body.is-mobile .shop-head {
+  display: grid !important;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto;
+  gap: 6px;
+  padding-top: var(--m-safe-top);
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--ink);
+  flex-shrink: 0;
+}
+body.is-mobile .shop-head > :first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+body.is-mobile .shop-head .kicker { font-size: 8px; margin: 0; letter-spacing: 0.18em; }
+body.is-mobile .shop-head .title,
+body.is-mobile .shop-title { font-size: 22px; line-height: 1; }
+body.is-mobile .shop-head-right {
+  display: flex !important;
+  flex-wrap: nowrap;
+  gap: 6px;
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  align-items: center;
+  padding-bottom: 2px;
+}
+body.is-mobile .shop-head-right::-webkit-scrollbar { display: none; }
+body.is-mobile .shop-head-right .coin-chip,
+body.is-mobile .shop-head-right .ink-btn,
+body.is-mobile .shop-head-right .bag-btn {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  min-height: 38px;
+  white-space: nowrap;
+}
+body.is-mobile .shop-head-right .audio-btn-slot { flex-shrink: 0; }
+body.is-mobile .shop-head-right .coin-chip { flex: 1 0 auto; }
+body.is-mobile .shop-head-right #continue-btn {
+  margin-left: auto;
+  font-weight: 900;
+}
+
+/* Status strip — compact pill row */
+body.is-mobile .shop-status-strip {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+/* Body becomes a single scrollable column. Hide the desktop sidebar. */
+body.is-mobile .shop-body {
+  display: block !important;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-top: 8px;
+  padding-bottom: 12px;
+}
+body.is-mobile .shop-body > .po-overlay { /* full-screen overlay — leave alone */ }
+
+/* Shelf: stack the three sections vertically, override grid-template-areas */
+body.is-mobile .shop-shelf {
+  display: flex !important;
+  flex-direction: column !important;
+  grid-template-columns: none !important;
+  grid-template-rows: none !important;
+  grid-template-areas: none !important;
+  gap: 14px;
+  overflow: visible !important;
+  min-height: 0;
+}
+body.is-mobile .shelf-boosters,
+body.is-mobile .shelf-items,
+body.is-mobile .shelf-vouchers {
+  grid-area: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  min-height: 0;
+  width: 100%;
+}
+body.is-mobile .booster-row {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px !important;
+  padding: 6px 0 !important;
+  overflow: visible !important;
+}
+body.is-mobile .shop-items-grid {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 8px !important;
+  overflow: visible !important;
+}
+body.is-mobile .shop-item {
+  padding: 8px;
+  gap: 8px;
+  align-items: center;
+  align-self: stretch;
+}
+body.is-mobile .shop-item .item-art { width: 48px; height: 48px; font-size: 22px; }
+body.is-mobile .shop-item .item-name { font-size: 14px; }
+body.is-mobile .shop-item .item-price { font-size: 14px; }
+body.is-mobile .shop-item .item-desc { font-size: 11px; -webkit-line-clamp: 2; }
+
+/* Voucher list: single column with its own scroll if huge */
+body.is-mobile .vouchers-grid,
+body.is-mobile .voucher-grid {
+  grid-template-columns: 1fr !important;
+  gap: 8px !important;
+}
+
+/* Team / PC sidebar becomes a slide-up drawer. Hide PC mini-strip on mobile. */
+body.is-mobile .shop-side {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  top: auto;
+  background: var(--paper);
+  border-top: 2px solid var(--ink);
+  z-index: 60;
+  transform: translateY(100%);
+  transition: transform 0.28s cubic-bezier(.4,1.4,.6,1);
+  height: 80vh;
+  max-height: 80vh;
+  display: flex !important;
+  flex-direction: column;
+  padding: 14px 12px var(--m-safe-bot);
+  gap: 10px;
+  box-shadow: 0 -6px 0 var(--ink);
+  overflow: hidden;
+  pointer-events: none;
+}
+body.is-mobile .shop-side.open {
+  transform: translateY(0);
+  pointer-events: auto;
+}
+body.is-mobile .shop-side::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 44px; height: 4px;
+  background: var(--ink-3);
+  border-radius: 2px;
+  opacity: 0.55;
+  pointer-events: none;
+}
+body.is-mobile .shop-side .team-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  height: auto; max-height: none;
+}
+body.is-mobile .shop-side .pc-strip-panel { display: none; }
+body.is-mobile .stc-card { padding: 8px; }
+body.is-mobile .stc-sprite { width: 48px; height: 48px; }
+
+/* Real backdrop element (injected by ShopScreen.attachMobileTeamDrawer) */
+.shop-side-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 55;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+body.is-mobile .shop-side-backdrop { display: block; pointer-events: none; }
+body.is-mobile .shop-side-backdrop.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Shop footer — sticky bottom action bar */
+body.is-mobile .shop-foot {
+  display: flex !important;
+  flex-direction: row;
+  align-items: center;
+  padding: 8px 12px var(--m-safe-bot);
+  gap: 6px;
+  border-top: 2px solid var(--ink);
+  background: var(--paper);
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  z-index: 5;
+}
+body.is-mobile .shop-foot .kicker { display: none; }
+body.is-mobile .shop-foot button {
+  padding: 8px 12px;
+  font-size: 12px;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+body.is-mobile .shop-foot #shop-team-toggle {
+  flex: 1;
+  font-weight: 900;
+}
+body.is-mobile .shop-foot #reroll-btn { flex: 1; }
+
+/* Pack-opening overlay must sit above drawer */
+body.is-mobile .po-overlay { z-index: 80 !important; }
+
+/* Override main.css legacy mobile rules that broke the shop */
+body.is-mobile.shop-active .screen-container,
+body.is-mobile.start-active .screen-container {
+  overflow: hidden !important;
+  height: var(--app-vh) !important;
+  min-height: var(--app-vh) !important;
+}
+body.is-mobile.shop-active .shop-wrap.screen {
+  position: relative;
+  inset: auto;
+  height: 100% !important;
+  min-height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+body.is-mobile.start-active .start-screen.screen,
+body.is-mobile.start-active .start-content {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* ============================================================
+   MODALS — bottom-sheet style on mobile
+   ============================================================ */
+body.is-mobile .modal-overlay {
+  align-items: flex-end;
+  padding: 0;
+}
+body.is-mobile .modal-overlay .modal,
+body.is-mobile .modal-overlay > .modal {
+  max-width: 100%;
+  width: 100%;
+  max-height: 88vh;
+  border-bottom: none;
+  border-left: 0;
+  border-right: 0;
+  box-shadow: 0 -6px 0 var(--ink);
+  padding: 18px 14px max(20px, var(--m-safe-bot));
+  border-radius: 0;
+  animation: m-sheet-up 0.28s cubic-bezier(.3,1.2,.5,1);
+}
+body.is-mobile .modal-overlay .modal::before { inset: 5px; }
+@keyframes m-sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+body.is-mobile .modal-close { width: 44px; height: 44px; font-size: 20px; }
+body.is-mobile .modal-title { font-size: 22px; }
+
+/* Bottom-sheet handle bar */
+body.is-mobile .modal-overlay .modal::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 4px;
+  background: var(--ink-3);
+  border-radius: 2px;
+  opacity: 0.55;
+}
+
+/* Path / forage / mystery use their own overlay class */
+body.is-mobile .path-overlay { align-items: flex-end; padding: 0; }
+body.is-mobile .path-overlay .path-modal-card {
+  width: 100%;
+  max-width: 100%;
+  max-height: 86vh;
+  padding: 18px 14px max(18px, var(--m-safe-bot));
+  border-radius: 0;
+  box-shadow: 0 -6px 0 var(--ink);
+}
+
+/* ============================================================
+   LEADERBOARD / GAME OVER — full-bleed
+   ============================================================ */
+body.is-mobile .lb-screen,
+body.is-mobile .gover-wrap {
+  padding: var(--m-safe-top) 12px var(--m-safe-bot);
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+body.is-mobile .gover-body { grid-template-columns: 1fr; }
+
+/* ============================================================
+   PokéCenter / catch / evolution — center & shrink dialogs
+   ============================================================ */
+body.is-mobile .catch-screen,
+body.is-mobile .center-screen {
+  padding: var(--m-safe-top) 12px var(--m-safe-bot);
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ============================================================
+   Toasts above safe area
+   ============================================================ */
+body.is-mobile .toast-container {
+  bottom: calc(var(--m-safe-bot) + 60px);
+  padding: 0 12px;
+}
+
+/* ============================================================
+   Misc — hide keyboard hints, hover tooltips, decorative frills
+   ============================================================ */
+body.is-mobile .kb-hints,
+body.is-mobile .kbd-hint,
+body.is-mobile .keyboard-hint { display: none !important; }
+body.is-mobile .tooltip-card { display: none !important; }   /* tap items toggle tooltip elsewhere */
+
+/* Disable selection where unintended */
+body.is-mobile .creature-card,
+body.is-mobile .reward-card,
+body.is-mobile .path-card,
+body.is-mobile .shop-item,
+body.is-mobile .move-btn,
+body.is-mobile .bts-card {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Prevent native pull-to-refresh hijacking gameplay */
+body.is-mobile { overscroll-behavior-y: contain; }

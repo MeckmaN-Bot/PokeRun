@@ -3,7 +3,7 @@ import { TYPE_COLORS } from '../../data/typeChart';
 
 export function renderTypeBadge(type: PokemonType): string {
   const color = TYPE_COLORS[type] ?? '#888';
-  return `<span class="type-badge" style="background:${color}" data-type="${type}">${type.toUpperCase()}</span>`;
+  return `<span class="type-badge" data-type="${type}">${type.toUpperCase()}</span>`;
 }
 
 export function renderTypeBadges(types: PokemonType[]): string {

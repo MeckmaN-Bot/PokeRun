@@ -1,440 +1,176 @@
 /* ============================================================
-   Game Over Screen
+   Leaderboard Screen — paper/ink field-guide aesthetic
    ============================================================ */
 
-.gameover-screen {
-  justify-content: flex-start;
-  align-items: center;
-  padding: 2rem 1.5rem;
-  overflow-y: auto;
-  background:
-    radial-gradient(ellipse at 50% 20%, rgba(239,68,68,0.08) 0%, transparent 50%),
-    var(--bg);
-}
-
-.gameover-content {
-  width: 100%;
-  max-width: 720px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.75rem;
-}
-
-.gameover-skull {
-  font-size: 3.5rem;
-  filter: drop-shadow(0 0 24px rgba(239,68,68,0.6));
-  animation: skull-pulse 1.5s ease infinite alternate;
-}
-
-@keyframes skull-pulse {
-  from { filter: drop-shadow(0 0 16px rgba(239,68,68,0.4)); }
-  to   { filter: drop-shadow(0 0 32px rgba(239,68,68,0.8)); }
-}
-
-.gameover-title {
-  font-family: var(--font-display);
-  font-size: clamp(2.5rem, 6vw, 4rem);
-  font-weight: 900;
-  color: var(--danger);
-  letter-spacing: 0.1em;
-  text-shadow: 0 0 40px rgba(239,68,68,0.4);
-  line-height: 1;
-}
-
-.gameover-trainer {
-  font-family: var(--font-display);
-  font-size: 1.3rem;
-  color: var(--text-muted);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-/* Score Card */
-.gameover-score-card {
-  width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--border-glow);
-  border-radius: var(--radius-lg);
-  padding: 1.5rem;
-  text-align: center;
-}
-
-.gameover-score-main {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.3rem;
-  margin-bottom: 1.25rem;
-}
-
-.score-label {
-  font-family: var(--font-display);
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  color: var(--text-muted);
-  text-transform: uppercase;
-}
-
-.score-value {
-  font-family: var(--font-display);
-  font-size: 4.5rem;
-  font-weight: 900;
-  color: var(--accent);
-  line-height: 1;
-  text-shadow: 0 0 30px var(--accent-glow);
-}
-
-.gameover-score-grid {
+.lb-full-wrap {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1rem;
-  border-top: 1px solid var(--border-glow);
-  padding-top: 1rem;
-}
-
-.score-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.score-stat-val {
-  font-family: var(--font-mono);
-  font-size: 1.3rem;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.score-stat-label {
-  font-family: var(--font-display);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: var(--text-muted);
-  text-transform: uppercase;
-}
-
-.gameover-starter {
-  font-size: 0.9rem;
-  color: var(--text-muted);
-}
-
-.gameover-starter strong {
-  color: var(--accent);
-}
-
-/* Sections */
-.gameover-section {
-  width: 100%;
-}
-
-.gameover-section-title {
-  font-family: var(--font-display);
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  margin-bottom: 0.75rem;
-  text-align: center;
-}
-
-/* Team display */
-.gameover-team {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.gameover-pokemon {
-  background: var(--surface);
-  border: 1px solid var(--border-glow);
-  border-radius: var(--radius-md);
-  padding: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.3rem;
-  width: 100px;
-  text-align: center;
-}
-
-.gameover-sprite {
-  width: 56px;
-  height: 56px;
-  object-fit: contain;
-  image-rendering: pixelated;
-}
-
-.gameover-mon-name {
-  font-family: var(--font-display);
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.gameover-mon-level {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  color: var(--text-muted);
-}
-
-.gameover-held-item {
-  font-size: 0.62rem;
-  color: var(--warning);
-  white-space: nowrap;
+  grid-template-rows: auto 1fr;
+  padding: 20px 40px 16px;
+  gap: 14px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 90px;
+  background: transparent;
 }
 
-/* Perks */
-.gameover-perks {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  justify-content: center;
+/* ── Header ─────────────────────────────────────────────── */
+.lb-full-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 20px;
+  align-items: end;
+  border-bottom: 3px double var(--ink);
+  padding-bottom: 10px;
 }
 
-.gameover-perk {
+.lb-full-head .kicker {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 2px;
+}
+
+.lb-full-title {
   font-family: var(--font-display);
-  font-size: 0.78rem;
-  font-weight: 700;
-  padding: 0.3rem 0.7rem;
-  border-radius: 999px;
-  border: 1px solid var(--rc, var(--border-glow));
-  color: var(--rc, var(--text-muted));
-  background: rgba(0,0,0,0.3);
-}
-
-/* Actions */
-.gameover-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-  width: 100%;
-  max-width: 360px;
-}
-
-.submit-status {
-  font-size: 0.85rem;
-  color: var(--text-muted);
+  font-weight: 900;
   font-style: italic;
+  font-size: clamp(32px, 4vw, 52px);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
 }
 
-.gameover-actions .btn {
-  width: 100%;
-}
+.lb-full-title em { color: var(--oxblood); font-style: italic; }
 
-/* ============================================================
-   Leaderboard Screen
-   ============================================================ */
-
-.leaderboard-screen {
-  display: grid;
-  grid-template-rows: auto auto 1fr;
-  overflow: hidden;
-  background:
-    radial-gradient(ellipse at 50% 0%, rgba(245,158,11,0.07) 0%, transparent 50%),
-    var(--bg);
-}
-
-.leaderboard-header {
+.lb-full-head-right {
   display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.75rem 1.5rem;
-  background: rgba(10,10,15,0.95);
-  border-bottom: 1px solid var(--border-glow);
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
 }
 
-.leaderboard-title {
-  font-family: var(--font-display);
-  font-size: 1.5rem;
-  font-weight: 900;
-  color: var(--text);
-  letter-spacing: 0.06em;
+/* ── Filter strip ────────────────────────────────────────── */
+.lb-filter-strip {
+  display: flex;
+  border: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.lb-filter {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  padding: 5px 14px;
+  background: var(--paper);
+  border: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.lb-filter + .lb-filter {
+  border-left: 2px solid var(--ink);
+}
+
+.lb-filter.active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* ── Body ────────────────────────────────────────────────── */
+.lb-full-body {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lb-full-panel {
+  height: 100%;
+}
+
+/* ── Column headers ──────────────────────────────────────── */
+.lb-full-cols {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   flex: 1;
-  text-align: center;
 }
 
-.lb-status {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  font-style: italic;
-  text-align: right;
-}
-
-.back-btn {
+.lb-col-head {
+  display: grid;
+  grid-template-columns: 28px 1fr 64px 100px 56px 64px;
+  gap: 8px;
+  padding: 4px 6px;
+  border-bottom: 1.5px solid var(--ink);
   flex-shrink: 0;
 }
 
-/* Tabs */
-.lb-tabs {
-  display: flex;
-  gap: 0;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border-glow);
-}
-
-.lb-tab {
-  flex: 1;
-  font-family: var(--font-display);
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  padding: 0.7rem 1rem;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.15s ease;
+.lb-col-head span {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.25em;
   text-transform: uppercase;
-  border-bottom: 2px solid transparent;
+  color: var(--ink-3);
 }
 
-.lb-tab:hover { color: var(--text); }
-
-.lb-tab.active {
-  color: var(--warning);
-  border-bottom-color: var(--warning);
-}
-
-/* Table Wrapper */
-.lb-table-wrapper {
-  overflow-y: auto;
-  padding: 1rem 1.5rem;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-glow) transparent;
-}
-
-/* Loading */
-.lb-loading {
+/* ── Rows ────────────────────────────────────────────────── */
+.lb-list {
   display: flex;
   flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.lb-loading-row {
+  padding: 16px 6px;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  padding: 3rem;
-  color: var(--text-muted);
-  font-family: var(--font-display);
-  font-size: 1rem;
-  letter-spacing: 0.06em;
 }
 
-/* Table */
-.lb-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.88rem;
+/* Override lb-row from main.css for full-layout variant */
+.lb-full-row {
+  display: grid !important;
+  grid-template-columns: 28px 1fr 64px 100px 56px 64px !important;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 6px !important;
+  border-bottom: 1px dotted var(--paper-edge) !important;
 }
 
-.lb-table.hidden { display: none; }
-
-.lb-table thead th {
-  font-family: var(--font-display);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  text-align: left;
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--border-glow);
-}
-
-.lb-table tbody tr {
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-  transition: background 0.1s ease;
-}
-
-.lb-table tbody tr:hover {
-  background: rgba(255,255,255,0.03);
-}
-
-.lb-table tbody td {
-  padding: 0.65rem 0.75rem;
-  color: var(--text-dim);
-  vertical-align: middle;
-}
-
-.lb-rank {
+.lb-full-row .lb-cell-starter,
+.lb-full-row .lb-cell-kos,
+.lb-full-row .lb-cell-date {
   font-family: var(--font-mono);
-  font-size: 0.9rem;
-  font-weight: 700;
-  min-width: 50px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
 }
 
-.lb-name {
-  font-family: var(--font-display);
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--text);
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.lb-full-row > div:nth-child(2) .sub {
+  display: none; /* hide sub on full layout since starter col exists */
 }
 
-.lb-waves {
-  font-family: var(--font-mono);
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--accent);
-}
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 700px) {
+  .lb-full-wrap { padding-left: 18px; padding-right: 18px; }
 
-.lb-starter, .lb-kos, .lb-date {
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-}
+  .lb-col-head {
+    grid-template-columns: 24px 1fr 52px;
+  }
+  .lb-col-head span:nth-child(n+4),
+  .lb-full-row .lb-cell-starter,
+  .lb-full-row .lb-cell-kos,
+  .lb-full-row .lb-cell-date { display: none; }
 
-/* Row highlights for top 3 */
-.lb-row-top-1 td { background: rgba(245,158,11,0.06); }
-.lb-row-top-1 .lb-waves { color: var(--warning); text-shadow: 0 0 12px var(--warning); }
-
-.lb-row-top-2 td { background: rgba(148,163,184,0.04); }
-.lb-row-top-2 .lb-waves { color: #94a3b8; }
-
-.lb-row-top-3 td { background: rgba(180,120,80,0.04); }
-.lb-row-top-3 .lb-waves { color: #c87533; }
-
-/* Current player highlight */
-.lb-row-highlight td {
-  background: rgba(99,102,241,0.1);
-  border-left: 2px solid var(--accent);
-}
-
-/* Empty */
-.lb-empty {
-  text-align: center;
-  padding: 3rem;
-  color: var(--text-muted);
-  font-size: 1rem;
-}
-
-.lb-empty.hidden { display: none; }
-
-/* ============================================================
-   Responsive
-   ============================================================ */
-@media (max-width: 600px) {
-  .gameover-score-grid { grid-template-columns: repeat(2, 1fr); }
-  .gameover-team .gameover-pokemon { width: 85px; }
-  .lb-table thead th:nth-child(4),
-  .lb-table tbody td:nth-child(4),
-  .lb-table thead th:nth-child(5),
-  .lb-table tbody td:nth-child(5) {
-    display: none;
+  .lb-full-row {
+    grid-template-columns: 24px 1fr 52px !important;
   }
 }
 
-@media (max-width: 400px) {
-  .gameover-score-grid { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
-  .score-value { font-size: 3.5rem; }
+@media (max-width: 480px) {
+  .lb-full-head { grid-template-columns: 1fr; gap: 10px; }
+  .lb-full-head-right { flex-direction: row; align-items: center; justify-content: space-between; }
 }

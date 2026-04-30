@@ -29,7 +29,7 @@ export function renderItemCard(
       </div>
       ${showPrice !== undefined ? `
         <div class="item-card-price ${sold ? 'sold-label' : ''}">
-          ${sold ? 'SOLD' : `<span class="coin-icon">🪙</span>${showPrice}`}
+          ${sold ? 'SOLD' : `<span class="coin-icon">¢</span>${showPrice}`}
         </div>
       ` : ''}
     </div>

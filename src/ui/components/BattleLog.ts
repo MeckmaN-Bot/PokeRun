@@ -4,6 +4,10 @@ export function renderBattleLog(entries: BattleLogEntry[], maxEntries = 8): stri
   const visible = entries.slice(-maxEntries);
   return `
     <div class="battle-log" id="battle-log">
+      <div class="h">
+        <span>Battle log</span>
+        <span id="battle-turn-counter" style="font-family:var(--font-mono);font-size:10px;letter-spacing:.2em;color:var(--ink-3)">Turn 1</span>
+      </div>
       ${visible.map((e, i) => `
         <div class="log-entry log-${e.type} ${i === visible.length - 1 ? 'latest' : ''}">
           ${e.text}
