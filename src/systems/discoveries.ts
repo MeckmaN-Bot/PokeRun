@@ -13,6 +13,7 @@
 
 import { SYNERGY_CATALOG } from './synergies';
 import { BOSS_BLINDS } from '../data/bossBlinds';
+import { tryUnlock } from './achievements';
 
 // ── Synergy discoveries ─────────────────────────────────────
 
@@ -65,6 +66,9 @@ function markIds(
 
 export function markDiscovered(username: string, ids: string[]): void {
   markIds(SYNERGY_KEY_PREFIX, KNOWN_SYNERGIES, username, ids);
+  if (getDiscoveredCount(username) >= TOTAL_SYNERGIES) {
+    tryUnlock(username, 'synergist');
+  }
 }
 
 export function getDiscoveredCount(username: string): number {
@@ -81,6 +85,9 @@ export function getDiscoveredSet(username: string): Set<string> {
 
 export function markBlindDiscovered(username: string, ids: string[]): void {
   markIds(BLIND_KEY_PREFIX, KNOWN_BLINDS, username, ids);
+  if (getDiscoveredBlindCount(username) >= TOTAL_BLINDS) {
+    tryUnlock(username, 'field_reference');
+  }
 }
 
 export function getDiscoveredBlindCount(username: string): number {

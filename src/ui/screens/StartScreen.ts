@@ -17,6 +17,7 @@ import {
 } from '../../systems/discoveries';
 import { SYNERGY_CATALOG } from '../../systems/synergies';
 import { BOSS_BLINDS } from '../../data/bossBlinds';
+import { ACHIEVEMENTS, getUnlockedSet, getUnlockedCount, TOTAL_ACHIEVEMENTS } from '../../systems/achievements';
 import { formatAct, formatBadges } from '../../util/runProgress';
 import { BADGES } from '../../data/badges';
 import { badgeSprite, imgErrorFallback } from '../../data/sprites';
@@ -233,8 +234,10 @@ export class StartScreen {
     const pb = getPersonalBest(this.playerName);
     const discovered = getDiscoveredCount(this.playerName);
     const blindsFaced = getDiscoveredBlindCount(this.playerName);
+    const achievementsUnlocked = getUnlockedCount(this.playerName);
     const discoveryLine = `<button type="button" class="ss-discovery-line" id="ss-discovery-open" title="Open Synergy Codex">Synergies discovered · ${discovered} / ${TOTAL_SYNERGIES} →</button>
-      <button type="button" class="ss-discovery-line" id="ss-blind-codex-open" title="Open Boss Blind Codex">Boss Blinds faced · ${blindsFaced} / ${TOTAL_BLINDS} →</button>`;
+      <button type="button" class="ss-discovery-line" id="ss-blind-codex-open" title="Open Boss Blind Codex">Boss Blinds faced · ${blindsFaced} / ${TOTAL_BLINDS} →</button>
+      <button type="button" class="ss-discovery-line" id="ss-achievements-open" title="Open Achievements">Achievements · ${achievementsUnlocked} / ${TOTAL_ACHIEVEMENTS} →</button>`;
     if (!pb) {
       return `
         <div class="ss-personal-best" data-empty="true">
@@ -337,6 +340,50 @@ export class StartScreen {
         <div class="codex-eyebrow">— Field Reference —</div>
         <h2 class="modal-title">Boss Blind <em>Codex</em></h2>
         <div class="codex-progress">${faced.size} / ${BOSS_BLINDS.length} faced</div>
+        <div class="codex-grid">${cards}</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#codex-close')?.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  }
+
+  private openAchievementsCodex(): void {
+    const unlocked = getUnlockedSet(this.playerName);
+    const cards = ACHIEVEMENTS.map(a => {
+      const found = unlocked.has(a.id);
+      if (found) {
+        return `
+          <div class="codex-card found codex-achievement">
+            <div class="codex-card-head">
+              <span class="codex-card-icon">★</span>
+              <span class="codex-card-name">${escapeHtml(a.name)}</span>
+            </div>
+            <div class="codex-card-eyebrow">${escapeHtml(a.eyebrow)}</div>
+            <p class="codex-card-desc">${escapeHtml(a.description)}</p>
+          </div>
+        `;
+      }
+      return `
+        <div class="codex-card locked">
+          <div class="codex-card-head">
+            <span class="codex-card-icon">·</span>
+            <span class="codex-card-name">???</span>
+          </div>
+          <p class="codex-card-desc">Locked. Keep playing to unlock.</p>
+        </div>
+      `;
+    }).join('');
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay codex-overlay';
+    overlay.innerHTML = `
+      <div class="modal codex-modal">
+        <button class="modal-close" id="codex-close" type="button">✕</button>
+        <div class="codex-eyebrow">— Field Reference —</div>
+        <h2 class="modal-title">Achieve<em>ments</em></h2>
+        <div class="codex-progress">${unlocked.size} / ${ACHIEVEMENTS.length} unlocked</div>
         <div class="codex-grid">${cards}</div>
       </div>
     `;
@@ -719,6 +766,8 @@ export class StartScreen {
       ?.addEventListener('click', () => this.openSynergyCodex());
     this.container.querySelector<HTMLButtonElement>('#ss-blind-codex-open')
       ?.addEventListener('click', () => this.openBlindCodex());
+    this.container.querySelector<HTMLButtonElement>('#ss-achievements-open')
+      ?.addEventListener('click', () => this.openAchievementsCodex());
 
     // Trainer chip — click cycles gender
     const trainerChip = this.container.querySelector<HTMLButtonElement>('#trainer-chip');

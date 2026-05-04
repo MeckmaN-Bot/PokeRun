@@ -53,6 +53,7 @@ import { trainerSpriteUrl } from './data/trainerArchetypes';
 import { buildArena } from './data/arenas';
 import { saveRun, loadRun, clearRun } from './systems/saveRun';
 import { markBlindDiscovered } from './systems/discoveries';
+import { tryUnlock as tryUnlockAchievement } from './systems/achievements';
 import { applySettings } from './systems/userSettings';
 import { getEliteStep } from './data/eliteFour';
 import { getBadge } from './data/badges';
@@ -718,6 +719,8 @@ function showBattleScreen(): void {
     const bs = state.battleState;
 
     if (bs?.winner === 'player') {
+      // First Step — fires once per username, idempotent.
+      tryUnlockAchievement(state.playerName, 'first_step');
       // Victory — award coins
       const isBossVictory = bs.isBossWave;
       void Audio.playMusic('music.victory', { fadeMs: 200, loop: false, volume: 0.95 });
@@ -785,6 +788,18 @@ function showBattleScreen(): void {
           }
           showBadgeAward(badge, gymLeaderWin.name);
         }
+        if (gymLeaderWin.id === 'brock') {
+          tryUnlockAchievement(state.playerName, 'boulder_master');
+        }
+        // Mono Master — alive teammates all share primary type at this victory moment.
+        const aliveMons = state.team.filter(m => m.battleHp > 0);
+        if (aliveMons.length > 0) {
+          const lead = aliveMons[0].types[0];
+          const allMono = aliveMons.every(m => m.types[0] === lead);
+          if (allMono) {
+            tryUnlockAchievement(state.playerName, 'mono_master');
+          }
+        }
       }
       // Leader fight ends the arena gauntlet — clear it so normal flow resumes.
       // Also clear the previewed blind and advance the act counter (deferred
@@ -800,6 +815,7 @@ function showBattleScreen(): void {
         state.leagueStep = (state.leagueStep ?? 0) + 1;
         if (eliteStepWin.isChampion) {
           state.pendingGenGate = true;
+          tryUnlockAchievement(state.playerName, 'champion');
         }
       }
 

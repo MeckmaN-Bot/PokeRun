@@ -1380,6 +1380,19 @@ html[data-reduce-motion="on"] *::after {
   background: var(--blind-color, #3a3a3a);
   color: var(--paper, #f4f1e8);
 }
+.codex-card.codex-achievement.found {
+  border-left: 6px solid var(--gold, #c9962b);
+}
+.codex-card.codex-achievement.found .codex-card-icon {
+  background: var(--gold, #c9962b);
+  color: var(--ink, #1a1a1a);
+}
+.codex-card-eyebrow {
+  font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: 0.28em; text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+  margin-bottom: 2px;
+}
 .codex-card-hint {
   font-family: var(--font-mono); font-size: 10px;
   color: var(--ink-3, #6b5e44);
