@@ -60,6 +60,8 @@ export class LeaderboardScreen {
                 <span>Waves</span>
                 <span>Starter</span>
                 <span>KOs</span>
+                <span>Act</span>
+                <span>Badges</span>
                 <span>Date</span>
               </div>
               <div class="lb-list" id="lb-list">
@@ -125,6 +127,8 @@ export class LeaderboardScreen {
         <div class="wv">W${entry.score_waves}</div>
         <div class="lb-cell-starter">${escapeHtml(entry.score_details?.starterName ?? '—')}</div>
         <div class="lb-cell-kos">${entry.score_details?.totalKOs ?? 0}</div>
+        <div class="lb-cell-act">${formatAct(entry.score_details?.actReached)}</div>
+        <div class="lb-cell-badges">${formatBadges(entry.score_details?.badgesEarned)}</div>
         <div class="lb-cell-date">${date}</div>
       </div>
     `;
@@ -159,4 +163,17 @@ function escapeHtml(str: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function formatAct(n: number | undefined | null): string {
+  if (n == null) return '—';
+  if (n >= 10) return 'Champion ✓';
+  if (n === 9) return 'League';
+  if (n >= 1 && n <= 8) return `Act ${n}`;
+  return '—';
+}
+
+function formatBadges(n: number | undefined | null): string {
+  if (n == null) return '—';
+  return `${n}/8`;
 }

@@ -99,7 +99,7 @@
 
 .lb-col-head {
   display: grid;
-  grid-template-columns: 28px 1fr 64px 100px 56px 64px;
+  grid-template-columns: 28px 1fr 64px 100px 56px 72px 56px 64px;
   gap: 8px;
   padding: 4px 6px;
   border-bottom: 1.5px solid var(--ink);
@@ -133,7 +133,7 @@
 /* Override lb-row from main.css for full-layout variant */
 .lb-full-row {
   display: grid !important;
-  grid-template-columns: 28px 1fr 64px 100px 56px 64px !important;
+  grid-template-columns: 28px 1fr 64px 100px 56px 72px 56px 64px !important;
   gap: 8px;
   align-items: center;
   padding: 5px 6px !important;
@@ -142,6 +142,8 @@
 
 .lb-full-row .lb-cell-starter,
 .lb-full-row .lb-cell-kos,
+.lb-full-row .lb-cell-act,
+.lb-full-row .lb-cell-badges,
 .lb-full-row .lb-cell-date {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -154,6 +156,9 @@
 }
 
 /* ── Responsive ──────────────────────────────────────────── */
+/* Mobile drops Starter/KOs/Act/Badges/Date down to just rank, name, waves —
+ * the table is too cramped at narrow widths to surface 8 columns and the new
+ * fields are also visible on the post-run Game Over screen for the player. */
 @media (max-width: 700px) {
   .lb-full-wrap { padding-left: 18px; padding-right: 18px; }
 
@@ -163,6 +168,8 @@
   .lb-col-head span:nth-child(n+4),
   .lb-full-row .lb-cell-starter,
   .lb-full-row .lb-cell-kos,
+  .lb-full-row .lb-cell-act,
+  .lb-full-row .lb-cell-badges,
   .lb-full-row .lb-cell-date { display: none; }
 
   .lb-full-row {
