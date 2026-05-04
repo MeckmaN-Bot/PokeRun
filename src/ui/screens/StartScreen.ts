@@ -208,6 +208,14 @@ export class StartScreen {
             </div>
             <button class="ink-btn ghost sm" id="clear-name-btn" type="button">Clear Saved Name</button>
           </div>
+
+          <div class="settings-row" style="border-top:1.5px dashed var(--ink, #1a1a1a); padding-top:14px;">
+            <div class="settings-row-label">
+              <div class="srl-title">Legal &amp; Disclaimer</div>
+              <div class="srl-sub">Fan project · non-commercial · trademarks belong to their owners.</div>
+            </div>
+            <button class="ink-btn ghost sm" id="open-legal-btn" type="button">View →</button>
+          </div>
         </div>
       </div>
     `;
@@ -1397,10 +1405,16 @@ export class StartScreen {
     });
 
     const legalBtn = this.container.querySelector('#ss-legal-link');
+    const legalBtnSettings = this.container.querySelector('#open-legal-btn');
     const legalModal = this.container.querySelector('#legal-modal');
+    const settingsModalForLegal = this.container.querySelector('#settings-modal');
     const closeLegal = this.container.querySelector('#close-legal');
     legalBtn?.addEventListener('click', e => {
       e.preventDefault();
+      legalModal?.classList.remove('hidden');
+    });
+    legalBtnSettings?.addEventListener('click', () => {
+      settingsModalForLegal?.classList.add('hidden');
       legalModal?.classList.remove('hidden');
     });
     closeLegal?.addEventListener('click', () => legalModal?.classList.add('hidden'));

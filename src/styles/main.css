@@ -1017,6 +1017,14 @@ body::after {
   font-size: 14px; font-weight: 900;
 }
 
+/* Narrow desktop / tablet landscape — drop footer-right info block.
+ * It was being silently clipped via overflow:hidden at <1280; symmetric
+ * with footer-left already hidden at ≤700. Legal link relocates to the
+ * Settings modal. */
+@media (max-width: 1100px) {
+  .ss-mag-footer-right { display: none; }
+}
+
 /* Mobile — stack How-it-works under title, hide footer-left/right */
 @media (max-width: 700px) {
   .ss-mag-header {
@@ -1134,9 +1142,60 @@ input::placeholder { color: var(--ink-4); }
   letter-spacing: 0.2em; text-transform: uppercase;
 }
 
+.starter-carousel {
+  display: flex; align-items: stretch; gap: 8px;
+}
+.starter-nav {
+  display: none;  /* desktop: hidden — starter-grid shows all 5 */
+  appearance: none; -webkit-appearance: none;
+  background: var(--paper);
+  border: 1.5px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  width: 44px; min-height: 44px;
+  font-family: var(--font-display); font-weight: 900;
+  font-size: 24px; color: var(--ink);
+  cursor: pointer; flex: 0 0 auto;
+  align-items: center; justify-content: center;
+}
+.starter-nav:hover {
+  transform: translate(-1px,-1px);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.starter-nav:active {
+  transform: translate(1px,1px);
+  box-shadow: 1px 1px 0 var(--ink);
+}
 .starter-grid {
+  flex: 1 1 auto; min-width: 0;
   display: grid; grid-template-columns: repeat(5, 1fr);
   gap: 14px;
+}
+.starter-dots {
+  display: none;  /* desktop: hidden — selection by direct card click */
+  justify-content: center; gap: 12px;
+  margin-top: 4px;
+  flex: 0 0 auto;
+}
+.starter-dot {
+  appearance: none; -webkit-appearance: none;
+  width: 10px; height: 10px;
+  border: 1.5px solid var(--ink); background: var(--paper);
+  cursor: pointer; padding: 0;
+  position: relative;
+  transition: background 0.12s ease;
+}
+.starter-dot::after {
+  content: ''; position: absolute; inset: -17px;  /* 44×44 tap slop */
+}
+.starter-dot.active { background: var(--ink); }
+
+/* Mobile single-card carousel: hide non-selected, show arrows + dots. */
+@media (max-width: 600px) {
+  .starter-nav { display: inline-flex; }
+  .starter-dots { display: flex; }
+  .starter-grid { grid-template-columns: 1fr; gap: 0; }
+  .starter-grid > .creature-card { display: none !important; }
+  .starter-grid > .creature-card.selected { display: grid !important; }
 }
 
 /* Creature card — matches design's .creature-card */
@@ -2579,11 +2638,7 @@ html[data-reduce-motion="on"] *::after {
    ============================================================ */
 @media (max-width: 640px) {
   .start-content { padding: 16px 18px; }
-  .starter-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .name-input-group .logo-subtitle { display: none; }
-}
-@media (max-width: 480px) {
-  .starter-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* Scrollbar */
@@ -3195,7 +3250,6 @@ body.is-mobile .gover-foot .ink-btn {
 /* ── Start screen tweaks ── */
 @media (max-width: 480px) {
   .start-content { padding: 12px 14px; gap: 10px; }
-  .starter-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; }
   .name-input-group { flex-wrap: wrap; }
   .name-input-group input { font-size: 18px; }
 }
