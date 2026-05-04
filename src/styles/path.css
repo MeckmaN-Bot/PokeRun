@@ -415,6 +415,76 @@
   .po-blind-chip-hint { font-size: 9px; }
 }
 
+/* ── Blind Lens reroll affordance ──── */
+.po-blind-reroll {
+  align-self: flex-start;
+  margin-left: 8px;
+  padding: 4px 9px;
+  background: var(--paper, #f4f1e8);
+  border: 1.5px solid var(--blind-color, #3a3a3a);
+  color: var(--blind-color, #3a3a3a);
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.po-blind-reroll:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--ink, #1a1a1a);
+}
+.po-blind-reroll:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--ink, #1a1a1a);
+}
+.po-blind-reroll-count {
+  margin-left: 4px;
+  opacity: 0.7;
+  letter-spacing: 0;
+}
+
+/* Brief shimmer on a chip whose blind was just re-rolled. */
+@keyframes po-blind-shimmer {
+  0%   { background-position: -150% 0; }
+  100% { background-position: 250% 0; }
+}
+.po-blind-chip.shimmer::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    color-mix(in srgb, var(--blind-color, #3a3a3a) 35%, transparent) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  animation: po-blind-shimmer 0.7s ease-out;
+  pointer-events: none;
+}
+.po-blind-chip { position: relative; overflow: hidden; }
+
+/* Reroll-confirm modal — current-blind row */
+.po-blind-modal-current {
+  display: flex; align-items: center; gap: 8px;
+  margin: 12px 0 4px;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--blind-color, #3a3a3a) 8%, var(--paper, #f4f1e8));
+  border: 1.5px solid var(--ink, #1a1a1a);
+  border-left: 5px solid var(--blind-color, #3a3a3a);
+}
+.po-blind-modal-label {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.28em;
+  text-transform: uppercase; color: var(--ink-3, #6b5e44);
+}
+.po-blind-modal-name {
+  font-family: var(--font-display); font-style: italic; font-weight: 800;
+  font-size: 16px; letter-spacing: 0.02em;
+}
+.path-modal-actions {
+  display: flex; justify-content: flex-end; gap: 10px;
+  margin-top: 14px;
+}
+
 /* Wave-intro variant: tighter, sits inside the dark intro card */
 .wave-intro-stage {
   margin-top: 14px;

@@ -48,7 +48,7 @@ import { MysteryEventScreen } from './ui/screens/MysteryEventScreen';
 import { generateNodeOptions } from './data/nodes';
 import { getTrainerArchetype } from './data/trainerArchetypes';
 import { poolForTypes } from './data/typePools';
-import { getGymLeader, GYM_LEADERS } from './data/gymLeaders';
+import { getGymLeader, getGymForAct, GYM_LEADERS } from './data/gymLeaders';
 import { trainerSpriteUrl } from './data/trainerArchetypes';
 import { buildArena } from './data/arenas';
 import { saveRun, loadRun, clearRun } from './systems/saveRun';
@@ -999,6 +999,64 @@ function showShopScreen(): void {
 // ============================================================
 
 /**
+ * Re-roll the upcoming gym arena's previewed Boss Blind by consuming a
+ * Blind Lens from the player's inventory. The new blind is guaranteed
+ * different from the current one (via excludeIds). League blinds are
+ * intentionally NOT rerollable here.
+ */
+function showRerollBlindModal(): void {
+  if (!gameState) return;
+  const oldBlindId = gameState.actBossBlind;
+  if (!oldBlindId) return;
+  const lensInv = gameState.inventory.find(inv => inv.item.id === 'blind_lens');
+  if (!lensInv || lensInv.quantity <= 0) return;
+  const oldBlind = getBossBlindById(oldBlindId);
+  if (!oldBlind) return;
+  const gymLeader = getGymForAct(gameState.currentAct);
+  const gymName = gymLeader?.name ?? 'the gym arena';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'path-overlay';
+  overlay.innerHTML = `
+    <div class="path-modal-card" style="--blind-color:${oldBlind.color}">
+      <div class="path-eyebrow">— Use Blind Lens —</div>
+      <h2 class="path-title">Re-roll <em>${gymName}'s</em> Boss Blind</h2>
+      <div class="po-blind-modal-current">
+        <span class="po-blind-modal-label">Current:</span>
+        <span class="po-blind-modal-name" style="color:${oldBlind.color}">
+          ${oldBlind.icon} ${oldBlind.name}
+        </span>
+      </div>
+      <p class="path-sub">Cost: 1× Blind Lens. The new blind will differ from the current one.</p>
+      <div class="path-modal-actions">
+        <button class="ink-btn ghost" data-cancel type="button">Cancel</button>
+        <button class="ink-btn primary" data-confirm type="button">Re-roll →</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector<HTMLButtonElement>('[data-cancel]')?.addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.querySelector<HTMLButtonElement>('[data-confirm]')?.addEventListener('click', () => {
+    if (!gameState) { close(); return; }
+    const inv = gameState.inventory.find(i => i.item.id === 'blind_lens');
+    if (!inv || inv.quantity <= 0) { close(); return; }
+    inv.quantity -= 1;
+    if (inv.quantity <= 0) {
+      gameState.inventory = gameState.inventory.filter(i => i !== inv);
+    }
+    const next = pickRandomBossBlind([oldBlindId]);
+    gameState.actBossBlind = next.id;
+    Audio.play('ui.coin');
+    showToast(`Boss Blind re-rolled: ${next.name}`, 'success');
+    saveRun(gameState);
+    close();
+    showPathSelect(); // re-render so the chip refreshes + the pill count updates
+  });
+}
+
+/**
  * Ensure boss-blind previews are populated for the current path screen.
  * - Acts 1..8: roll one blind per act (re-rolled when act increments).
  * - League: roll all 5 blinds (E4 x4 + Champion) once on league entry.
@@ -1091,6 +1149,8 @@ function showPathSelect(): void {
       // grass + trainer + gym + elite_four + champion → combat wave
       startNewWave();
     }
+  }, () => {
+    showRerollBlindModal();
   });
   pathSelectScreen.mount();
 }

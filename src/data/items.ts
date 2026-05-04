@@ -517,6 +517,13 @@ export const ALL_ITEMS: Item[] = [
   },
   // ===================== EPIC CONSUMABLES =====================
   {
+    id: 'blind_lens', name: 'Blind Lens', rarity: 'epic', itemType: 'consumable',
+    icon: '◎',
+    pokeapiName: 'lens-case',
+    description: 'Re-roll the upcoming gym arena\'s Boss Blind. Single use.',
+    effect: { trigger: 'manual' },
+  },
+  {
     id: 'full_restore', name: 'Full Restore', rarity: 'epic', itemType: 'consumable',
     icon: '✚',
     pokeapiName: 'full-restore',

@@ -20,15 +20,18 @@ export class PathSelectScreen {
   private container: HTMLElement;
   private state: GameState;
   private onChoose: (node: NodeInstance) => void;
+  private onRerollBlind?: () => void;
 
   constructor(
     container: HTMLElement,
     state: GameState,
     onChoose: (node: NodeInstance) => void,
+    onRerollBlind?: () => void,
   ) {
     this.container = container;
     this.state = state;
     this.onChoose = onChoose;
+    this.onRerollBlind = onRerollBlind;
   }
 
   mount(): void {
@@ -117,8 +120,13 @@ export class PathSelectScreen {
     // Big stage progress strip — 4 pips representing the act, with the gym leader portrait.
     const nextGymLeader = !inLeague && act >= 1 && act <= 8 ? getGymForAct(act) : undefined;
     const stopsToGym = nextGymLeader ? Math.max(0, 4 - step) : 0;
+    const lensCount = (this.state.inventory ?? [])
+      .filter(inv => inv.item.id === 'blind_lens')
+      .reduce((sum, inv) => sum + inv.quantity, 0);
+    // Lens reroll is only offered for the per-act gym preview, never the league sequence.
+    const canRerollGymBlind = !!nextGymLeader && !!this.state.actBossBlind && lensCount > 0;
     const gymBlindHtml = nextGymLeader
-      ? renderBlindChip(this.state.actBossBlind ?? null)
+      ? renderBlindChip(this.state.actBossBlind ?? null, { rerollable: canRerollGymBlind, lensCount })
       : '';
     const stageProgressHtml = nextGymLeader
       ? (() => {
@@ -225,6 +233,12 @@ export class PathSelectScreen {
         window.setTimeout(() => this.onChoose(node), 280);
       });
     });
+    this.container.querySelector<HTMLButtonElement>('[data-blind-reroll]')
+      ?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        Audio.play('ui.confirm');
+        this.onRerollBlind?.();
+      });
   }
 }
 
@@ -245,10 +259,19 @@ function kindLabel(kind: NodeInstance['kind']): string {
 // keep getBadge import "live" so it stays available for future expansions
 void getBadge;
 
-function renderBlindChip(blindId: BossBlindId | null): string {
+function renderBlindChip(
+  blindId: BossBlindId | null,
+  opts?: { rerollable?: boolean; lensCount?: number },
+): string {
   if (!blindId) return '';
   const b = getBossBlindById(blindId);
   if (!b) return '';
+  const pillHtml = opts?.rerollable
+    ? `<button type="button" class="po-blind-reroll" data-blind-reroll
+              title="Blind Lens — re-roll once, blind will differ from the current one.">
+         ↻ REROLL <span class="po-blind-reroll-count">×${opts.lensCount ?? 1}</span>
+       </button>`
+    : '';
   return `
     <div class="po-blind-chip" style="--blind-color:${b.color}" aria-label="Boss Blind: ${b.name}">
       <div class="po-blind-chip-icon" aria-hidden="true">${b.icon}</div>
@@ -258,6 +281,7 @@ function renderBlindChip(blindId: BossBlindId | null): string {
         <div class="po-blind-chip-desc">${b.description}</div>
         <div class="po-blind-chip-hint">${b.tacticalHint}</div>
       </div>
+      ${pillHtml}
     </div>
   `;
 }
