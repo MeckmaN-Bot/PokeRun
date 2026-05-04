@@ -225,7 +225,7 @@ export class ShopScreen {
               <span class="bag-btn-count" id="bag-btn-count">${this.state.inventory.reduce((s, i) => s + i.quantity, 0)}</span>
             </button>
             <button class="ink-btn ghost bag-btn pc-btn" id="pc-btn" title="Open PC Box">
-              <img class="bag-btn-glyph pc-btn-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/pokemon-box-link.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'bag-btn-glyph',textContent:'📦'}))" />
+              <img class="bag-btn-glyph pc-btn-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/pokemon-box-link.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'bag-btn-glyph',textContent:'◆'}))" />
               <span class="bag-btn-label">PC</span>
               <span class="bag-btn-count" id="pc-btn-count">${this.state.pc.length}</span>
             </button>

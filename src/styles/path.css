@@ -652,7 +652,7 @@
 .center-card .path-card-icon {
   color: var(--card-accent, var(--ink));
   font-size: 52px;
-  filter: none; /* glyph icons (✚, 🩹, 💰) read better unpixelated */
+  filter: none; /* glyph icons (✚, ◇, ◆) read better unpixelated */
 }
 
 @media (max-width: 980px) {

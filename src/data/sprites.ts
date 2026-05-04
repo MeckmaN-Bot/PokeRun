@@ -34,9 +34,9 @@ export const badgeSprite = (badgeId: string): string | undefined => {
 };
 
 /**
- * Inline `onerror` handler that swaps a broken sprite img for an emoji glyph.
- * Used as `onerror="${imgErrorFallback('🪨')}"`. The fallback runs once and
- * removes itself, so no infinite loop on a missing emoji.
+ * Inline `onerror` handler that swaps a broken sprite img for a text glyph.
+ * Used as `onerror="${imgErrorFallback('◆')}"`. The fallback runs once and
+ * removes itself, so no infinite loop on a missing icon.
  *
  * The result is embedded in an HTML attribute (`onerror="..."`), so all
  * double-quotes in the JS body must be HTML-escaped — otherwise the attribute

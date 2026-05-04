@@ -85,8 +85,8 @@ export class MysteryEventScreen {
               <span class="path-card-corner br"></span>
               <div class="mystery-front">
                 ${node?.spriteUrl
-                  ? `<div class="mystery-sprite-wrap"><img src="${node.spriteUrl}" alt="" class="mystery-sprite" onerror="${imgErrorFallback(node.icon ?? '❓')}" /></div>`
-                  : `<div class="path-card-icon px-emoji">${node?.icon ?? '❓'}</div>`}
+                  ? `<div class="mystery-sprite-wrap"><img src="${node.spriteUrl}" alt="" class="mystery-sprite" onerror="${imgErrorFallback(node.icon ?? '◇')}" /></div>`
+                  : `<div class="path-card-icon px-emoji">${node?.icon ?? '◇'}</div>`}
                 <div class="mystery-cta">Tap to investigate</div>
               </div>
               <div class="mystery-back hidden" id="mystery-back"></div>
@@ -136,14 +136,14 @@ export class MysteryEventScreen {
       case 'coins':
         if (o.amount === 5) {
           return `
-            ${sprite('oran-berry', '🍒')}
+            ${sprite('oran-berry', '◇')}
             <h3 class="path-card-title">A stray berry</h3>
             <p class="path-card-hint">You found a stray berry and pocket change. +5¢</p>
             <div class="mystery-cta">Tap to continue →</div>
           `;
         }
         return `
-          ${sprite('nugget', '💰')}
+          ${sprite('nugget', '◆')}
           <h3 class="path-card-title">+${o.amount} coins</h3>
           <p class="path-card-hint">Lucky find — straight into the satchel.</p>
           <div class="mystery-cta">Tap to continue →</div>
@@ -151,8 +151,8 @@ export class MysteryEventScreen {
       case 'item': {
         const slug = o.item.item.pokeapiName;
         const inner = slug
-          ? sprite(slug, o.item.item.icon ?? '🎁')
-          : `<div class="path-card-icon px-emoji">${o.item.item.icon ?? '🎁'}</div>`;
+          ? sprite(slug, o.item.item.icon ?? '◆')
+          : `<div class="path-card-icon px-emoji">${o.item.item.icon ?? '◆'}</div>`;
         return `
           ${inner}
           <h3 class="path-card-title">${o.item.item.name}</h3>
@@ -162,7 +162,7 @@ export class MysteryEventScreen {
       }
       case 'heal':
         return `
-          ${sprite('super-potion', '🌿')}
+          ${sprite('super-potion', '✚')}
           <h3 class="path-card-title">Restorative herbs</h3>
           <p class="path-card-hint">+${Math.round(o.pct * 100)}% HP across the team.</p>
           <div class="mystery-cta">Tap to continue →</div>

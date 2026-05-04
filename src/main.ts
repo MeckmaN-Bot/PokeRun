@@ -1345,8 +1345,8 @@ function showForageEvent(): void {
   overlay.className = 'path-overlay';
   const slug = pick.pokeapiName;
   const iconHtml = slug
-    ? `<div class="forage-sprite-wrap"><img src="${itemSprite(slug)}" alt="" class="forage-sprite" onerror="${imgErrorFallback(pick.icon ?? '🌿')}" /></div>`
-    : `<div class="path-card-icon px-emoji" aria-hidden="true">${pick.icon ?? '🌿'}</div>`;
+    ? `<div class="forage-sprite-wrap"><img src="${itemSprite(slug)}" alt="" class="forage-sprite" onerror="${imgErrorFallback(pick.icon ?? '◇')}" /></div>`
+    : `<div class="path-card-icon px-emoji" aria-hidden="true">${pick.icon ?? '◇'}</div>`;
   overlay.innerHTML = `
     <div class="path-modal-card forage-modal">
       <div class="path-eyebrow">Forage</div>

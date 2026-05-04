@@ -76,7 +76,7 @@ export const SYNERGY_CATALOG: SynergyCatalogEntry[] = [
     description: 'Light Ball + Amulet Coin — brilliance and fortune intertwined for electric payday.' },
   { id: 'phoenix_oath', name: 'Phoenix Oath', icon: '✦', color: 'red',
     description: 'Revive Heart wielder at <30% HP — embrace the ashes. Your next strike burns brighter.' },
-  { id: 'brilliant_beam', name: 'Brilliant Beam', icon: '⚡', color: 'gold',
+  { id: 'brilliant_beam', name: 'Brilliant Beam', icon: '★', color: 'gold',
     description: 'Light Ball + Mega Stone + Z-Crystal on an Electric-type — a once-in-a-run jackpot.' },
 ];
 
@@ -302,7 +302,7 @@ export function evaluateSynergies(ctx: SynergyContext): {
   if (hasLightBall && hasMegaStone && hasZCrystal && primaryType === 'electric') {
     const b = 1.75;
     activeSynergies.push({
-      id: 'brilliant_beam', name: 'Brilliant Beam', multiplier: b, color: 'gold', icon: '⚡',
+      id: 'brilliant_beam', name: 'Brilliant Beam', multiplier: b, color: 'gold', icon: '★',
       description: 'Light Ball + Mega Stone + Z-Crystal on an Electric-type — a once-in-a-run jackpot.',
     });
     mult *= b;

@@ -47,18 +47,18 @@ function pickKind(weights: KindWeight[], excluded: Set<NodeKind>): NodeKind {
 }
 
 const GRASS_FLAVORS: Array<Omit<NodeInstance, 'kind'> & { habitatBias?: PokemonType }> = [
-  { title: 'Tall Grass',     eyebrow: 'Wild',   hint: 'Rustling leaves. Wild encounter, chance for items.',     icon: '🌿', accent: '#5d8266', habitatBias: 'grass' },
-  { title: 'Old Path',       eyebrow: 'Trail',  hint: 'Mixed terrain. Variable foes.',                          icon: '🥾', accent: '#9a7d3f' },
-  { title: 'Wooded Edge',    eyebrow: 'Forest', hint: 'Cool shade — rarer drops, twitchy critters.',            icon: '🌳', accent: '#4d6b3f', habitatBias: 'bug' },
-  { title: 'Rocky Outcrop',  eyebrow: 'Cliffs', hint: 'Sharp footing favours rock & ground types.',             icon: '⛰', accent: '#7a634a', habitatBias: 'rock' },
-  { title: 'Riverside',      eyebrow: 'Banks',  hint: 'Cattails and ripples. Water types nearby.',              icon: '🌊', accent: '#3a6c8a', habitatBias: 'water' },
-  { title: 'Sunny Meadow',   eyebrow: 'Open',   hint: 'Wildflowers and bug song. Common pool, abundant loot.',  icon: '🌼', accent: '#c08a2c', habitatBias: 'normal' },
+  { title: 'Tall Grass',     eyebrow: 'Wild',   hint: 'Rustling leaves. Wild encounter, chance for items.',     icon: '◇', accent: '#5d8266', habitatBias: 'grass' },
+  { title: 'Old Path',       eyebrow: 'Trail',  hint: 'Mixed terrain. Variable foes.',                          icon: '›', accent: '#9a7d3f' },
+  { title: 'Wooded Edge',    eyebrow: 'Forest', hint: 'Cool shade — rarer drops, twitchy critters.',            icon: '◆', accent: '#4d6b3f', habitatBias: 'bug' },
+  { title: 'Rocky Outcrop',  eyebrow: 'Cliffs', hint: 'Sharp footing favours rock & ground types.',             icon: '▲', accent: '#7a634a', habitatBias: 'rock' },
+  { title: 'Riverside',      eyebrow: 'Banks',  hint: 'Cattails and ripples. Water types nearby.',              icon: '◇', accent: '#3a6c8a', habitatBias: 'water' },
+  { title: 'Sunny Meadow',   eyebrow: 'Open',   hint: 'Wildflowers and bug song. Common pool, abundant loot.',  icon: '◉', accent: '#c08a2c', habitatBias: 'normal' },
 ];
 
 const MYSTERY_FLAVORS: Array<Omit<NodeInstance, 'kind' | 'mysteryFlavourId'>> = [
-  { title: 'Old Signpost',    eyebrow: 'Mystery',   hint: 'Half-buried, scratched. Worth a poke?',                  icon: '❓', accent: '#7a4f8a', spriteUrl: itemSprite('dusk-stone') },
-  { title: 'Lost Satchel',    eyebrow: 'Mystery',   hint: 'Someone\'s travel gear, abandoned in the brush.',         icon: '🎒', accent: '#7a4f8a', spriteUrl: itemSprite('poke-ball') },
-  { title: 'Travelling NPC',  eyebrow: 'Encounter', hint: 'A weary stranger waves you down. Could go either way.',  icon: '🧙', accent: '#7a4f8a', spriteUrl: itemSprite('tm-normal') },
+  { title: 'Old Signpost',    eyebrow: 'Mystery',   hint: 'Half-buried, scratched. Worth a poke?',                  icon: '◇', accent: '#7a4f8a', spriteUrl: itemSprite('dusk-stone') },
+  { title: 'Lost Satchel',    eyebrow: 'Mystery',   hint: 'Someone\'s travel gear, abandoned in the brush.',         icon: '◆', accent: '#7a4f8a', spriteUrl: itemSprite('poke-ball') },
+  { title: 'Travelling NPC',  eyebrow: 'Encounter', hint: 'A weary stranger waves you down. Could go either way.',  icon: '◈', accent: '#7a4f8a', spriteUrl: itemSprite('tm-normal') },
 ];
 
 const CENTER_FLAVORS: Array<Omit<NodeInstance, 'kind'>> = [
@@ -67,13 +67,13 @@ const CENTER_FLAVORS: Array<Omit<NodeInstance, 'kind'>> = [
 ];
 
 const SHOP_MINI_FLAVORS: Array<Omit<NodeInstance, 'kind'>> = [
-  { title: 'Travelling Pedlar', eyebrow: 'Pop-up Shop', hint: 'Mules laden with curios — small but choice.',      icon: '🛒', accent: '#c08a2c', spriteUrl: itemSprite('coin-case') },
-  { title: 'Roadside Stall',    eyebrow: 'Pop-up Shop', hint: 'Half-set tent, prices already half-shouted.',      icon: '🏪', accent: '#c08a2c', spriteUrl: itemSprite('great-ball') },
+  { title: 'Travelling Pedlar', eyebrow: 'Pop-up Shop', hint: 'Mules laden with curios — small but choice.',      icon: '◆', accent: '#c08a2c', spriteUrl: itemSprite('coin-case') },
+  { title: 'Roadside Stall',    eyebrow: 'Pop-up Shop', hint: 'Half-set tent, prices already half-shouted.',      icon: '◉', accent: '#c08a2c', spriteUrl: itemSprite('great-ball') },
 ];
 
 const FORAGE_FLAVORS: Array<Omit<NodeInstance, 'kind'>> = [
-  { title: 'Berry Bush',       eyebrow: 'Forage', hint: 'Heavy with fruit. No fight — just leaves & loot.',       icon: '🍒', accent: '#5a8a3a', spriteUrl: itemSprite('oran-berry') },
-  { title: 'Mossy Stump',      eyebrow: 'Forage', hint: 'Look beneath. Mushrooms? Maybe a stray Pokéball.',        icon: '🍄', accent: '#5a8a3a', spriteUrl: itemSprite('tiny-mushroom') },
+  { title: 'Berry Bush',       eyebrow: 'Forage', hint: 'Heavy with fruit. No fight — just leaves & loot.',       icon: '◇', accent: '#5a8a3a', spriteUrl: itemSprite('oran-berry') },
+  { title: 'Mossy Stump',      eyebrow: 'Forage', hint: 'Look beneath. Mushrooms? Maybe a stray Pokéball.',        icon: '◇', accent: '#5a8a3a', spriteUrl: itemSprite('tiny-mushroom') },
 ];
 
 function makeGrass(): NodeInstance {

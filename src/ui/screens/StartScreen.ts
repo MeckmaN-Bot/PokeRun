@@ -405,7 +405,7 @@ export class StartScreen {
     return `
       <button type="button" class="ss-codex-hub-button" id="ss-codex-hub-open"
               aria-label="Open Codex hub">
-        <span class="ss-codex-hub-icon" aria-hidden="true">📖</span>
+        <span class="ss-codex-hub-icon" aria-hidden="true">◆</span>
         <span class="ss-codex-hub-label">Codex</span>
         <span class="ss-codex-hub-progress">${ratio}</span>
         <span class="ss-codex-hub-arrow" aria-hidden="true">›</span>

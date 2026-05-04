@@ -391,7 +391,7 @@ export class BattleScreen {
           ${eyeBlocked ? 'title="Blocked by The Eye — already used this battle"' : ''}
         >
           <div class="mtop">
-            <span class="mname">${move.displayName}${eyeBlocked ? ' 👁' : ''}</span>
+            <span class="mname">${move.displayName}${eyeBlocked ? ' ●' : ''}</span>
             <span class="type-stamp type-${move.type}">${move.type}</span>
           </div>
           <div class="mmeta">

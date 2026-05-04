@@ -715,7 +715,7 @@ const PLANET_MAP: Array<{ type: PokemonType; name: string; icon: string }> = [
   { type: 'fire',     name: 'Mars',     icon: '☉' },
   { type: 'water',    name: 'Neptune',  icon: '☋' },
   { type: 'grass',    name: 'Venus',    icon: '☿' },
-  { type: 'electric', name: 'Jupiter',  icon: '⚡' },
+  { type: 'electric', name: 'Jupiter',  icon: '★' },
   { type: 'psychic',  name: 'Mercury',  icon: '☿' },
   { type: 'ice',      name: 'Pluto',    icon: '◌' },
   { type: 'dragon',   name: 'Saturn',   icon: '♄' },

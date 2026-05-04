@@ -61,7 +61,7 @@ function makeArenaShop(leader: GymLeader): NodeInstance {
     title: 'Arena Atrium',
     eyebrow: `${leader.city} · Arena · Restock`,
     hint: 'Catch your breath. The vendor here knows what gym leaders cost.',
-    icon: '🛒',
+    icon: '◆',
     accent: leader.accent,
     spriteUrl: itemSprite('coin-case'),
     arenaRank: 'Restock',
