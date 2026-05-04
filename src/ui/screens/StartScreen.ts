@@ -24,6 +24,9 @@ import {
   DECKS, MONO_TYPE_OPTIONS, getUnlockedDecks, getLastDeck, saveLastDeck,
   getLastMonoType, saveLastMonoType,
 } from '../../systems/decks';
+import {
+  STAKES, getUnlockedStakes, getLastStake, saveLastStake, getStakeMods,
+} from '../../systems/stakes';
 import type { PokemonType } from '../../types';
 import { formatAct, formatBadges } from '../../util/runProgress';
 import { BADGES } from '../../data/badges';
@@ -71,6 +74,7 @@ export class StartScreen {
   private destroyAudioBtn: (() => void) | null = null;
   private selectedDeck: string = 'standard';
   private selectedMonoType: PokemonType = 'grass';
+  private selectedStake: string = 'white';
 
   constructor(
     container: HTMLElement,
@@ -88,6 +92,7 @@ export class StartScreen {
     this.onResume = onResume;
     this.selectedDeck = getLastDeck(playerName);
     this.selectedMonoType = getLastMonoType(playerName);
+    this.selectedStake = getLastStake(playerName);
   }
 
   async mount(): Promise<void> {
@@ -314,6 +319,15 @@ export class StartScreen {
           this.refreshStarterFilter();
         });
       });
+      next.querySelectorAll<HTMLButtonElement>('[data-stake-id]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (btn.disabled) return;
+          const id = btn.dataset['stakeId'] ?? 'white';
+          this.selectedStake = id;
+          saveLastStake(this.playerName, id);
+          this.refreshDeckPicker();
+        });
+      });
     }
   }
 
@@ -380,6 +394,22 @@ export class StartScreen {
          </div>`
       : '';
 
+    const stakeUnlocked = getUnlockedStakes(this.playerName);
+    const stakePills = STAKES.map(s => {
+      const isUnlocked = stakeUnlocked.has(s.id);
+      const isSelected = this.selectedStake === s.id && isUnlocked;
+      const lockHint = !isUnlocked && s.unlockAfter
+        ? `Unlock: clear Champion on ${this.stakeNameForId(s.unlockAfter)}`
+        : s.description;
+      return `<button type="button"
+                      class="stake-pill stake-${s.id}${isSelected ? ' selected' : ''}${!isUnlocked ? ' locked' : ''}"
+                      data-stake-id="${s.id}"
+                      title="${escapeHtml(lockHint)}"
+                      ${!isUnlocked ? 'disabled' : ''}>
+                ${escapeHtml(isUnlocked ? s.name.split(' ')[0] : '???')}
+              </button>`;
+    }).join('');
+
     return `
       <div class="deck-picker-section">
         <div class="deck-picker-header">
@@ -388,8 +418,16 @@ export class StartScreen {
         </div>
         <div class="deck-picker-grid">${cards}</div>
         ${monoSubpicker}
+        <div class="stake-picker-row">
+          <span class="stake-picker-label">Stake</span>
+          ${stakePills}
+        </div>
       </div>
     `;
+  }
+
+  private stakeNameForId(id: string): string {
+    return STAKES.find(s => s.id === id)?.name ?? id;
   }
 
   private unlockHintFor(deckId: string): string {
@@ -928,6 +966,15 @@ export class StartScreen {
         this.refreshDeckPicker();
       });
     });
+    this.container.querySelectorAll<HTMLButtonElement>('[data-stake-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        const id = btn.dataset['stakeId'] ?? 'white';
+        this.selectedStake = id;
+        saveLastStake(this.playerName, id);
+        this.refreshDeckPicker();
+      });
+    });
 
     // Trainer chip — click cycles gender
     const trainerChip = this.container.querySelector<HTMLButtonElement>('#trainer-chip');
@@ -1176,6 +1223,8 @@ export class StartScreen {
         leagueBlinds: [],
         deck: this.selectedDeck,
         deckMods,
+        stake: this.selectedStake,
+        stakeMods: getStakeMods(this.selectedStake),
       };
 
       this.onStart(initialState);

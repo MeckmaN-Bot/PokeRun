@@ -277,7 +277,7 @@ export class ShopScreen {
         <!-- Footer: tip + reroll -->
         <div class="shop-foot">
           <div class="kicker">► Items refresh next shop · Prices rise with depth</div>
-          <button class="ink-btn ghost" id="reroll-btn">Reroll (${getRerollCost(this.state.wave)}¢)</button>
+          <button class="ink-btn ghost" id="reroll-btn">Reroll (${Math.floor(getRerollCost(this.state.wave) * (this.state.stakeMods?.shopPriceMult ?? 1))}¢)</button>
         </div>
 
         <!-- Bag modal (inventory + equip + perks) -->
@@ -1772,7 +1772,8 @@ export class ShopScreen {
     const surplusFree = hasSurplus && !this.state.freeRerollUsed;
     const perkFreeLeft = (this.state.freeRerollsLeft ?? 0) > 0;
     const freeNow = surplusFree || perkFreeLeft;
-    const cost = getRerollCost(this.state.wave);
+    const priceMult = this.state.stakeMods?.shopPriceMult ?? 1;
+    const cost = Math.floor(getRerollCost(this.state.wave) * priceMult);
     if (!freeNow && !canAfford(cost, this.state.coins)) {
       showToast('Not enough coins to reroll!', 'error');
       Audio.play('shop.unaffordable');

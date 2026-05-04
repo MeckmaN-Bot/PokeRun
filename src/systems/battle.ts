@@ -552,7 +552,8 @@ export function determineTurnOrder(
   enemyMon: BattlePokemon,
   playerMove: Move,
   enemyMove: Move,
-  perks: Perk[]
+  perks: Perk[],
+  enemySpeedMult: number = 1,
 ): 'player' | 'enemy' {
   // Priority brackets
   if (playerMove.priority !== enemyMove.priority) {
@@ -567,6 +568,10 @@ export function determineTurnOrder(
 
   let playerSpeed = getEffectiveStat(playerMon, 'speed');
   let enemySpeed = getEffectiveStat(enemyMon, 'speed');
+  // Stake — Black bumps enemy speed by 25% globally.
+  if (enemySpeedMult !== 1) {
+    enemySpeed = Math.floor(enemySpeed * enemySpeedMult);
+  }
 
   // Quick Powder — first turn only
   if (monHasItem(playerMon, 'quick_powder') && (playerMon.turnsInBattle ?? 0) === 0) {

@@ -506,6 +506,15 @@ export interface GameState {
   pendingGenGate?: boolean;
   /** Deck id picked for this run ('standard' default). Drives deckMods. */
   deck?: string;
+  /** Stake id picked for this run ('white' default). Drives stakeMods. */
+  stake?: string;
+  /** Stake-resolved difficulty/reward multipliers. */
+  stakeMods?: {
+    bossBlindHpMult?: number;
+    coinRewardMult?: number;
+    shopPriceMult?: number;
+    enemySpeedMult?: number;
+  };
   /** Run-modifier flags resolved from the picked deck at run-start. Optional
    *  fields apply when set; all consumers should read each field independently. */
   deckMods?: {
@@ -720,6 +729,8 @@ export interface LeaderboardEntry {
     endless?: boolean;
     /** Deck id used for this run. Display-only on leaderboard, not part of rank. */
     deck?: string;
+    /** Stake id used for this run. Display-only on leaderboard, not part of rank. */
+    stake?: string;
   };
   created_at?: string;
 }

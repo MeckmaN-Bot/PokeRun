@@ -603,7 +603,7 @@ export class BattleScreen {
     }
 
     // Determine turn order
-    const order = determineTurnOrder(playerMon, enemyMon, playerMove, enemyMove, this.state.activePerks);
+    const order = determineTurnOrder(playerMon, enemyMon, playerMove, enemyMove, this.state.activePerks, this.state.stakeMods?.enemySpeedMult ?? 1);
 
     const logEl = this.container.querySelector<HTMLElement>('#battle-log');
 

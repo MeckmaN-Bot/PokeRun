@@ -64,6 +64,7 @@ import { saveRun, loadRun, clearRun } from './systems/saveRun';
 import { markBlindDiscovered } from './systems/discoveries';
 import { tryUnlock as tryUnlockAchievement } from './systems/achievements';
 import { bumpChampionClears } from './systems/championClears';
+import { unlockNextStake } from './systems/stakes';
 import { showChampionVictoryScreen } from './ui/screens/ChampionVictoryScreen';
 import { applySettings } from './systems/userSettings';
 import { getEliteStep } from './data/eliteFour';
@@ -672,6 +673,16 @@ async function startNewWave(): Promise<void> {
         e.battleHp = e.maxBattleHp;
       });
     }
+    // Stake — boss-blind HP multiplier (Red+Black). Applies in addition to
+    // The Wall (so a Red-Stake Wall = 1.5 × 2 = 3× HP). Stake mods only fire
+    // on actual boss waves where a blind is in play.
+    const blindHpMult = gameState.stakeMods?.bossBlindHpMult;
+    if (blindHpMult && blindHpMult !== 1 && bossBlind && config.isBossWave) {
+      enemyTeam.forEach(e => {
+        e.maxBattleHp = Math.floor(e.maxBattleHp * blindHpMult);
+        e.battleHp = e.maxBattleHp;
+      });
+    }
 
     // Reset boss-insurance flag at start of each boss wave
     if (config.isBossWave) {
@@ -799,8 +810,9 @@ function showBattleScreen(): void {
         eliteStepWin?.coinMultiplier ??
         gymLeaderWin?.coinMultiplier ??
         trainerArchetypeWin?.coinMultiplier ?? 1;
+      const stakeCoinMult = state.stakeMods?.coinRewardMult ?? 1;
       const totalCoins = Math.floor(
-        coinEarned * (1 + amuletBonus + eliteBonus) * coinMultiplier * trainerCoinMult
+        coinEarned * (1 + amuletBonus + eliteBonus) * coinMultiplier * trainerCoinMult * stakeCoinMult
       ) + tagBonus + investmentPayout;
 
       // Gym victory → award badge + matching perk if not yet held.
@@ -844,6 +856,7 @@ function showBattleScreen(): void {
           tryUnlockAchievement(state.playerName, 'champion');
           state.pendingChampionClears = bumpChampionClears(state.playerName);
           state.pendingChampionVictoryScreen = true;
+          unlockNextStake(state.playerName, state.stake);
         }
       }
 
@@ -995,6 +1008,15 @@ function showShopScreen(): void {
     const guaranteed = !!gameState.pendingVoucherSlot;
     gameState.shopVouchers = generateShopVouchers(gameState.wave, ownedVouchers, guaranteed);
     gameState.pendingVoucherSlot = false;
+  }
+
+  // Stake — Black bumps shop prices +50%. Apply post-generation across items,
+  // packs (skip free ones from Charm tag), and vouchers.
+  const priceMult = gameState.stakeMods?.shopPriceMult ?? 1;
+  if (priceMult !== 1) {
+    for (const si of gameState.shopItems) si.price = Math.floor(si.price * priceMult);
+    for (const sp of gameState.shopPacks) if (!sp.free) sp.price = Math.floor(sp.price * priceMult);
+    for (const sv of gameState.shopVouchers) sv.price = Math.floor(sv.price * priceMult);
   }
   gameState.freeRerollUsed = false;
   // Master Ball Luck perk: +1 free reroll per shop
