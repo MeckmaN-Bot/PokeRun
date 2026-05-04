@@ -1281,6 +1281,13 @@ html[data-reduce-motion="on"] *::after {
   color: var(--ink-3, #6b5e44); letter-spacing: 0.12em;
   font-style: italic;
 }
+.ss-discovery-line {
+  margin: 4px 0 10px;
+  padding: 0 4px;
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+}
 @media (max-width: 700px) {
   .ss-pb-row { grid-template-columns: repeat(2, 1fr); }
   .ss-pb-stat .v { font-size: 16px; }

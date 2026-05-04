@@ -11,6 +11,7 @@ import { escapeHtml, safeUrl } from '../../util/sanitize';
 import { hasSavedRun, loadRun, clearRun } from '../../systems/saveRun';
 import { loadSettings, saveSettings } from '../../systems/userSettings';
 import { getPersonalBest } from '../../systems/leaderboard';
+import { getDiscoveredCount, TOTAL_SYNERGIES } from '../../systems/discoveries';
 import { formatAct, formatBadges } from '../../util/runProgress';
 import { BADGES } from '../../data/badges';
 import { badgeSprite, imgErrorFallback } from '../../data/sprites';
@@ -225,12 +226,15 @@ export class StartScreen {
 
   private renderPersonalBest(): string {
     const pb = getPersonalBest(this.playerName);
+    const discovered = getDiscoveredCount(this.playerName);
+    const discoveryLine = `<div class="ss-discovery-line">Synergies discovered · ${discovered} / ${TOTAL_SYNERGIES}</div>`;
     if (!pb) {
       return `
         <div class="ss-personal-best" data-empty="true">
           <div class="ss-pb-eyebrow">Personal best</div>
           <div class="ss-pb-empty">No runs yet — start your first.</div>
         </div>
+        ${discoveryLine}
       `;
     }
     const d = pb.score_details ?? {} as NonNullable<typeof pb.score_details>;
@@ -244,6 +248,7 @@ export class StartScreen {
           <div class="ss-pb-stat"><span class="k">Starter</span><span class="v">${escapeHtml(d.starterName ?? '—')}</span></div>
         </div>
       </div>
+      ${discoveryLine}
     `;
   }
 

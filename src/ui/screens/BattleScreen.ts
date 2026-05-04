@@ -9,6 +9,7 @@ import {
 } from '../../systems/battle';
 import { getBossBlindById, blindDisablesItems } from '../../data/bossBlinds';
 import { evaluateSynergies, type ActiveSynergy } from '../../systems/synergies';
+import { markDiscovered } from '../../systems/discoveries';
 import { ALL_ITEMS } from '../../data/items';
 import { attachTooltipDelegation } from '../components/Tooltip';
 import { getEffectivenessLabel } from '../../data/typeChart';
@@ -427,6 +428,9 @@ export class BattleScreen {
     });
 
     this.activeSynergies = activeSynergies;
+    if (activeSynergies.length > 0) {
+      markDiscovered(this.state.playerName, activeSynergies.map(s => s.id));
+    }
     const label = activeSynergies.length > 0
       ? `<span class="syn-label">Synergies</span>`
       : '';
