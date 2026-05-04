@@ -51,7 +51,11 @@ export function logout(): void {
 }
 
 function setSession(session: Session): void {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  // Storage may be disabled or full — in-memory session would be ideal, but the
+  // app reads getSession() from localStorage everywhere. We at least keep the
+  // auth flow from crashing; the user can still play this tab's session via
+  // the playerName the caller already has. Reload will land them on auth again.
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch { /* ignore */ }
 }
 
 export async function register(
