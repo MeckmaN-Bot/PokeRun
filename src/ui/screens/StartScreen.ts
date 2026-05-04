@@ -258,6 +258,143 @@ export class StartScreen {
     `;
   }
 
+  /** 3-cell strip — replaces the temporary stacked placeholder. Each cell
+   *  shows an eyebrow + current value; click opens its detail modal. */
+  private renderThreeCellStrip(): string {
+    const synergies = getDiscoveredCount(this.playerName);
+    const blinds = getDiscoveredBlindCount(this.playerName);
+    const achievements = getUnlockedCount(this.playerName);
+    const codexProgress = synergies + blinds + achievements;
+    const codexTotal = TOTAL_SYNERGIES + TOTAL_BLINDS + TOTAL_ACHIEVEMENTS;
+
+    const selectedDeck = DECKS.find(d => d.id === this.selectedDeck) ?? DECKS[0];
+    // Strip ' Field Kit' suffix for narrow cell layout; mono adds a type chip.
+    const fieldKitShort = selectedDeck.name.replace(/ Field Kit$/, '');
+    const monoChip = selectedDeck.id === 'mono_type'
+      ? `<span class="ss-tcs-mono-chip type-chip type-${this.selectedMonoType}">${escapeHtml(this.selectedMonoType.toUpperCase())}</span>`
+      : '';
+
+    const selectedStake = STAKES.find(s => s.id === this.selectedStake) ?? STAKES[0];
+
+    return `
+      <div class="ss-three-cell-strip">
+        <button type="button" class="ss-tcs-cell" id="ss-codex-cell" aria-label="Open Codex hub">
+          <div class="ss-tcs-eyebrow">CODEX</div>
+          <div class="ss-tcs-value">${codexProgress} / ${codexTotal}</div>
+        </button>
+        <button type="button" class="ss-tcs-cell" id="ss-fieldkit-cell" aria-label="Open Field Kit picker">
+          <div class="ss-tcs-eyebrow">FIELD KIT</div>
+          <div class="ss-tcs-value">${escapeHtml(fieldKitShort)}${monoChip}</div>
+        </button>
+        <button type="button" class="ss-tcs-cell" id="ss-rank-cell" aria-label="Open Trainer Rank picker">
+          <div class="ss-tcs-eyebrow">TRAINER RANK</div>
+          <div class="ss-tcs-value">${escapeHtml(selectedStake.name)}</div>
+        </button>
+      </div>
+    `;
+  }
+
+  private refreshThreeCellStrip(): void {
+    const strip = this.container.querySelector<HTMLElement>('.ss-three-cell-strip');
+    if (!strip) return;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = this.renderThreeCellStrip();
+    const next = wrap.firstElementChild as HTMLElement;
+    if (next) {
+      strip.replaceWith(next);
+      this.wireThreeCellStripEvents();
+    }
+  }
+
+  private wireThreeCellStripEvents(): void {
+    this.container.querySelector<HTMLButtonElement>('#ss-codex-cell')
+      ?.addEventListener('click', () => this.openCodexHub());
+    this.container.querySelector<HTMLButtonElement>('#ss-fieldkit-cell')
+      ?.addEventListener('click', () => this.openFieldKitDetail());
+    this.container.querySelector<HTMLButtonElement>('#ss-rank-cell')
+      ?.addEventListener('click', () => this.openTrainerRankDetail());
+  }
+
+  /** Trainer Rank Detail Modal — 3 pills + selected description + cascade
+   *  hint. Mirrors openFieldKitDetail pattern. Picking a pill updates state,
+   *  refreshes modal in-place, and refreshes the 3-cell strip behind it. */
+  private openTrainerRankDetail(): void {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay codex-overlay trainer-rank-detail-overlay';
+    overlay.innerHTML = `
+      <div class="modal trainer-rank-detail-modal">
+        <button class="modal-close" id="trd-close" type="button">✕</button>
+        <div class="codex-eyebrow">— Run difficulty —</div>
+        <h2 class="modal-title">Trainer <em>Rank</em></h2>
+        <p class="trd-modal-sub">Difficulty rank — earned by clearing Champion at lower tiers.</p>
+        ${this.renderTrainerRankBody()}
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#trd-close')?.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    this.wireTrainerRankPills(overlay);
+  }
+
+  private renderTrainerRankBody(): string {
+    const stakeUnlocked = getUnlockedStakes(this.playerName);
+    const firstLockedStake = STAKES.find(s => !stakeUnlocked.has(s.id));
+    const stakeHintHtml = firstLockedStake?.unlockAfter
+      ? `<div class="stake-picker-hint">Unlock ${escapeHtml(firstLockedStake.name)} rank by clearing Champion as ${escapeHtml(this.stakeNameForId(firstLockedStake.unlockAfter))}.</div>`
+      : '';
+    const pills = STAKES.map(s => {
+      const isUnlocked = stakeUnlocked.has(s.id);
+      const isSelected = this.selectedStake === s.id && isUnlocked;
+      const lockHint = !isUnlocked && s.unlockAfter
+        ? `Unlock: clear Champion on ${this.stakeNameForId(s.unlockAfter)}`
+        : s.description;
+      return `<button type="button"
+                      class="stake-pill stake-${s.id}${isSelected ? ' selected' : ''}${!isUnlocked ? ' locked' : ''}"
+                      data-stake-id="${s.id}"
+                      title="${escapeHtml(lockHint)}"
+                      ${!isUnlocked ? 'disabled' : ''}>
+                ${escapeHtml(isUnlocked ? s.name : '???')}
+              </button>`;
+    }).join('');
+    const sel = STAKES.find(s => s.id === this.selectedStake) ?? STAKES[0];
+    const desc = `<div class="trd-stake-desc"><b>${escapeHtml(sel.name)}</b> · ${escapeHtml(sel.description)}</div>`;
+    return `
+      <div class="trd-rank-body">
+        <div class="stake-picker-pills">${pills}</div>
+        ${desc}
+        ${stakeHintHtml}
+      </div>
+    `;
+  }
+
+  private wireTrainerRankPills(scope: HTMLElement): void {
+    scope.querySelectorAll<HTMLButtonElement>('[data-stake-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        const id = btn.dataset['stakeId'] ?? 'white';
+        this.selectedStake = id;
+        saveLastStake(this.playerName, id);
+        this.refreshTrainerRankBody(scope);
+        this.refreshThreeCellStrip();
+      });
+    });
+  }
+
+  private refreshTrainerRankBody(scope: HTMLElement): void {
+    const body = scope.querySelector<HTMLElement>('.trd-rank-body');
+    if (!body) return;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = this.renderTrainerRankBody();
+    const next = wrap.firstElementChild as HTMLElement;
+    if (next) {
+      body.replaceWith(next);
+      this.wireTrainerRankPills(scope);
+    }
+  }
+
   private renderCodexHubButton(): string {
     const synergies = getDiscoveredCount(this.playerName);
     const blinds = getDiscoveredBlindCount(this.playerName);
@@ -324,7 +461,7 @@ export class StartScreen {
         this.selectedDeck = id;
         saveLastDeck(this.playerName, id);
         this.refreshDeckPicker(scope);
-        this.refreshFieldKitCompactRow();
+        this.refreshThreeCellStrip();
         this.refreshStarterFilter();
       });
     });
@@ -334,45 +471,10 @@ export class StartScreen {
         this.selectedMonoType = t;
         saveLastMonoType(this.playerName, t);
         this.refreshDeckPicker(scope);
-        this.refreshFieldKitCompactRow();
+        this.refreshThreeCellStrip();
         this.refreshStarterFilter();
       });
     });
-  }
-
-  /** Update the compact Field Kit row on StartScreen to reflect the
-   *  current selection. Called after the modal updates state. */
-  private refreshFieldKitCompactRow(): void {
-    const row = this.container.querySelector<HTMLElement>('.ss-field-kit-row');
-    if (!row) return;
-    const wrap = document.createElement('div');
-    wrap.innerHTML = this.renderFieldKitCompactRow();
-    const next = wrap.firstElementChild as HTMLElement;
-    if (next) {
-      row.replaceWith(next);
-      next.querySelector<HTMLButtonElement>('#ss-fk-change-open')
-        ?.addEventListener('click', () => this.openFieldKitDetail());
-    }
-  }
-
-  private refreshStakePickerRow(): void {
-    const row = this.container.querySelector<HTMLElement>('.ss-stake-row');
-    if (!row) return;
-    const wrap = document.createElement('div');
-    wrap.innerHTML = this.renderStakePickerRow();
-    const next = wrap.firstElementChild as HTMLElement;
-    if (next) {
-      row.replaceWith(next);
-      next.querySelectorAll<HTMLButtonElement>('[data-stake-id]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          if (btn.disabled) return;
-          const id = btn.dataset['stakeId'] ?? 'white';
-          this.selectedStake = id;
-          saveLastStake(this.playerName, id);
-          this.refreshStakePickerRow();
-        });
-      });
-    }
   }
 
   /** Field Kit Detail modal — full 4-card picker + Mono-Type sub-picker
@@ -906,6 +1008,7 @@ export class StartScreen {
           </div>
 
           ${this.renderResumeBanner()}
+          ${this.renderBadgeTrophyStrip()}
 
           <!-- Section-headline above starters -->
           <div class="ss-mag-section-head">
@@ -913,13 +1016,7 @@ export class StartScreen {
             <div class="ss-mag-section-meta">${this.starterData.length} AVAILABLE · PRESS A TO CONFIRM</div>
           </div>
 
-          <!-- TEMPORARY 3-cell placeholder (Slice B replaces this) -->
-          <div class="ss-mag-three-cell-placeholder">
-            ${this.renderCodexHubButton()}
-            ${this.renderBadgeTrophyStrip()}
-            ${this.renderFieldKitCompactRow()}
-            ${this.renderStakePickerRow()}
-          </div>
+          ${this.renderThreeCellStrip()}
 
           <!-- Starter selection -->
           <div class="starter-section">
@@ -1205,24 +1302,8 @@ export class StartScreen {
     const closeHowtoplay = this.container.querySelector('#close-howtoplay')!;
     const logoutBtn      = this.container.querySelector('#ss-back-to-auth');
 
-    // Codex Hub — opens consolidated meta-progression modal.
-    this.container.querySelector<HTMLButtonElement>('#ss-codex-hub-open')
-      ?.addEventListener('click', () => this.openCodexHub());
-
-    // Field Kit — compact row 'Change ▾' opens the detail modal.
-    this.container.querySelector<HTMLButtonElement>('#ss-fk-change-open')
-      ?.addEventListener('click', () => this.openFieldKitDetail());
-
-    // Trainer Rank pills — pickable directly on the StartScreen.
-    this.container.querySelectorAll<HTMLButtonElement>('[data-stake-id]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (btn.disabled) return;
-        const id = btn.dataset['stakeId'] ?? 'white';
-        this.selectedStake = id;
-        saveLastStake(this.playerName, id);
-        this.refreshStakePickerRow();
-      });
-    });
+    // 3-cell strip — each cell opens its detail modal.
+    this.wireThreeCellStripEvents();
 
     // Trainer-cycle button — toggle gender, refresh eyebrow color label.
     const trainerCycle = this.container.querySelector<HTMLButtonElement>('#ss-trainer-cycle');

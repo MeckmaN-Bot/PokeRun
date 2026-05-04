@@ -911,9 +911,76 @@ body::after {
   color: var(--ink-3);
 }
 
-/* TEMPORARY 3-cell placeholder — Slice B replaces this with proper strip. */
-.ss-mag-three-cell-placeholder {
-  display: flex; flex-direction: column; gap: 8px;
+/* 3-cell strip — CODEX / FIELD KIT / TRAINER RANK. Each cell opens a modal. */
+.ss-three-cell-strip {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin: 4px 0 8px;
+}
+.ss-tcs-cell {
+  appearance: none; -webkit-appearance: none;
+  background: transparent;
+  border: 1.5px dashed var(--ink);
+  padding: 10px 14px;
+  cursor: pointer;
+  display: flex; flex-direction: column; gap: 4px;
+  text-align: left;
+  min-height: 70px;
+  font-family: inherit; color: inherit;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+.ss-tcs-cell:hover {
+  transform: translateY(-1px);
+  background: rgba(180,53,42,0.04);
+  border-color: var(--oxblood);
+}
+.ss-tcs-cell:active { transform: translateY(0); }
+.ss-tcs-eyebrow {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--ink-2);
+}
+.ss-tcs-value {
+  font-family: var(--font-display); font-style: italic; font-weight: 700;
+  font-size: 22px; color: var(--ink);
+  line-height: 1.1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ss-tcs-mono-chip {
+  display: inline-block;
+  font-family: var(--font-mono); font-style: normal;
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 1px 5px; margin-left: 6px;
+  border: 1px solid var(--ink);
+  vertical-align: middle;
+}
+
+/* Trainer Rank Detail Modal */
+.trd-modal-sub {
+  font-family: var(--font-mono); font-style: italic;
+  font-size: 12px; color: var(--ink-2);
+  margin: 4px 0 16px;
+}
+.trd-rank-body { display: flex; flex-direction: column; gap: 12px; }
+.trd-stake-desc {
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--ink-2);
+  padding-top: 10px;
+  border-top: 1px dashed var(--ink-3);
+  line-height: 1.5;
+}
+.trd-stake-desc b {
+  font-family: var(--font-display); font-style: italic;
+  color: var(--ink); font-size: 14px;
+}
+
+@media (max-width: 520px) {
+  .ss-three-cell-strip { gap: 8px; }
+  .ss-tcs-cell { min-height: 56px; padding: 8px 10px; }
+  .ss-tcs-value { font-size: 16px; }
+  .ss-tcs-eyebrow { font-size: 9px; letter-spacing: 0.14em; }
+  .ss-tcs-mono-chip { font-size: 8px; padding: 1px 4px; margin-left: 4px; }
 }
 
 /* Magazine footer — 3 columns */
