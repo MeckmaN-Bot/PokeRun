@@ -163,3 +163,16 @@ export function getLeaderboardStatusMessage(): string {
   if (isConfigured) return '◉ Connected to global leaderboard';
   return '◇ Local leaderboard (set up Supabase for global scores)';
 }
+
+/**
+ * Look up a player's best run by name. Local-only — Supabase round-trip is
+ * unnecessary for a startup-screen card and would slow first paint. The local
+ * fallback already mirrors the player's runs since addLocalEntry runs on every
+ * submit. v1: name-keyed (case-insensitive); not account-scoped, so multiple
+ * users sharing a name will conflate. Account-scoped PB is a future spec.
+ */
+export function getPersonalBest(name: string): LeaderboardEntry | null {
+  if (!name) return null;
+  const entries = getLocalLeaderboard();
+  return entries.find(e => e.name.toLowerCase() === name.toLowerCase()) ?? null;
+}

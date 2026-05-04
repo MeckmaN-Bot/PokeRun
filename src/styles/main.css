@@ -1242,6 +1242,50 @@ html[data-reduce-motion="on"] *::after {
 }
 .resume-banner-actions { display: flex; gap: 8px; align-items: center; }
 
+/* Personal Best card on StartScreen */
+.ss-personal-best {
+  margin: 6px 0 10px;
+  padding: 10px 14px 12px;
+  background: color-mix(in srgb, var(--paper, #f4f1e8) 84%, var(--ink, #1a1a1a) 4%);
+  border: 2px dashed var(--ink, #1a1a1a);
+  box-shadow: 3px 3px 0 var(--ink, #1a1a1a);
+  transform: rotate(-0.15deg);
+}
+.ss-pb-eyebrow {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.32em; text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+  margin-bottom: 6px;
+}
+.ss-pb-row {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+}
+.ss-pb-stat {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 4px 6px;
+  background: var(--paper, #f4f1e8);
+  border: 1px solid var(--paper-edge, rgba(0,0,0,0.18));
+}
+.ss-pb-stat .k {
+  font-family: var(--font-mono); font-size: 9px;
+  letter-spacing: 0.28em; text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+}
+.ss-pb-stat .v {
+  font-family: var(--font-display); font-weight: 800; font-style: italic;
+  font-size: 18px; color: var(--ink, #1a1a1a);
+  letter-spacing: 0.02em;
+}
+.ss-pb-empty {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--ink-3, #6b5e44); letter-spacing: 0.12em;
+  font-style: italic;
+}
+@media (max-width: 700px) {
+  .ss-pb-row { grid-template-columns: repeat(2, 1fr); }
+  .ss-pb-stat .v { font-size: 16px; }
+}
+
 /* Badge trophy strip on StartScreen — only renders when a saved run has badges */
 .trophy-strip {
   margin: 6px 0 10px;

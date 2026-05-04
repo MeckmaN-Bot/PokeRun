@@ -2,6 +2,7 @@ import type { LeaderboardEntry } from '../../types';
 import { getTopScores, getLeaderboardStatusMessage } from '../../systems/leaderboard';
 import { fadeIn } from '../animations';
 import { gsap } from 'gsap';
+import { formatAct, formatBadges } from '../../util/runProgress';
 
 export class LeaderboardScreen {
   private container: HTMLElement;
@@ -165,15 +166,3 @@ function escapeHtml(str: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function formatAct(n: number | undefined | null): string {
-  if (n == null) return '—';
-  if (n >= 10) return 'Champion ✓';
-  if (n === 9) return 'League';
-  if (n >= 1 && n <= 8) return `Act ${n}`;
-  return '—';
-}
-
-function formatBadges(n: number | undefined | null): string {
-  if (n == null) return '—';
-  return `${n}/8`;
-}

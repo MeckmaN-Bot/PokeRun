@@ -10,6 +10,8 @@ import { mountAudioControls } from '../../audio/AudioSettingsPanel';
 import { escapeHtml, safeUrl } from '../../util/sanitize';
 import { hasSavedRun, loadRun, clearRun } from '../../systems/saveRun';
 import { loadSettings, saveSettings } from '../../systems/userSettings';
+import { getPersonalBest } from '../../systems/leaderboard';
+import { formatAct, formatBadges } from '../../util/runProgress';
 import { BADGES } from '../../data/badges';
 import { badgeSprite, imgErrorFallback } from '../../data/sprites';
 import { wasSeen, markSeen, resetTutorial } from '../../systems/tutorial';
@@ -221,6 +223,30 @@ export class StartScreen {
     `;
   }
 
+  private renderPersonalBest(): string {
+    const pb = getPersonalBest(this.playerName);
+    if (!pb) {
+      return `
+        <div class="ss-personal-best" data-empty="true">
+          <div class="ss-pb-eyebrow">Personal best</div>
+          <div class="ss-pb-empty">No runs yet — start your first.</div>
+        </div>
+      `;
+    }
+    const d = pb.score_details ?? {} as NonNullable<typeof pb.score_details>;
+    return `
+      <div class="ss-personal-best" data-empty="false">
+        <div class="ss-pb-eyebrow">Personal best</div>
+        <div class="ss-pb-row">
+          <div class="ss-pb-stat"><span class="k">Waves</span><span class="v">${pb.score_waves}</span></div>
+          <div class="ss-pb-stat"><span class="k">Act</span><span class="v">${formatAct(d.actReached)}</span></div>
+          <div class="ss-pb-stat"><span class="k">Badges</span><span class="v">${formatBadges(d.badgesEarned)}</span></div>
+          <div class="ss-pb-stat"><span class="k">Starter</span><span class="v">${escapeHtml(d.starterName ?? '—')}</span></div>
+        </div>
+      </div>
+    `;
+  }
+
   private wireHtpPager(modalEl: HTMLElement): void {
     const book = modalEl.querySelector<HTMLElement>('.htp-book');
     if (!book) return;
@@ -300,6 +326,7 @@ export class StartScreen {
           </div>
 
           ${this.renderResumeBanner()}
+          ${this.renderPersonalBest()}
           ${this.renderBadgeTrophyStrip()}
 
           <!-- Starter selection -->
