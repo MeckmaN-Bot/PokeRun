@@ -721,6 +721,11 @@ function showBattleScreen(): void {
     if (bs?.winner === 'player') {
       // First Step — fires once per username, idempotent.
       tryUnlockAchievement(state.playerName, 'first_step');
+      // Hall of Records fires whenever wavesCleared >= 30 (BattleScreen has just
+      // updated runStats.wavesCleared with this win's wave number).
+      if ((state.runStats.wavesCleared ?? 0) >= 30) {
+        tryUnlockAchievement(state.playerName, 'hall_of_records');
+      }
       // Victory — award coins
       const isBossVictory = bs.isBossWave;
       void Audio.playMusic('music.victory', { fadeMs: 200, loop: false, volume: 0.95 });
@@ -806,6 +811,10 @@ function showBattleScreen(): void {
         state.actBossBlind = null;
         state.actStep = 0;
         state.currentAct += 1;
+        // Survivor — reaching act 5 means Erika just got cleared.
+        if (state.currentAct >= 5) {
+          tryUnlockAchievement(state.playerName, 'survivor');
+        }
       }
       // Elite Four / Champion → advance league progression.
       if (eliteStepWin) {
@@ -818,6 +827,9 @@ function showBattleScreen(): void {
 
       const oldCoins = state.coins;
       state.coins += totalCoins;
+      if (state.coins >= 500) {
+        tryUnlockAchievement(state.playerName, 'rich_trainer');
+      }
 
       // Investment resets on boss clear
       if (isBossVictory && state.investmentCoins) {

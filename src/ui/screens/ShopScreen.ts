@@ -5,6 +5,7 @@ import { renderTypeBadges } from '../components/TypeBadge';
 import { renderHPBar } from '../components/HPBar';
 import { purchaseShopItem, rerollShop, getRerollCost, canAfford } from '../../systems/shop';
 import { fadeIn, animateCoinGain, showToast } from '../animations';
+import { tryUnlock as tryUnlockAchievement } from '../../systems/achievements';
 import { toBattlePokemon, xpForLevel, monHasItem } from '../../systems/battle';
 import { fetchPokemon, learnMovesForLevel } from '../../api/pokeapi';
 import { showEvolutionOverlay } from './EvolutionOverlay';
@@ -1738,6 +1739,7 @@ export class ShopScreen {
       (this.state as any).curseTimeDebtWaves = ((this.state as any).curseTimeDebtWaves ?? 0) + 2;
     }
     showToast(`Curse: ${curse.name} — ${curse.description}`, 'error');
+    tryUnlockAchievement(this.state.playerName, 'spectral_dabbler');
   }
 
   private closePackModal(): void {

@@ -17,17 +17,25 @@ export interface Achievement {
 }
 
 export const ACHIEVEMENTS: Achievement[] = [
-  { id: 'first_step',      name: 'First Step',      eyebrow: 'First steps.',
+  { id: 'first_step',       name: 'First Step',       eyebrow: 'First steps.',
     description: 'Clear your first wave. Every legend starts here.' },
-  { id: 'boulder_master',  name: 'Boulder Master',  eyebrow: 'Act 1.',
+  { id: 'boulder_master',   name: 'Boulder Master',   eyebrow: 'Act 1.',
     description: 'Defeat Brock and earn the Boulder Badge.' },
-  { id: 'champion',        name: 'Champion',        eyebrow: 'Hall of Fame.',
+  { id: 'survivor',         name: 'Survivor',         eyebrow: 'Five badges deep.',
+    description: 'Reach Act 5 (defeat Erika).' },
+  { id: 'hall_of_records',  name: 'Hall of Records',  eyebrow: 'Thirty waves clear.',
+    description: 'Survive 30+ waves in a single run.' },
+  { id: 'champion',         name: 'Champion',         eyebrow: 'Hall of Fame.',
     description: 'Defeat the Champion and complete the league.' },
-  { id: 'mono_master',     name: 'Mono Master',     eyebrow: 'Pure of type.',
+  { id: 'mono_master',      name: 'Mono Master',      eyebrow: 'Pure of type.',
     description: 'Defeat a gym leader with a mono-type team.' },
-  { id: 'synergist',       name: 'Synergist',       eyebrow: 'Catalogue complete.',
+  { id: 'rich_trainer',     name: 'Rich Trainer',     eyebrow: 'Pocket full of Pokédollars.',
+    description: 'Bank 500+ coins in a single run.' },
+  { id: 'spectral_dabbler', name: 'Spectral Dabbler', eyebrow: 'Fortune at a price.',
+    description: 'Accept a Premier Ball Spectral Curse.' },
+  { id: 'synergist',        name: 'Synergist',        eyebrow: 'Catalogue complete.',
     description: 'Trigger every synergy at least once.' },
-  { id: 'field_reference', name: 'Field Reference', eyebrow: 'Catalogue complete.',
+  { id: 'field_reference',  name: 'Field Reference',  eyebrow: 'Catalogue complete.',
     description: 'Face every Boss Blind at least once.' },
 ];
 
