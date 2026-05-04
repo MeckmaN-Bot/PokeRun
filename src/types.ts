@@ -504,6 +504,12 @@ export interface GameState {
   leagueStep?: number;
   /** Pending generation-gate prompt after the champion is defeated. */
   pendingGenGate?: boolean;
+  /** Pending Champion-victory celebration overlay; fires before pendingGenGate. */
+  pendingChampionVictoryScreen?: boolean;
+  /** Snapshot of championClears at the moment of the most recent Champion KO,
+   *  so the victory screen can display the same value the bump returned even
+   *  on a save+resume. */
+  pendingChampionClears?: number;
   /** Active arena gauntlet (multi-step gym sequence), or null if not in one. */
   arenaState?: ArenaState | null;
   /** Pre-rolled Boss Blind for this act's gym leader. Re-rolled on act change. */

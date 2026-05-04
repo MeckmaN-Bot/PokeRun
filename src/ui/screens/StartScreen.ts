@@ -18,6 +18,7 @@ import {
 import { SYNERGY_CATALOG } from '../../systems/synergies';
 import { BOSS_BLINDS } from '../../data/bossBlinds';
 import { ACHIEVEMENTS, getUnlockedSet, getUnlockedCount, TOTAL_ACHIEVEMENTS } from '../../systems/achievements';
+import { getChampionClears } from '../../systems/championClears';
 import { formatAct, formatBadges } from '../../util/runProgress';
 import { BADGES } from '../../data/badges';
 import { badgeSprite, imgErrorFallback } from '../../data/sprites';
@@ -237,7 +238,8 @@ export class StartScreen {
     const achievementsUnlocked = getUnlockedCount(this.playerName);
     const discoveryLine = `<button type="button" class="ss-discovery-line" id="ss-discovery-open" title="Open Synergy Codex">Synergies discovered · ${discovered} / ${TOTAL_SYNERGIES} →</button>
       <button type="button" class="ss-discovery-line" id="ss-blind-codex-open" title="Open Boss Blind Codex">Boss Blinds faced · ${blindsFaced} / ${TOTAL_BLINDS} →</button>
-      <button type="button" class="ss-discovery-line" id="ss-achievements-open" title="Open Achievements">Achievements · ${achievementsUnlocked} / ${TOTAL_ACHIEVEMENTS} →</button>`;
+      <button type="button" class="ss-discovery-line" id="ss-achievements-open" title="Open Achievements">Achievements · ${achievementsUnlocked} / ${TOTAL_ACHIEVEMENTS} →</button>
+      <div class="ss-discovery-line champion-clears-line">Champion clears · ${getChampionClears(this.playerName)}</div>`;
     if (!pb) {
       return `
         <div class="ss-personal-best" data-empty="true">

@@ -1299,6 +1299,17 @@ html[data-reduce-motion="on"] *::after {
   color: var(--ink-3, #6b5e44); letter-spacing: 0.12em;
   font-style: italic;
 }
+/* Champion-clears info line — same dashed framing as the codex buttons but
+ * non-interactive (no hover, default cursor). */
+.champion-clears-line.ss-discovery-line {
+  cursor: default;
+  color: var(--ink-2, #2e2822);
+}
+.champion-clears-line.ss-discovery-line:hover {
+  background: transparent;
+  color: var(--ink-2, #2e2822);
+}
+
 .ss-discovery-line {
   display: block;
   margin: 4px 0 10px;
@@ -2257,6 +2268,82 @@ html[data-reduce-motion="on"] *::after {
 .gover-foot {
   display: flex; justify-content: center; gap: 10px;
   border-top: 3px double var(--ink); padding-top: 10px;
+}
+
+/* Champion Victory celebration overlay (between Champion-KO and gen-gate) */
+.champion-victory-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  display: grid; place-items: center;
+  padding: 24px;
+  background: rgba(26, 22, 18, 0.85);
+  backdrop-filter: blur(4px);
+  animation: cv-fade 220ms ease both;
+}
+.champion-victory-overlay.closing {
+  animation: cv-fade 200ms ease both reverse;
+}
+@keyframes cv-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.champion-victory-card {
+  position: relative;
+  max-width: 480px;
+  width: min(480px, 92vw);
+  background: var(--paper, #f4f1e8);
+  border: 3px solid var(--ink, #1a1a1a);
+  box-shadow: 10px 10px 0 var(--ink, #1a1a1a);
+  padding: 28px 28px 24px;
+  text-align: center;
+  display: grid;
+  gap: 12px;
+}
+.champion-victory-card::before {
+  content: '';
+  position: absolute; inset: 6px;
+  border: 1px solid var(--ink, #1a1a1a);
+  pointer-events: none;
+}
+.champion-victory-title {
+  font-family: var(--font-display); font-weight: 900; font-style: italic;
+  font-size: 32px; line-height: 1.05; color: var(--ink, #1a1a1a);
+  margin: 0;
+}
+.champion-victory-title em { color: var(--gold, #c9962b); font-style: italic; }
+.champion-victory-trophy {
+  display: grid; place-items: center;
+  padding: 8px 0;
+}
+.champion-trophy-img {
+  width: 128px; height: 128px;
+  image-rendering: pixelated;
+  filter: drop-shadow(4px 4px 0 var(--ink, #1a1a1a));
+}
+.champion-victory-summary {
+  font-family: var(--font-mono); font-size: 12px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+}
+.champion-victory-summary b { color: var(--ink, #1a1a1a); }
+.champion-victory-clears {
+  font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--gold, #c9962b);
+}
+.champion-victory-clears b {
+  font-family: var(--font-display); font-weight: 800; font-size: 18px;
+  color: var(--ink, #1a1a1a);
+}
+.champion-victory-cta {
+  margin-top: 4px;
+  align-self: center;
+  min-width: 160px;
+  min-height: 44px;
+}
+@media (max-width: 520px) {
+  .champion-victory-card { padding: 22px 18px; }
+  .champion-victory-title { font-size: 26px; }
+  .champion-trophy-img { width: 100px; height: 100px; }
 }
 
 /* Run-end progress display */

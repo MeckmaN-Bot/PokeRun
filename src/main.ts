@@ -54,6 +54,8 @@ import { buildArena } from './data/arenas';
 import { saveRun, loadRun, clearRun } from './systems/saveRun';
 import { markBlindDiscovered } from './systems/discoveries';
 import { tryUnlock as tryUnlockAchievement } from './systems/achievements';
+import { bumpChampionClears } from './systems/championClears';
+import { showChampionVictoryScreen } from './ui/screens/ChampionVictoryScreen';
 import { applySettings } from './systems/userSettings';
 import { getEliteStep } from './data/eliteFour';
 import { getBadge } from './data/badges';
@@ -822,6 +824,8 @@ function showBattleScreen(): void {
         if (eliteStepWin.isChampion) {
           state.pendingGenGate = true;
           tryUnlockAchievement(state.playerName, 'champion');
+          state.pendingChampionClears = bumpChampionClears(state.playerName);
+          state.pendingChampionVictoryScreen = true;
         }
       }
 
@@ -1117,7 +1121,18 @@ function ensureBlindsRolled(state: GameState): void {
 function showPathSelect(): void {
   if (!gameState) return;
 
-  // Champion just defeated → show generation gate before any new path.
+  // Champion just defeated → fanfare overlay first, then the gen-gate.
+  if (gameState.pendingChampionVictoryScreen) {
+    const clears = gameState.pendingChampionClears ?? 0;
+    showChampionVictoryScreen(gameState, clears, () => {
+      if (!gameState) return;
+      gameState.pendingChampionVictoryScreen = false;
+      gameState.pendingChampionClears = 0;
+      saveRun(gameState);
+      showPathSelect(); // re-enter — gen-gate fires next.
+    });
+    return;
+  }
   if (gameState.pendingGenGate) {
     showGenerationGate();
     return;
