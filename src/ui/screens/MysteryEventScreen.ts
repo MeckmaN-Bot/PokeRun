@@ -12,8 +12,7 @@ import { itemSprite, imgErrorFallback } from '../../data/sprites';
 type Outcome =
   | { kind: 'coins'; amount: number }
   | { kind: 'item'; item: InventoryItem }
-  | { kind: 'heal'; pct: number }
-  | { kind: 'nothing' };
+  | { kind: 'heal'; pct: number };
 
 function rollOutcome(): Outcome {
   const r = Math.random();
@@ -30,7 +29,8 @@ function rollOutcome(): Outcome {
   if (r < 0.88) {
     return { kind: 'heal', pct: 0.35 };
   }
-  return { kind: 'nothing' };
+  // Pity payout — was previously the 'nothing' branch. No path-click is wasted.
+  return { kind: 'coins', amount: 5 };
 }
 
 export class MysteryEventScreen {
@@ -134,6 +134,14 @@ export class MysteryEventScreen {
       `<div class="mystery-sprite-wrap"><img src="${itemSprite(slug)}" alt="" class="mystery-sprite" onerror="${imgErrorFallback(fallbackEmoji)}" /></div>`;
     switch (o.kind) {
       case 'coins':
+        if (o.amount === 5) {
+          return `
+            ${sprite('oran-berry', '🍒')}
+            <h3 class="path-card-title">A stray berry</h3>
+            <p class="path-card-hint">You found a stray berry and pocket change. +5¢</p>
+            <div class="mystery-cta">Tap to continue →</div>
+          `;
+        }
         return `
           ${sprite('nugget', '💰')}
           <h3 class="path-card-title">+${o.amount} coins</h3>
@@ -157,13 +165,6 @@ export class MysteryEventScreen {
           ${sprite('super-potion', '🌿')}
           <h3 class="path-card-title">Restorative herbs</h3>
           <p class="path-card-hint">+${Math.round(o.pct * 100)}% HP across the team.</p>
-          <div class="mystery-cta">Tap to continue →</div>
-        `;
-      case 'nothing':
-        return `
-          <div class="path-card-icon px-emoji">🍃</div>
-          <h3 class="path-card-title">Just leaves</h3>
-          <p class="path-card-hint">Nothing here. The route continues.</p>
           <div class="mystery-cta">Tap to continue →</div>
         `;
     }

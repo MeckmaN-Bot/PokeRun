@@ -2,6 +2,24 @@
    PokeRun — Field-guide redesign
    Warm paper + ink. Full viewport. No scroll.
    ============================================================ */
+
+/* ── Reduced-motion baseline ─────────────────────────────────
+ * Honor the OS-level a11y preference globally. Strips keyframe
+ * animations, transitions, and parallax-style transforms across
+ * every screen. Battle still resolves (game logic isn't gated on
+ * CSS), it just lands without the motion theatrics.
+ * Per-component bespoke overrides can re-enable specific motion
+ * cues if/when they're known not to cause discomfort. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 :root {
   /* Paper palette */
   --paper:       #f2ead9;
