@@ -17,7 +17,7 @@ const KEY = 'pokerun:settings:v1';
 
 const DEFAULTS: UserSettings = {
   reduceMotion: false,
-  animationSpeed: 1,
+  animationSpeed: 1.5,
 };
 
 let cache: UserSettings | null = null;

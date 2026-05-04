@@ -47,7 +47,7 @@ export function trainerSpriteUrl(slug: string): string {
 export const TRAINER_ARCHETYPES: TrainerArchetype[] = [
   {
     id: 'miner',
-    name: 'Bergarbeiter',
+    name: 'Hiker',
     shortLabel: 'Miner',
     flavour: 'Crusts the dust off his boots and grins. "Got a few rock-hards down here."',
     icon: '⛏',
@@ -59,7 +59,7 @@ export const TRAINER_ARCHETYPES: TrainerArchetype[] = [
   },
   {
     id: 'cop',
-    name: 'Polizist',
+    name: 'Officer',
     shortLabel: 'Officer',
     flavour: 'Tips his cap. "Routine inspection. Hope your Pokémon are squared away."',
     icon: '🚓',
@@ -71,7 +71,7 @@ export const TRAINER_ARCHETYPES: TrainerArchetype[] = [
   },
   {
     id: 'swimmer',
-    name: 'Schwimmer',
+    name: 'Swimmer',
     shortLabel: 'Swimmer',
     flavour: 'Goggles up. "The current\'s perfect. Want to spar before I dive?"',
     icon: '🏊',
@@ -83,7 +83,7 @@ export const TRAINER_ARCHETYPES: TrainerArchetype[] = [
   },
   {
     id: 'bug_catcher',
-    name: 'Käfersammler',
+    name: 'Bug Catcher',
     shortLabel: 'Bug Catcher',
     flavour: 'Holds out a net, eyes sparkling. "I just caught the perfect one!"',
     icon: '🐛',
@@ -95,7 +95,7 @@ export const TRAINER_ARCHETYPES: TrainerArchetype[] = [
   },
   {
     id: 'ranger',
-    name: 'Pfadfinder',
+    name: 'Pathfinder',
     shortLabel: 'Ranger',
     flavour: 'Field cap, weathered map. "Trail rules: clear battle, then we both move on."',
     icon: '🥾',
@@ -107,7 +107,7 @@ export const TRAINER_ARCHETYPES: TrainerArchetype[] = [
   },
   {
     id: 'channeler',
-    name: 'Geistheilerin',
+    name: 'Channeler',
     shortLabel: 'Channeler',
     flavour: 'Hood low. Whispers a name you don\'t catch.',
     icon: '🔮',
@@ -119,7 +119,7 @@ export const TRAINER_ARCHETYPES: TrainerArchetype[] = [
   },
   {
     id: 'school_kid',
-    name: 'Schulkind',
+    name: 'Youngster',
     shortLabel: 'Schoolkid',
     flavour: 'Bag bouncing, gap-tooth grin. "I just got my license!"',
     icon: '🎒',
@@ -132,7 +132,7 @@ export const TRAINER_ARCHETYPES: TrainerArchetype[] = [
   },
   {
     id: 'biker',
-    name: 'Rocker',
+    name: 'Biker',
     shortLabel: 'Biker',
     flavour: 'Engine idles. Leather creaks. "You blocking the road, kid?"',
     icon: '🏍',
@@ -144,7 +144,7 @@ export const TRAINER_ARCHETYPES: TrainerArchetype[] = [
   },
   {
     id: 'firebreather',
-    name: 'Feuerschlucker',
+    name: 'Burglar',
     shortLabel: 'Firebreather',
     flavour: 'Cracks his knuckles. "Light my fire, kid."',
     icon: '🔥',
@@ -156,7 +156,7 @@ export const TRAINER_ARCHETYPES: TrainerArchetype[] = [
   },
   {
     id: 'sailor',
-    name: 'Matrose',
+    name: 'Sailor',
     shortLabel: 'Sailor',
     flavour: 'Rolls his sleeves. "Salt in the air. Salt in your tea."',
     icon: '⚓',

@@ -56,7 +56,7 @@ export class GameOverScreen {
             <div class="stat-row"><div class="k">Total KOs</div><div class="v">${s.totalKOs}</div></div>
             <div class="stat-row"><div class="k">Damage dealt</div><div class="v">${s.totalDamageDealt.toLocaleString()}</div></div>
             <div class="stat-row"><div class="k">Items collected</div><div class="v">${s.itemsCollected}</div></div>
-            <div class="stat-row"><div class="k">Perks found</div><div class="v">${s.perksCollected}</div></div>
+            <div class="stat-row"><div class="k">Perks picked</div><div class="v">${s.perksCollected}</div></div>
             <div class="stat-row"><div class="k">Coins banked</div><div class="v">${this.state.coins.toLocaleString()}¢</div></div>
             <div id="submit-status" style="margin-top:10px;font-family:var(--font-mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3)">Submitting score…</div>
           </div>

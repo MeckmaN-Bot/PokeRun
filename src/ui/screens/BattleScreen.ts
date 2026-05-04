@@ -25,6 +25,7 @@ import {
 } from '../animations';
 import { gsap } from 'gsap';
 import { learnMovesForLevel } from '../../api/pokeapi';
+import { processPendingLearns } from './MoveLearnPicker';
 import { Audio } from '../../audio/AudioManager';
 import { isTourActive, isTourBattlePaused } from '../../systems/tutorialTour';
 
@@ -72,8 +73,8 @@ export class BattleScreen {
       bs.enemyTeam.forEach(mon => {
         mon.battleHp = 1;
         mon.maxBattleHp = Math.max(1, Math.min(mon.maxBattleHp, 1));
-        mon.attack = Math.max(1, Math.floor(mon.attack * 0.4));
-        mon.specialAttack = Math.max(1, Math.floor(mon.specialAttack * 0.4));
+        mon.effectiveStats.attack = Math.max(1, Math.floor(mon.effectiveStats.attack * 0.4));
+        mon.effectiveStats.spAtk = Math.max(1, Math.floor(mon.effectiveStats.spAtk * 0.4));
       });
     }
     // Make sure we don't start the battle with a fainted mon active
@@ -320,7 +321,10 @@ export class BattleScreen {
 
   private renderBagButtons(): string {
     const bs = this.state.battleState!;
-    const isSelecting = bs.phase === 'selecting' && !bs.autoBattle;
+    // Bag is usable any time the battle hasn't ended — auto-battle doesn't
+    // block manual item use, since picking targets is the only manual call
+    // the player makes once auto is on.
+    const battleOver = !!bs.winner || bs.phase === 'finished';
     const usable = (this.state.inventory ?? []).filter(inv => {
       const e = inv.item.effect;
       return inv.item.itemType === 'consumable' && (e.healPercent || e.healAmount || e.curesStatus || inv.item.id === 'full_restore' || inv.item.id === 'revive' || inv.item.id === 'max_revive');
@@ -328,10 +332,10 @@ export class BattleScreen {
     if (usable.length === 0) return '';
     return usable.map((inv, i) => `
       <button
-        class="ink-btn ghost sm${!isSelecting ? ' move-disabled' : ''}"
+        class="ink-btn ghost sm${battleOver ? ' move-disabled' : ''}"
         data-bag-index="${i}"
         data-tooltip-item-id="${inv.item.id}"
-        ${!isSelecting ? 'disabled' : ''}
+        ${battleOver ? 'disabled' : ''}
       >${itemArt(inv.item)} ${inv.item.name} ×${inv.quantity}</button>
     `).join('');
   }
@@ -423,8 +427,11 @@ export class BattleScreen {
     });
 
     this.activeSynergies = activeSynergies;
-    bar.innerHTML = activeSynergies.map(s => `
-      <div class="syn-badge syn-${s.color}" data-synergy-id="${s.id}">
+    const label = activeSynergies.length > 0
+      ? `<span class="syn-label">Synergies</span>`
+      : '';
+    bar.innerHTML = label + activeSynergies.map(s => `
+      <div class="syn-badge syn-${s.color}" data-synergy-id="${s.id}" title="Synergy — ${s.description ?? s.name}">
         <span class="syn-icon">${s.icon}</span>
         <span class="syn-name">${s.name}</span>
         <span class="syn-mult">×${s.multiplier.toFixed(2)}</span>
@@ -467,7 +474,7 @@ export class BattleScreen {
         });
         const idx = parseInt(bagBtn.dataset['bagIndex'] ?? '0');
         const invEntry = usable[idx];
-        if (invEntry) this.useBattleItem(invEntry.item);
+        if (invEntry) await this.useBattleItem(invEntry.item);
       }
     });
 
@@ -708,11 +715,12 @@ export class BattleScreen {
       return;
     }
 
-    // Effectiveness messages
+    // Effectiveness messages — glued to the move name so it can't drift
+    // onto an adjacent log entry in the ticker.
     const effectLabel = getEffectivenessLabel(result.effectiveness);
     if (effectLabel) {
       this.addLog(logEl, {
-        text: effectLabel,
+        text: `${move.displayName} — ${effectLabel}`,
         type: result.effectiveness > 1 ? 'super_effective' : 'not_effective',
       });
       if (result.effectiveness > 1) {
@@ -1126,11 +1134,13 @@ export class BattleScreen {
           this.updateHPDisplay(attacker, bs);
           this.renderTeamPortraits();
 
-          // Learn new moves
+          // Learn new moves. When 4 slots are full the pokeapi helper now
+          // queues a pendingLearns entry instead of auto-replacing — the
+          // post-battle picker lets the player choose what to forget.
           const learned = await learnMovesForLevel(attacker);
           for (const ev of learned) {
-            const txt = ev.replacedMove
-              ? `✦ ${attacker.displayName} forgot ${ev.replacedMove.displayName} and learned ${ev.newMove.displayName}!`
+            const txt = ev.pending
+              ? `✦ ${attacker.displayName} wants to learn ${ev.newMove.displayName} — pick after battle!`
               : `✦ ${attacker.displayName} learned ${ev.newMove.displayName}!`;
             this.addLog(logEl, { text: txt, type: 'system' });
           }
@@ -1165,8 +1175,8 @@ export class BattleScreen {
             });
             const benchLearned = await learnMovesForLevel(mon);
             for (const ev of benchLearned) {
-              const txt = ev.replacedMove
-                ? `✦ ${mon.displayName} forgot ${ev.replacedMove.displayName} and learned ${ev.newMove.displayName}!`
+              const txt = ev.pending
+                ? `✦ ${mon.displayName} wants to learn ${ev.newMove.displayName} — pick after battle!`
                 : `✦ ${mon.displayName} learned ${ev.newMove.displayName}!`;
               this.addLog(logEl, { text: txt, type: 'system' });
             }
@@ -1247,18 +1257,80 @@ export class BattleScreen {
     this.renderMoveButtons();
   }
 
-  private useBattleItem(item: import('../../types').Item): void {
+  private pickItemTarget(
+    item: import('../../types').Item,
+    candidates: import('../../types').BattlePokemon[]
+  ): Promise<import('../../types').BattlePokemon | null> {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'item-target-overlay';
+      overlay.innerHTML = `
+        <div class="itm-card">
+          <div class="itm-eyebrow">◆ Use Item ◆</div>
+          <div class="itm-title">${item.name}</div>
+          <div class="itm-desc">${item.description}</div>
+          <div class="itm-pickline">Pick a target</div>
+          <div class="itm-targets">
+            ${candidates.map((m, i) => `
+              <button class="itm-target" data-itm-idx="${i}">
+                <img src="${m.sprite}" class="itm-target-sprite" alt="" draggable="false" />
+                <div class="itm-target-body">
+                  <div class="itm-target-name">${m.displayName}</div>
+                  <div class="itm-target-hp">HP ${m.battleHp}/${m.maxBattleHp}</div>
+                </div>
+              </button>
+            `).join('')}
+          </div>
+          <div class="itm-actions">
+            <button class="ink-btn ghost" data-itm-cancel>Cancel</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      requestAnimationFrame(() => overlay.classList.add('active'));
+
+      const cleanup = (result: import('../../types').BattlePokemon | null) => {
+        overlay.classList.remove('active');
+        setTimeout(() => {
+          overlay.remove();
+          document.removeEventListener('keydown', onKey);
+          resolve(result);
+        }, 180);
+      };
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') cleanup(null);
+      };
+      document.addEventListener('keydown', onKey);
+
+      overlay.addEventListener('click', (e) => {
+        const t = e.target as HTMLElement;
+        if (t.closest('[data-itm-cancel]')) { cleanup(null); return; }
+        const tgt = t.closest<HTMLElement>('[data-itm-idx]');
+        if (tgt) {
+          const idx = parseInt(tgt.dataset['itmIdx'] ?? '-1', 10);
+          cleanup(candidates[idx] ?? null);
+        }
+      });
+    });
+  }
+
+  private async useBattleItem(item: import('../../types').Item): Promise<void> {
     const bs = this.state.battleState!;
     const logEl = this.container.querySelector<HTMLElement>('#battle-log');
-    const activeMon = bs.playerTeam[bs.activePlayerIndex];
 
-    // For revives, target first fainted mon; otherwise target active mon
+    // Pick a target based on item kind. Revives → fainted mons. Heals/cures
+    // → living mons. Player picks via a modal so a Pokémon doesn't die in the
+    //  bench because the active mon hogged the potion.
     const isRevive = item.id === 'revive' || item.id === 'max_revive';
-    const target = isRevive
-      ? bs.playerTeam.find(m => m.battleHp <= 0)
-      : activeMon;
+    const candidates = bs.playerTeam.filter(m =>
+      isRevive ? m.battleHp <= 0 : m.battleHp > 0
+    );
+    if (candidates.length === 0) { showToast('No valid target!', 'warning'); return; }
 
-    if (!target) { showToast('No valid target!', 'warning'); return; }
+    const target = candidates.length === 1
+      ? candidates[0]
+      : await this.pickItemTarget(item, candidates);
+    if (!target) return;
 
     const ef = item.effect;
     if (ef.healPercent) {
@@ -1296,12 +1368,18 @@ export class BattleScreen {
     const bs = this.state.battleState;
     if (!bs) return;
     const team = bs.playerTeam;
-    // Compute total xp gained across the team — bail if nothing to show
+    // Total XP gained across the battle, summed across any level-ups so the
+    // recap shows the real number ("+147 XP") instead of "+1" when a Pokémon
+    // crossed a level threshold.
+    const totalXp = (level: number, xp: number): number => {
+      let sum = 0;
+      for (let l = 1; l < level; l++) sum += Math.floor(Math.pow(l, 1.5) * 10);
+      return sum + xp;
+    };
     const gained = team.map((m, i) => {
       const start = this.xpStart[i];
       if (!start) return 0;
-      if (m.level > start.level) return 1;
-      return Math.max(0, m.xp - start.xp);
+      return Math.max(0, totalXp(m.level, m.xp) - totalXp(start.level, start.xp));
     });
     if (gained.every(g => g === 0)) return;
 
@@ -1334,21 +1412,31 @@ export class BattleScreen {
             `;
           }).join('')}
         </div>
-        <div class="xpr-skip">Click to continue</div>
+        <div class="xpr-skip">Tallying experience…</div>
       </div>
     `;
     document.body.appendChild(overlay);
 
     let dismissed = false;
+    let dismissable = false;
     const dismiss = () => {
-      if (dismissed) return;
+      if (dismissed || !dismissable) return;
       dismissed = true;
       gsap.to(overlay, {
         opacity: 0, duration: 0.2, ease: 'power2.in',
         onComplete: () => overlay.remove(),
       });
     };
-    overlay.addEventListener('click', dismiss);
+    overlay.addEventListener('click', () => {
+      if (!dismissable) {
+        // Nudge the user — animation still running.
+        overlay.classList.remove('shake');
+        void overlay.offsetWidth;
+        overlay.classList.add('shake');
+        return;
+      }
+      dismiss();
+    });
 
     requestAnimationFrame(() => overlay.classList.add('active'));
     // Pause: let the panel settle before the bars start filling
@@ -1419,6 +1507,12 @@ export class BattleScreen {
       await new Promise(r => setTimeout(r, 260));
     }
 
+    dismissable = true;
+    const skipHint = overlay.querySelector<HTMLElement>('.xpr-skip');
+    if (skipHint) {
+      skipHint.classList.add('ready');
+      skipHint.textContent = 'Click to continue';
+    }
     if (!dismissed) {
       await new Promise(r => setTimeout(r, 1500));
       dismiss();
@@ -1464,6 +1558,12 @@ export class BattleScreen {
       this.state.team[i].battleHp = battleMon.battleHp;
       this.state.team[i].maxBattleHp = battleMon.maxBattleHp;
       this.state.team[i].effectiveStats = battleMon.effectiveStats;
+      // Move + learnset state — picker uses these post-battle.
+      this.state.team[i].moves = battleMon.moves;
+      this.state.team[i].learnedMoveIds = battleMon.learnedMoveIds;
+      this.state.team[i].pendingLearns = battleMon.pendingLearns;
+      this.state.team[i].movePool = battleMon.movePool;
+      this.state.team[i].learnsetPool = battleMon.learnsetPool;
       // Sync unlock state (auto-unlocks from level-ups)
       if (battleMon.itemSlots && this.state.team[i].itemSlots) {
         battleMon.itemSlots.forEach((s, si) => {
@@ -1471,6 +1571,10 @@ export class BattleScreen {
           if (target && s.unlocked) target.unlocked = true;
         });
       }
+    }
+
+    if (playerWon) {
+      await processPendingLearns(this.state.team);
     }
 
     this.onBattleEnd(this.state);

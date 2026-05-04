@@ -41,15 +41,26 @@ export class RewardScreen {
 
   private renderHTML(): string {
     const isBoss = this.state.battleState?.isBossWave ?? false;
+    const arena = this.state.arenaState;
     const skipAmount = isBoss ? 200 : 60;
     const skipLabel = isBoss
       ? `Skip for a <strong>${skipAmount}¢</strong> boss bounty · Stash it for the Shop.`
       : `Skip to continue with +${skipAmount}¢ in your pocket.`;
+    let badgeText: string;
+    if (arena) {
+      const total = arena.steps.length;
+      const cur = Math.min(arena.index, total);
+      badgeText = `Arena · Round ${cur}/${total} · Cleared`;
+    } else if (isBoss) {
+      badgeText = 'Boss Wave · Cleared';
+    } else {
+      badgeText = `Wave ${this.state.wave} · Cleared`;
+    }
     return `
       <div class="reward-screen screen">
         <div class="reward-header">
-          <div class="reward-wave-badge ${isBoss ? 'boss' : ''}">
-            ${isBoss ? 'Boss Wave · Cleared' : `Wave ${this.state.wave} · Cleared`}
+          <div class="reward-wave-badge ${isBoss ? 'boss' : ''}${arena ? ' arena' : ''}">
+            ${badgeText}
           </div>
           <h2 class="reward-title">Pick a <em>prize</em></h2>
           <p class="reward-subtitle">Three cards dealt · Choose one · Skip for +${skipAmount}¢</p>

@@ -422,7 +422,7 @@ export class StartScreen {
               <h3 class="htp-chapter-title">The <em>Run</em></h3>
               <p class="htp-lede">A run is a single life. Survive waves, clear three acts, capture badges. When your team faints — that's the run.</p>
               <ul class="htp-flow">
-                <li><b>Pick a starter.</b> One mon, level 5. Your seed.</li>
+                <li><b>Pick a starter.</b> One mon, level 8. Your seed.</li>
                 <li><b>Walk a path.</b> Each act branches: battles, shops, arenas, events.</li>
                 <li><b>Clear waves.</b> Win fights, earn coins &amp; rewards.</li>
                 <li><b>Beat arenas.</b> Eight gym leaders gate the acts. Win → badge.</li>
@@ -453,12 +453,12 @@ export class StartScreen {
                 </div>
                 <div class="htp-block">
                   <div class="htp-label">Auto-Battle</div>
-                  <p>Toggle <kbd>A</kbd> in battle. AI picks moves &amp; items. Faster but blind to setups.</p>
+                  <p>Battles resolve automatically — your team picks moves based on type matchups, items, and HP. Toggle <kbd>A</kbd> to pause and read the log.</p>
                 </div>
               </div>
               <div class="htp-tips">
-                <div class="htp-label">Switching</div>
-                <p>You can switch on any turn. The incoming mon eats one hit before acting — switch on a resist.</p>
+                <div class="htp-label">Move roster</div>
+                <p>When a mon learns a new move with a full set, the picker pops up — choose what to forget or stash it in the move pool. The team-panel <b>☰</b> button opens the manager any time.</p>
               </div>
             </div>
 
@@ -511,7 +511,7 @@ export class StartScreen {
                 </div>
                 <div class="htp-block">
                   <div class="htp-label">Held items</div>
-                  <p>Leftovers, Choice Band, Focus Sash, type plates. Equip via menu — one per mon.</p>
+                  <p>Leftovers, Choice Band, Focus Sash, type plates. Each mon has up to <b>5 slots</b> — slot 1 is free, the rest unlock with coins as you level.</p>
                 </div>
                 <div class="htp-block">
                   <div class="htp-label">Perks</div>
@@ -528,7 +528,7 @@ export class StartScreen {
             <div class="htp-page" data-page="5" hidden>
               <div class="htp-eyebrow">Chapter 05</div>
               <h3 class="htp-chapter-title">Arenas &amp; <em>Badges</em></h3>
-              <p class="htp-lede">An arena is a four-stage gauntlet. Heal between fights, but coins are tight.</p>
+              <p class="htp-lede">An arena is a four-stage gauntlet. HP carries over — pack potions or grab a Pokémon Center node first.</p>
               <ol class="htp-gauntlet">
                 <li><b>Junior trainer</b> — warm-up</li>
                 <li><b>Restock shop</b> — discounted consumables</li>
@@ -551,7 +551,7 @@ export class StartScreen {
                   <li>Type diversity beats raw stats — always have an answer</li>
                   <li>Held items stack with perks. Combine deliberately</li>
                   <li>Hoard Revives &amp; Full Restores for bosses</li>
-                  <li>Manual play unlocks Z-moves &amp; mid-fight switches</li>
+                  <li>Pause the auto-battle (<kbd>A</kbd>) to inspect the log between turns</li>
                   <li>Skip early waves for coins · spend before arenas</li>
                   <li>Read the leader's type before walking in — counter-build</li>
                   <li>Lose a mon? Don't panic. The bag is your second team</li>
@@ -668,6 +668,11 @@ export class StartScreen {
     closeHowtoplay.addEventListener('click', () => howtoplayModal.classList.add('hidden'));
     howtoplayModal.addEventListener('click', e => {
       if (e.target === howtoplayModal) howtoplayModal.classList.add('hidden');
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !howtoplayModal.classList.contains('hidden')) {
+        howtoplayModal.classList.add('hidden');
+      }
     });
     this.wireHtpPager(howtoplayModal as HTMLElement);
 

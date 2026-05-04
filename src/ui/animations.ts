@@ -7,7 +7,14 @@ import { gsap } from 'gsap';
 export function fadeIn(el: HTMLElement, duration = 0.4): gsap.core.Tween {
   return gsap.fromTo(el,
     { opacity: 0, y: 20 },
-    { opacity: 1, y: 0, duration, ease: 'power2.out' }
+    {
+      opacity: 1, y: 0, duration, ease: 'power2.out',
+      // Clear inline transform once the fade is done — otherwise GSAP leaves
+      // `transform: translate(0,0)` on the element, which makes it the
+      // containing block for descendant `position: fixed` children. That
+      // breaks the mobile shop drawer (it ends up clipped to .shop-wrap).
+      clearProps: 'transform',
+    },
   );
 }
 
@@ -218,7 +225,7 @@ export function animateCoinGain(
     duration: 0.8,
     ease: 'power2.out',
     onUpdate: () => {
-      coinEl.textContent = `¢${Math.floor(obj.value)}`;
+      coinEl.textContent = Math.floor(obj.value).toLocaleString();
     },
   });
   gsap.fromTo(coinEl,

@@ -24,10 +24,21 @@ function saveKey(): string {
 
 /** Saved at the start of every wave/path/shop transition (debounced). */
 let saveTimer: number | null = null;
+let pendingState: GameState | null = null;
 
 export interface SavedRun {
   savedAt: number;
   state: GameState;
+}
+
+function writeSaveNow(state: GameState): void {
+  try {
+    const payload: SavedRun = { savedAt: Date.now(), state };
+    localStorage.setItem(saveKey(), JSON.stringify(payload));
+  } catch (err) {
+    // Quota exceeded or disabled — fail silently. Resume just won't be available.
+    console.warn('[saveRun] failed to persist:', err);
+  }
 }
 
 export function saveRun(state: GameState): void {
@@ -35,18 +46,30 @@ export function saveRun(state: GameState): void {
   if (state.phase === 'gameover' || state.phase === 'leaderboard' || state.phase === 'start') {
     return;
   }
+  pendingState = state;
   // Debounce — collapse bursty saves (e.g. shop transitions fire a few in a row).
   if (saveTimer != null) window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(() => {
-    try {
-      const payload: SavedRun = { savedAt: Date.now(), state };
-      localStorage.setItem(saveKey(), JSON.stringify(payload));
-    } catch (err) {
-      // Quota exceeded or disabled — fail silently. Resume just won't be available.
-      console.warn('[saveRun] failed to persist:', err);
-    }
+    if (pendingState) writeSaveNow(pendingState);
     saveTimer = null;
+    pendingState = null;
   }, 400) as unknown as number;
+}
+
+/** Synchronous write — bypasses the debounce. Use on critical boundaries
+ *  (page unload, screen transition) so a quick refresh can't beat the timer
+ *  and lose the latest state. */
+export function flushSaveNow(): void {
+  if (saveTimer != null) window.clearTimeout(saveTimer);
+  if (pendingState) writeSaveNow(pendingState);
+  saveTimer = null;
+  pendingState = null;
+}
+
+if (typeof window !== 'undefined') {
+  // Persist before the page goes away — covers tab close, refresh, navigation.
+  window.addEventListener('beforeunload', flushSaveNow);
+  window.addEventListener('pagehide', flushSaveNow);
 }
 
 export function loadRun(): SavedRun | null {

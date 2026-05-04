@@ -6,6 +6,8 @@ import './styles/catch.css';
 import './styles/leaderboard.css';
 import './styles/auth.css';
 import './styles/evolution.css';
+import './styles/moveLearn.css';
+import './styles/moveManager.css';
 import './styles/audio.css';
 import './styles/path.css';
 import './styles/mobile.css';
@@ -444,7 +446,7 @@ async function startNewWave(): Promise<void> {
     showCoachmark('first_arena', {
       eyebrow: 'Field manual · Arena',
       title: 'You\'re at a gym leader',
-      body: 'Arenas are <b>multi-step gauntlets</b>: junior trainer → restock shop → senior trainer → leader. Your team heals between fights but coins are tight. Spend wisely on items that counter the gym\'s type.',
+      body: 'Arenas are <b>multi-step gauntlets</b>: junior trainer → restock shop → senior trainer → leader. HP carries over between fights, so spend coins on healing items or counter the gym\'s type.',
       cta: 'Got it →',
     });
   }
@@ -493,7 +495,9 @@ async function startNewWave(): Promise<void> {
       enemyIds = [...fillers, gymLeader.acePokemonId];
       levelDelta = gymLeader.levelDelta;
     } else if (trainerArchetype) {
-      const biased = poolForTypes(trainerArchetype.typeBias);
+      const allowed = new Set(config.enemyPool);
+      const biasedRaw = poolForTypes(trainerArchetype.typeBias);
+      const biased = biasedRaw.filter(id => allowed.has(id));
       teamSize = node?.teamSizeOverride ?? trainerArchetype.teamSize ?? config.enemyCount;
       enemyIds = biased.length > 0
         ? Array.from({ length: teamSize }, () => biased[Math.floor(Math.random() * biased.length)])
@@ -504,8 +508,13 @@ async function startNewWave(): Promise<void> {
         levelDelta = Math.min(levelDelta, 0);
       }
     } else if (node?.kind === 'grass' && node.habitatBias) {
-      // Habitat-biased grass: bias type pool by node hint.
-      const biased = poolForTypes([node.habitatBias]);
+      // Habitat-biased grass: bias type pool by node hint, but never break
+      // out of the wave's allowed dex range — keeps fossils/legendaries
+      // (Aerodactyl, Articuno, etc.) out of early waves where they'd be
+      // pure type-traps with no counter-play.
+      const allowed = new Set(config.enemyPool);
+      const biasedRaw = poolForTypes([node.habitatBias]);
+      const biased = biasedRaw.filter(id => allowed.has(id));
       enemyIds = biased.length > 0
         ? Array.from({ length: config.enemyCount }, () => biased[Math.floor(Math.random() * biased.length)])
         : selectEnemyIds(config);
@@ -522,8 +531,16 @@ async function startNewWave(): Promise<void> {
       fetched = done;
     });
 
-    // Scale each enemy to its specific level + apply threat multiplier for late-game
-    const threatMult = config.threatMultiplier ?? 1;
+    // Scale each enemy to its specific level + apply threat multiplier for late-game.
+    // Early-arena easing: the act-1/2 gym leader is a hard wall otherwise — first
+    // arena leader fight lands on a boss-flagged wave 6, compounding wave threat
+    // ramp × boss bonus × leader levelDelta into a one-shot wipe.
+    let threatMult = config.threatMultiplier ?? 1;
+    if (gymLeader && (gameState.currentAct ?? 1) <= 2) {
+      threatMult = Math.min(threatMult, 1.0);
+    } else if (gymLeader && (gameState.currentAct ?? 1) <= 4) {
+      threatMult = Math.min(threatMult, 1.0 + (threatMult - 1.0) * 0.6);
+    }
     // Elite pool: only meaningful held items (skip healing berries — not very threatening)
     const ELITE_ITEM_POOL = ALL_ITEMS.filter(i =>
       i.itemType === 'held' && (i.rarity === 'rare' || i.rarity === 'epic') &&
@@ -809,8 +826,13 @@ function showRewardScreen(): void {
   });
   screenContainer.appendChild(div);
 
+  // Save the post-battle state so a refresh inside the reward step doesn't
+  // rewind you back across the battle you already won.
+  saveRun(gameState);
+
   rewardScreen = new RewardScreen(div, gameState, (state) => {
     gameState = state;
+    saveRun(gameState);
     if (state.pendingCatch) {
       showCatchScreen();
     } else if (state.arenaState) {
@@ -845,10 +867,18 @@ function showCatchScreen(): void {
     cta: 'Got it →',
   });
 
+  saveRun(gameState);
+
   catchScreen = new CatchScreen(div, gameState, gameState.pendingCatch, (state) => {
     gameState = state;
+    saveRun(gameState);
     Audio.duckMusic(1, 400);
-    showShopScreen();
+    if (state.arenaState) {
+      // Inside an arena gauntlet — skip the standard post-wave shop and march on.
+      showPathSelect();
+    } else {
+      showShopScreen();
+    }
   });
   catchScreen.mount();
 }
@@ -906,6 +936,10 @@ function showShopScreen(): void {
     cta: 'Got it →',
   });
 
+  // Save the freshly-rolled shop so refresh inside the shop returns the same
+  // inventory + post-battle team, not the stale state from the prior path.
+  saveRun(gameState);
+
   shopScreen = new ShopScreen(div, gameState, (state) => {
     gameState = state;
 
@@ -918,7 +952,9 @@ function showShopScreen(): void {
     gameState.freeRerollsLeft = 0;
     gameState.battleState = null;
 
-    // Restore team HP between waves (Nurse's Blessing perk = full heal)
+    // HP persists across waves. Only Nurse's Blessing perk auto-heals;
+    // everyone else must rely on items, Pokémon Center nodes, or surviving
+    // injured. Damage carrying forward is core roguelike attrition tension.
     const hasNurse = gameState.activePerks.some(p => p.id === 'nurses_blessing');
     gameState.team.forEach(mon => {
       // Momentum Badge: gain 1 stack per wave won (max 10)
@@ -929,13 +965,8 @@ function showShopScreen(): void {
       mon.resetPulseUsedThisWave = false;
       mon.turnsInBattle = 0;
 
-      if (mon.battleHp > 0) {
-        if (hasNurse) {
-          mon.battleHp = mon.maxBattleHp; // full heal
-        } else {
-          const heal = Math.floor(mon.maxBattleHp * 0.6);
-          mon.battleHp = Math.min(mon.maxBattleHp, mon.battleHp + heal);
-        }
+      if (mon.battleHp > 0 && hasNurse) {
+        mon.battleHp = mon.maxBattleHp;
       }
     });
 

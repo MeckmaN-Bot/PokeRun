@@ -159,6 +159,10 @@ export class CatchScreen {
 
             <div class="ca-flash" id="ca-flash"></div>
             <div class="ca-result-layer" id="ca-result-layer"></div>
+
+            <!-- Mobile-only: tap arena to throw, small flee chip top-right -->
+            <div class="ca-tap-hint" id="ca-tap-hint" aria-hidden="true">▸ Tap to throw</div>
+            <button class="ca-mobile-flee" id="ca-mobile-flee" type="button" aria-label="Run away">Run</button>
           </div>
 
           <!-- Side -->
@@ -212,6 +216,20 @@ export class CatchScreen {
     this.container.querySelector('#catch-throw-btn')?.addEventListener('click', throwFn);
     this.container.querySelector('#catch-run-btn')?.addEventListener('click', () => this.onFled());
 
+    // Mobile-friendly: tap anywhere on the arena (including the wild Pokémon)
+    // to throw a ball. Decorative children have pointer-events: none, so clicks
+    // bubble up to the arena. The flee chip stops propagation.
+    const arena = this.container.querySelector<HTMLElement>('#catch-arena');
+    arena?.addEventListener('click', (e) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('#ca-mobile-flee') || t.closest('.catch-pc-overlay')) return;
+      throwFn();
+    });
+    this.container.querySelector('#ca-mobile-flee')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.onFled();
+    });
+
     const keyHandler = (e: KeyboardEvent) => {
       if (e.key === 'a' || e.key === 'A' || e.key === ' ' || e.key === 'Enter') {
         e.preventDefault();
@@ -238,6 +256,7 @@ export class CatchScreen {
     if (!arena || !wild || !ball || !beam || !trainer || !resultLayer) return;
 
     arena.classList.toggle('intro', this.phase === 'intro');
+    arena.classList.toggle('idle', this.phase === 'idle' && this.ballsLeft > 0);
 
     // Wild visibility
     const spriteHidden = ['absorb', 'falling', 'wobbling', 'caught'].includes(this.phase);
@@ -314,6 +333,8 @@ export class CatchScreen {
     runBtn.disabled = !idle;
     if (this.phase === 'idle') throwBtn.textContent = '▶ Throw Pokéball';
     else if (this.phase === 'intro') throwBtn.textContent = '…';
+    else if (this.phase === 'caught') throwBtn.textContent = '✓ Caught';
+    else if (this.phase === 'fled') throwBtn.textContent = 'Got away';
     else throwBtn.textContent = 'Throwing…';
   }
 

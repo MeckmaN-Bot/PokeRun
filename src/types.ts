@@ -336,6 +336,11 @@ export interface Pokemon {
   learnsetPool?: LearnsetEntry[];
   /** IDs of moves already taught (so we don't re-teach the same one). */
   learnedMoveIds?: number[];
+  /** Moves the Pokémon has unlocked but couldn't fit into its 4-slot moveset.
+   *  Tapped from the move manager so the player can swap them in later. */
+  movePool?: Move[];
+  /** Moves waiting on the player to choose: replace a slot or skip. */
+  pendingLearns?: Move[];
 }
 
 export interface LearnsetEntry {

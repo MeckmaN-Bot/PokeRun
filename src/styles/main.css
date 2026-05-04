@@ -1436,9 +1436,32 @@ html[data-reduce-motion="on"] *::after {
 .tour-card.pos-left   .tour-card-arrow { right: -9px;  top: 50%;  transform: translateY(-50%) rotate(135deg); }
 .tour-card.pos-right  .tour-card-arrow { left: -9px;   top: 50%;  transform: translateY(-50%) rotate(-45deg); }
 
-@media (max-width: 520px) {
-  .tour-card { width: calc(100vw - 24px); }
+@media (max-width: 600px) {
+  .tour-card { width: calc(100vw - 16px); padding: 11px 14px; }
+  .tour-title { font-size: 18px; }
+  .tour-body { font-size: 12px; line-height: 1.45; margin-bottom: 9px; }
+  .tour-actions { padding-top: 8px; }
 }
+
+/* Mobile bottom/top sheet: pin card to viewport edge so it never covers the spotlight. */
+.tour-card.mobile-sheet {
+  position: fixed;
+  width: calc(100vw - 16px);
+  max-width: 460px;
+  left: 50% !important;
+  transform: translateX(-50%) rotate(0deg) !important;
+  border-width: 2px;
+  box-shadow: 4px 4px 0 var(--ink, #1a1a1a);
+}
+.tour-card.mobile-sheet.pos-bottom {
+  top: auto !important;
+  bottom: 12px;
+}
+.tour-card.mobile-sheet.pos-top {
+  top: 12px !important;
+  bottom: auto;
+}
+.tour-card.mobile-sheet .tour-card-arrow { display: none; }
 
 /* Footer text-link for Legal — small, doesn't compete with primary buttons. */
 .footer-legal-link {
@@ -2046,6 +2069,66 @@ html[data-reduce-motion="on"] *::after {
 @media (max-width: 800px) {
   .gover-wrap { padding-left: 18px; padding-right: 18px; }
   .gover-body { grid-template-columns: 1fr; }
+}
+
+/* ── Mobile rework: scroll the whole sheet, stack body, sticky foot ── */
+body.is-mobile .gover-wrap {
+  display: flex; flex-direction: column;
+  gap: 12px;
+  padding: 14px 12px 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  height: 100%;
+  min-height: 0;
+}
+body.is-mobile .gover-stamp {
+  font-size: clamp(36px, 12vw, 56px);
+  padding: 4px 14px;
+  box-shadow: 5px 5px 0 var(--ink);
+  border-width: 3px;
+  margin-top: 6px;
+}
+body.is-mobile .gover-head {
+  grid-template-columns: 1fr;
+  text-align: center;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+body.is-mobile .gover-head h2 { font-size: 22px; }
+body.is-mobile .gover-head .kicker { font-size: 10px; letter-spacing: 0.3em; }
+body.is-mobile .gover-body {
+  display: flex; flex-direction: column;
+  gap: 12px;
+  overflow: visible;
+  min-height: 0;
+}
+body.is-mobile .gover-stats,
+body.is-mobile .lb-panel {
+  overflow: visible;
+  padding: 10px 12px;
+}
+body.is-mobile .gover-stats .h,
+body.is-mobile .lb-panel .h .t { font-size: 16px; }
+body.is-mobile .lb-list {
+  max-height: 260px;
+  overflow-y: auto;
+}
+body.is-mobile .stat-row .v { font-size: 16px; }
+body.is-mobile .gover-foot {
+  position: sticky; bottom: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 4px calc(env(safe-area-inset-bottom, 0) + 12px);
+  margin: 0 -12px;
+  background: linear-gradient(180deg, transparent 0%, var(--paper) 28%);
+  border-top: 2px solid var(--ink);
+  z-index: 5;
+}
+body.is-mobile .gover-foot .ink-btn {
+  width: 100%;
+  min-height: 48px;
+  justify-content: center;
 }
 
 /* ============================================================

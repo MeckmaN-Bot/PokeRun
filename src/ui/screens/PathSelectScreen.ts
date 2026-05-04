@@ -5,6 +5,7 @@ import { BADGES, getBadge } from '../../data/badges';
 import { badgeSprite, imgErrorFallback } from '../../data/sprites';
 import { getGymForAct } from '../../data/gymLeaders';
 import { trainerSpriteUrl } from '../../data/trainerArchetypes';
+import { renderTypeBadge } from '../components/TypeBadge';
 
 /**
  * Path-select screen — three thematic node cards. The player picks one;
@@ -141,7 +142,10 @@ export class PathSelectScreen {
                      onerror="${imgErrorFallback(nextGymLeader.icon)}" />
               </div>
               <div class="stage-progress-body">
-                <div class="stage-progress-eyebrow">${nextGymLeader.city.toUpperCase()} · ACT ${act}</div>
+                <div class="stage-progress-eyebrow">
+                  <span>${nextGymLeader.city.toUpperCase()} · ACT ${act}</span>
+                  <span class="stage-progress-type">${renderTypeBadge(nextGymLeader.type)}</span>
+                </div>
                 <div class="stage-progress-pips">${pips}</div>
                 <div class="stage-progress-cta">${cta}</div>
               </div>

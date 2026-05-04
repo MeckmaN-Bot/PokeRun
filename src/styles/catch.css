@@ -532,12 +532,16 @@
   background: rgba(247, 240, 222, 0.5);
   z-index: 7;
   pointer-events: none;
-  animation: breakout-shake 0.5s ease-out;
+  animation: breakout-shake 0.5s ease-out, breakout-fade 0.95s ease-out forwards;
 }
 @keyframes breakout-shake {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-8px); }
   75% { transform: translateX(8px); }
+}
+@keyframes breakout-fade {
+  0%, 60% { opacity: 1; }
+  100% { opacity: 0; }
 }
 .ca-fled-overlay {
   position: absolute; inset: 0;
@@ -661,6 +665,52 @@
 }
 .catch-actions .ink-btn { justify-content: center; }
 
+/* ── Mobile tap-to-throw affordances (hidden on desktop by default) ── */
+.ca-tap-hint {
+  display: none;
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 5;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  padding: 7px 14px;
+  white-space: nowrap;
+  animation: tap-hint-pulse 1.4s ease-in-out infinite;
+}
+@keyframes tap-hint-pulse {
+  0%, 100% { transform: translateX(-50%) translateY(0); opacity: 1; }
+  50% { transform: translateX(-50%) translateY(-3px); opacity: 0.65; }
+}
+
+.ca-mobile-flee {
+  display: none;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 8;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  padding: 6px 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ca-mobile-flee:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink); }
+
 /* PC overlay (preserved) */
 .catch-pc-overlay {
   position: absolute;
@@ -691,9 +741,16 @@
 
 /* ── Responsive ── */
 @media (max-width: 960px) {
+  /* Allow vertical scroll on tablets/phones so the action buttons remain reachable. */
+  .catch-screen {
+    height: auto;
+    min-height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
   .catch-main {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(360px, 1fr) auto;
+    grid-template-rows: minmax(320px, auto) auto;
   }
   .catch-side { flex-direction: column; }
   .ca-trainer { width: 180px; height: 180px; bottom: calc(8% + 34px); }
@@ -704,17 +761,104 @@
   .ca-platform-wild { width: 200px; height: 38px; }
 }
 @media (max-width: 640px) {
-  .catch-screen { padding: 12px 12px 16px; gap: 10px; }
-  .catch-arena { min-height: 320px; }
+  /* On mobile the catch screen is tap-driven: tap the arena (or the wild
+     Pokémon) to throw a ball. Buttons disappear; arena gets a pulsing hint;
+     a small Run chip lives in the arena's top-right corner.
+     Layout uses flex column so the arena claims the leftover height robustly,
+     even when the grid track allocator collapses min-height: 0 cells to zero. */
+  .catch-screen {
+    display: flex !important;
+    flex-direction: column;
+    padding: 10px 10px max(12px, var(--m-safe-bot, 12px));
+    gap: 8px;
+    overflow: hidden;
+    height: 100%;
+  }
+  .catch-headline { display: none; }
+  .catch-main {
+    display: flex !important;
+    flex-direction: column;
+    flex: 1 1 auto;
+    gap: 8px;
+    min-height: 0;
+    grid-template-rows: none;
+    grid-template-columns: none;
+  }
+  .catch-arena {
+    flex: 1 1 auto;
+    min-height: 220px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .catch-arena.idle .ca-tap-hint { display: block; }
+  .ca-mobile-flee { display: block; }
+  .catch-actions { display: none; }
+
   .catch-title { font-size: 22px; }
-  .ca-trainer { width: 140px; height: 140px; bottom: calc(8% + 28px); }
-  .ca-trainer-sprite { width: 120px; height: 120px; bottom: -14px; }
-  .ca-wild { width: 200px; height: 200px; right: 6%; bottom: calc(16% + 30px); }
-  .ca-wild-sprite { bottom: -18px; object-position: 50% 100%; }
-  .ca-platform-trainer { width: 140px; height: 28px; }
-  .ca-platform-wild { width: 160px; height: 30px; }
-  .ca-sun { width: 52px; height: 52px; }
+  .ca-trainer { width: 110px; height: 110px; bottom: calc(8% + 24px); left: 4%; }
+  .ca-trainer-sprite { width: 96px; height: 96px; bottom: -12px; }
+  .ca-wild {
+    /* Cap the wild sprite — even with --mon-scale, never exceed the arena. */
+    width: min(160px, calc(180px * var(--mon-scale, 1)));
+    height: min(160px, calc(180px * var(--mon-scale, 1)));
+    right: 5%; bottom: calc(16% + 26px);
+  }
+  .ca-wild-sprite { bottom: -14px; object-position: 50% 100%; }
+  .ca-platform-trainer { width: 120px; height: 24px; left: 4%; }
+  .ca-platform-wild { width: 140px; height: 26px; right: 5%; }
+  .ca-sun { width: 44px; height: 44px; top: 8%; right: 8%; }
   .ca-mtn { border-left-width: 60px; border-right-width: 60px; border-bottom-width: 80px; }
-  .catch-data-card { padding: 10px 12px; }
-  .cdc-name { font-size: 22px; }
+
+  /* Compact info strip below the arena: stats inline + ball tray as one row.
+     Stats card: name on left, three mini-cells on right, no gauge. */
+  .catch-side {
+    display: flex !important;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 0;
+    flex: 0 0 auto;
+  }
+  .catch-data-card {
+    padding: 8px 10px;
+    gap: 8px;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .cdc-head {
+    flex: 1 1 110px;
+    gap: 2px;
+    min-width: 0;
+  }
+  .cdc-kicker { font-size: 8.5px; letter-spacing: 0.2em; }
+  .cdc-name { font-size: 18px; }
+  .cdc-types { gap: 3px; }
+  .cdc-stats {
+    flex: 1 1 180px;
+    flex-direction: row;
+    gap: 8px;
+    min-width: 0;
+  }
+  .cdc-row {
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 1px;
+    align-items: flex-start;
+    border-bottom: none;
+    padding: 0;
+    min-width: 0;
+  }
+  .cdc-row span { font-size: 8.5px; letter-spacing: 0.1em; }
+  .cdc-row b { font-size: 13px; }
+  .cdc-gauge { display: none; }
+
+  .catch-ball-tray {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+  }
+  .cbt-label { font-size: 9px; letter-spacing: 0.18em; }
+  .cbt-balls { gap: 8px; }
+  .cbt-ball { width: 26px; height: 26px; }
 }

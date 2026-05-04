@@ -208,8 +208,20 @@ function positionForCurrent(): void {
 
   // Card placement
   const card = active.card;
-  card.classList.remove('pos-top', 'pos-bottom', 'pos-left', 'pos-right');
+  card.classList.remove('pos-top', 'pos-bottom', 'pos-left', 'pos-right', 'mobile-sheet');
   const vw = window.innerWidth, vh = window.innerHeight;
+
+  // Mobile: pin card to top or bottom of viewport so it never covers the spotlight.
+  // Decision: anchor in upper half → card sticks to bottom; anchor in lower half → card to top.
+  if (vw <= 600) {
+    const anchorMid = rect.top + rect.height / 2;
+    const dockTop = anchorMid > vh / 2;
+    card.classList.add('mobile-sheet', dockTop ? 'pos-top' : 'pos-bottom');
+    card.style.top = '';
+    card.style.left = '';
+    return;
+  }
+
   const desired = step.position && step.position !== 'auto' ? step.position : pickAuto(rect, vw, vh);
   card.classList.add(`pos-${desired}`);
 

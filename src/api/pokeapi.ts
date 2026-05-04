@@ -206,13 +206,20 @@ async function buildMovesAndLearnset(
 
 /**
  * Learn moves a Pokémon now qualifies for via its level.
- * Mutates pokemon.moves and pokemon.learnedMoveIds.
- * If 4 move slots are full, replaces the weakest damaging move when the new one is stronger.
- * Returns an array describing each learn event for log output.
+ * Mutates pokemon.moves, pokemon.learnedMoveIds, and pokemon.pendingLearns.
+ *
+ * If a move slot is free → equip the move directly and mark learned.
+ * If all 4 slots are full → push to `pendingLearns` and DO NOT mark learned;
+ *   the caller (typically the post-battle flow) opens a picker so the player
+ *   chooses which slot to replace, or whether to drop the move into the
+ *   reserve pool. Marking happens at commit time.
  */
 export interface LearnEvent {
   newMove: Move;
   replacedMove: Move | null;
+  /** True when the new move couldn't be auto-equipped (slots full). The
+   *  caller must run the picker before treating the learn as resolved. */
+  pending?: boolean;
 }
 
 export async function learnMovesForLevel(
@@ -221,6 +228,8 @@ export async function learnMovesForLevel(
   const events: LearnEvent[] = [];
   if (!pokemon.learnsetPool || pokemon.learnsetPool.length === 0) return events;
   const learned = new Set(pokemon.learnedMoveIds ?? []);
+  const pendingIds = new Set((pokemon.pendingLearns ?? []).map(m => m.id));
+  const poolIds = new Set((pokemon.movePool ?? []).map(m => m.id));
 
   const eligible = pokemon.learnsetPool.filter(
     e => e.level > 0 && e.level <= pokemon.level,
@@ -229,33 +238,71 @@ export async function learnMovesForLevel(
   for (const entry of eligible) {
     const move = await fetchMove(entry.name);
     if (!move) continue;
-    if (learned.has(move.id)) continue;
-    learned.add(move.id);
+    if (learned.has(move.id) || pendingIds.has(move.id) || poolIds.has(move.id)) continue;
 
     if (pokemon.moves.length < 4) {
       pokemon.moves.push(move);
+      learned.add(move.id);
       events.push({ newMove: move, replacedMove: null });
       continue;
     }
 
-    // 4 slots full — only replace if new move is stronger than the weakest damaging move
-    let weakestIdx = -1;
-    let weakestPower = move.power;
-    pokemon.moves.forEach((m, i) => {
-      if (m.power > 0 && m.power < weakestPower) {
-        weakestPower = m.power;
-        weakestIdx = i;
-      }
-    });
-    if (weakestIdx >= 0 && move.power > 0) {
-      const replaced = pokemon.moves[weakestIdx];
-      pokemon.moves[weakestIdx] = move;
-      events.push({ newMove: move, replacedMove: replaced });
-    }
+    pokemon.pendingLearns = pokemon.pendingLearns ?? [];
+    pokemon.pendingLearns.push(move);
+    pendingIds.add(move.id);
+    events.push({ newMove: move, replacedMove: null, pending: true });
   }
 
   pokemon.learnedMoveIds = Array.from(learned);
   return events;
+}
+
+/** Commit the player's choice for a pending learn.
+ *  - replaceIdx >= 0: swap moves[replaceIdx] with newMove, push the old slot
+ *    contents into movePool so the player can re-equip it later.
+ *  - replaceIdx === -1: skip the move entirely; it goes into movePool too,
+ *    so the player can pick it up later from the move manager.
+ *  Either way the move is marked learned to avoid re-prompting. */
+export function commitPendingLearn(
+  pokemon: Pokemon,
+  newMove: Move,
+  replaceIdx: number,
+): void {
+  pokemon.pendingLearns = (pokemon.pendingLearns ?? []).filter(m => m.id !== newMove.id);
+  pokemon.movePool = pokemon.movePool ?? [];
+  if (replaceIdx >= 0 && replaceIdx < pokemon.moves.length) {
+    const removed = pokemon.moves[replaceIdx];
+    pokemon.moves[replaceIdx] = { ...newMove };
+    if (removed && !pokemon.movePool.some(m => m.id === removed.id)) {
+      pokemon.movePool.push(removed);
+    }
+  } else if (replaceIdx >= 0 && pokemon.moves.length < 4) {
+    // Empty slot — just push (also remove from pool if it was stashed there).
+    pokemon.moves.push({ ...newMove });
+    pokemon.movePool = pokemon.movePool.filter(m => m.id !== newMove.id);
+  } else {
+    if (!pokemon.movePool.some(m => m.id === newMove.id)) {
+      pokemon.movePool.push({ ...newMove });
+    }
+  }
+  const learned = new Set(pokemon.learnedMoveIds ?? []);
+  learned.add(newMove.id);
+  pokemon.learnedMoveIds = Array.from(learned);
+}
+
+/** Swap a move from movePool into a moveset slot. The displaced move
+ *  goes back into the pool so the player can rotate freely. */
+export function swapMoveFromPool(
+  pokemon: Pokemon,
+  poolIdx: number,
+  slotIdx: number,
+): void {
+  if (!pokemon.movePool || poolIdx < 0 || poolIdx >= pokemon.movePool.length) return;
+  if (slotIdx < 0 || slotIdx >= pokemon.moves.length) return;
+  const fromPool = pokemon.movePool[poolIdx];
+  const fromSlot = pokemon.moves[slotIdx];
+  pokemon.moves[slotIdx] = { ...fromPool };
+  pokemon.movePool[poolIdx] = fromSlot;
 }
 
 // ============================================================

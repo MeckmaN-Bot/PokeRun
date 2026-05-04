@@ -640,15 +640,34 @@ body.is-mobile .shop-side .team-panel {
   height: auto; max-height: none;
 }
 body.is-mobile .shop-side .pc-strip-panel { display: none; }
-body.is-mobile .stc-card { padding: 8px; }
-body.is-mobile .stc-sprite { width: 48px; height: 48px; }
+body.is-mobile .shop-team-card { padding: 8px 4px; gap: 6px; }
+body.is-mobile .stc-sprite { width: 44px; height: 44px; }
+body.is-mobile .stc-drag-handle { display: none; }
+body.is-mobile .stc-top {
+  grid-template-columns: 44px 1fr auto;
+  gap: 8px;
+}
+body.is-mobile .stc-name { font-size: 14px; }
+body.is-mobile .stc-stat { font-size: 9px; }
+body.is-mobile .stc-slots { gap: 4px; flex-wrap: wrap; }
+body.is-mobile .stc-slot { height: 38px; min-width: 38px; padding: 2px 4px; }
+body.is-mobile .stc-slot-glyph { font-size: 14px; }
+body.is-mobile .stc-slot-label { display: none; }
+body.is-mobile .stc-order-btn { width: 30px; height: 30px; }
+/* Drawer header — explicit close to make the bottom sheet obvious */
+body.is-mobile .shop-side .team-panel .h {
+  position: sticky; top: 0; background: var(--paper);
+  padding: 6px 4px; margin: -2px -4px 6px;
+  border-bottom: 1.5px solid var(--ink);
+  z-index: 2;
+}
 
 /* Real backdrop element (injected by ShopScreen.attachMobileTeamDrawer) */
 .shop-side-backdrop {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(20, 18, 12, 0.4);
   z-index: 55;
   opacity: 0;
   transition: opacity 0.22s ease;
@@ -685,8 +704,13 @@ body.is-mobile .shop-foot #shop-team-toggle {
 }
 body.is-mobile .shop-foot #reroll-btn { flex: 1; }
 
-/* Pack-opening overlay must sit above drawer */
-body.is-mobile .po-overlay { z-index: 80 !important; }
+/* Pack-opening overlay must sit above drawer AND every shop chrome row.
+   The shop's foot+head are inside .shop-wrap (in document flow); a fixed
+   overlay nested inside that wrap stacks within the wrap's containing block,
+   so it needs a z-index higher than any sibling shop chrome to render above
+   them. We portal the overlay to <body> at runtime — keep z-index high in
+   case any rule above sets one. */
+body.is-mobile .po-overlay { z-index: 9999 !important; }
 
 /* Override main.css legacy mobile rules that broke the shop */
 body.is-mobile.shop-active .screen-container,
