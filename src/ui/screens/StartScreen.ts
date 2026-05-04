@@ -19,6 +19,11 @@ import { SYNERGY_CATALOG } from '../../systems/synergies';
 import { BOSS_BLINDS } from '../../data/bossBlinds';
 import { ACHIEVEMENTS, getUnlockedSet, getUnlockedCount, TOTAL_ACHIEVEMENTS } from '../../systems/achievements';
 import { getChampionClears } from '../../systems/championClears';
+import {
+  DECKS, MONO_TYPE_OPTIONS, getUnlockedDecks, getLastDeck, saveLastDeck,
+  getLastMonoType, saveLastMonoType,
+} from '../../systems/decks';
+import type { PokemonType } from '../../types';
 import { formatAct, formatBadges } from '../../util/runProgress';
 import { BADGES } from '../../data/badges';
 import { badgeSprite, imgErrorFallback } from '../../data/sprites';
@@ -53,6 +58,8 @@ export class StartScreen {
   private isGuest = false;
   private trainerGender: TrainerGender = 'male';
   private destroyAudioBtn: (() => void) | null = null;
+  private selectedDeck: string = 'standard';
+  private selectedMonoType: PokemonType = 'grass';
 
   constructor(
     container: HTMLElement,
@@ -68,6 +75,8 @@ export class StartScreen {
     this.playerName = playerName;
     this.isGuest = isGuest;
     this.onResume = onResume;
+    this.selectedDeck = getLastDeck(playerName);
+    this.selectedMonoType = getLastMonoType(playerName);
   }
 
   async mount(): Promise<void> {
@@ -262,6 +271,89 @@ export class StartScreen {
       </div>
       ${discoveryLine}
     `;
+  }
+
+  private refreshDeckPicker(): void {
+    const sec = this.container.querySelector<HTMLElement>('.deck-picker-section');
+    if (!sec) return;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = this.renderDeckPicker();
+    const next = wrap.firstElementChild as HTMLElement;
+    if (next) {
+      sec.replaceWith(next);
+      // Re-wire the new buttons.
+      next.querySelectorAll<HTMLButtonElement>('[data-deck-id]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (btn.disabled) return;
+          const id = btn.dataset['deckId'] ?? 'standard';
+          this.selectedDeck = id;
+          saveLastDeck(this.playerName, id);
+          this.refreshDeckPicker();
+        });
+      });
+      next.querySelectorAll<HTMLButtonElement>('[data-mono-type]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const t = btn.dataset['monoType'] as PokemonType;
+          this.selectedMonoType = t;
+          saveLastMonoType(this.playerName, t);
+          this.refreshDeckPicker();
+        });
+      });
+    }
+  }
+
+  private renderDeckPicker(): string {
+    const unlocked = getUnlockedDecks(this.playerName);
+    const cards = DECKS.map(d => {
+      const isUnlocked = unlocked.has(d.id);
+      const isSelected = this.selectedDeck === d.id && isUnlocked;
+      const lockHint = !isUnlocked
+        ? `<div class="deck-card-lock">Unlock: ${this.unlockHintFor(d.id)}</div>`
+        : '';
+      return `
+        <button type="button"
+                class="deck-card${isSelected ? ' selected' : ''}${!isUnlocked ? ' locked' : ''}"
+                data-deck-id="${d.id}"
+                ${!isUnlocked ? 'disabled' : ''}>
+          <div class="deck-card-icon" aria-hidden="true">${isUnlocked ? d.icon : '·'}</div>
+          <div class="deck-card-eyebrow">${escapeHtml(d.eyebrow)}</div>
+          <div class="deck-card-name">${escapeHtml(isUnlocked ? d.name : '???')}</div>
+          <div class="deck-card-desc">${escapeHtml(isUnlocked ? d.description : 'Locked. Keep playing to unlock.')}</div>
+          ${lockHint}
+        </button>
+      `;
+    }).join('');
+
+    const monoSubpicker = this.selectedDeck === 'mono_type' && unlocked.has('mono_type')
+      ? `<div class="deck-mono-subpicker">
+           <span class="deck-mono-label">Choose type:</span>
+           ${MONO_TYPE_OPTIONS.map(t => `
+             <button type="button"
+                     class="deck-mono-chip type-chip type-${t}${this.selectedMonoType === t ? ' selected' : ''}"
+                     data-mono-type="${t}">${escapeHtml(t.toUpperCase())}</button>
+           `).join('')}
+         </div>`
+      : '';
+
+    return `
+      <div class="deck-picker-section">
+        <div class="deck-picker-header">
+          <span class="deck-picker-title">Choose your deck</span>
+          <span class="deck-picker-hint">Decks bend the rules — unlocked via achievements.</span>
+        </div>
+        <div class="deck-picker-grid">${cards}</div>
+        ${monoSubpicker}
+      </div>
+    `;
+  }
+
+  private unlockHintFor(deckId: string): string {
+    switch (deckId) {
+      case 'speedrunner':  return 'Hall of Records — survive 30+ waves';
+      case 'iron_trainer': return 'Survivor — reach Act 5';
+      case 'mono_type':    return 'Mono Master — beat a gym with 2+ same-type alive';
+      default:             return '—';
+    }
   }
 
   private openSynergyCodex(): void {
@@ -476,6 +568,7 @@ export class StartScreen {
           ${this.renderResumeBanner()}
           ${this.renderPersonalBest()}
           ${this.renderBadgeTrophyStrip()}
+          ${this.renderDeckPicker()}
 
           <!-- Starter selection -->
           <div class="starter-section">
@@ -771,6 +864,26 @@ export class StartScreen {
     this.container.querySelector<HTMLButtonElement>('#ss-achievements-open')
       ?.addEventListener('click', () => this.openAchievementsCodex());
 
+    // Deck picker — clicking unlocked card selects it. Re-render strip so the
+    // mono-type sub-picker can appear/disappear.
+    this.container.querySelectorAll<HTMLButtonElement>('[data-deck-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        const id = btn.dataset['deckId'] ?? 'standard';
+        this.selectedDeck = id;
+        saveLastDeck(this.playerName, id);
+        this.refreshDeckPicker();
+      });
+    });
+    this.container.querySelectorAll<HTMLButtonElement>('[data-mono-type]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = btn.dataset['monoType'] as PokemonType;
+        this.selectedMonoType = t;
+        saveLastMonoType(this.playerName, t);
+        this.refreshDeckPicker();
+      });
+    });
+
     // Trainer chip — click cycles gender
     const trainerChip = this.container.querySelector<HTMLButtonElement>('#trainer-chip');
     trainerChip?.addEventListener('click', () => {
@@ -988,6 +1101,12 @@ export class StartScreen {
         pendingGenGate: false,
         actBossBlind: null,
         leagueBlinds: [],
+        deck: this.selectedDeck,
+        // deckMods D.2 — populated when the modifier wiring lands. For D.1 we
+        // just stash the chosen mono-type so the future boost can read it.
+        deckMods: this.selectedDeck === 'mono_type'
+          ? { monoType: this.selectedMonoType }
+          : {},
       };
 
       this.onStart(initialState);

@@ -3,6 +3,7 @@ import { getTopScores, getLeaderboardStatusMessage } from '../../systems/leaderb
 import { fadeIn } from '../animations';
 import { gsap } from 'gsap';
 import { formatAct, formatBadges } from '../../util/runProgress';
+import { getDeckName } from '../../systems/decks';
 
 export class LeaderboardScreen {
   private container: HTMLElement;
@@ -118,11 +119,13 @@ export class LeaderboardScreen {
       ? new Date(entry.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
       : '—';
 
+    const deckName = getDeckName(entry.score_details?.deck);
+    const deckPill = deckName ? `<span class="lb-deck-pill">${escapeHtml(deckName)}</span>` : '';
     return `
       <div class="lb-row lb-full-row${isMe ? ' me' : ''}">
         <div class="rank">${rank}.</div>
         <div>
-          <div class="n">${escapeHtml(entry.name)}</div>
+          <div class="n">${escapeHtml(entry.name)}${deckPill}</div>
           <div class="sub">Starter · ${escapeHtml(entry.score_details?.starterName ?? '—')}</div>
         </div>
         <div class="wv">W${entry.score_waves ?? 0}</div>

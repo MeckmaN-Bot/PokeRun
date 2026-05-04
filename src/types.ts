@@ -504,6 +504,20 @@ export interface GameState {
   leagueStep?: number;
   /** Pending generation-gate prompt after the champion is defeated. */
   pendingGenGate?: boolean;
+  /** Deck id picked for this run ('standard' default). Drives deckMods. */
+  deck?: string;
+  /** Run-modifier flags resolved from the picked deck at run-start. Optional
+   *  fields apply when set; all consumers should read each field independently. */
+  deckMods?: {
+    startCoins?: number;
+    /** [{itemId, quantity}] resolved into actual InventoryItem entries at run-start. */
+    startInventoryItemIds?: string[];
+    stagesPerAct?: number;
+    shopExcludeConsumables?: boolean;
+    startWithSlot2?: boolean;
+    monoType?: PokemonType;
+    monoDamageBoost?: boolean;
+  };
   /** Pending Champion-victory celebration overlay; fires before pendingGenGate. */
   pendingChampionVictoryScreen?: boolean;
   /** Snapshot of championClears at the moment of the most recent Champion KO,
@@ -704,6 +718,8 @@ export interface LeaderboardEntry {
     badgesEarned?: number;
     /** Run was in endless mode at end. Takes precedence over actReached for display. */
     endless?: boolean;
+    /** Deck id used for this run. Display-only on leaderboard, not part of rank. */
+    deck?: string;
   };
   created_at?: string;
 }

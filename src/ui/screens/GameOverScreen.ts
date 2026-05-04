@@ -191,6 +191,7 @@ export class GameOverScreen {
           actReached: progress.actReached,
           badgesEarned: this.state.badges?.length ?? 0,
           endless: progress.endless,
+          deck: this.state.deck,
         },
       });
       if (statusEl) statusEl.textContent = '✓ Score submitted';
