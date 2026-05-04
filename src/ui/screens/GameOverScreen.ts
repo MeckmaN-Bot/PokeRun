@@ -1,5 +1,5 @@
 import type { GameState, LeaderboardEntry } from '../../types';
-import { submitScore, getTopScores } from '../../systems/leaderboard';
+import { submitScore, getTopScores, getPersonalBest } from '../../systems/leaderboard';
 import { fadeIn } from '../animations';
 import { getGymForAct } from '../../data/gymLeaders';
 import { getEliteByIndex, ELITE_FOUR } from '../../data/eliteFour';
@@ -12,6 +12,10 @@ export class GameOverScreen {
   private onRestart: () => void;
   private onLeaderboard: () => void;
   private submitted = false;
+  // PB snapshot — must be captured BEFORE autoSubmitScore writes the new entry,
+  // otherwise the comparison would always read "tied with the freshly-written record."
+  private priorPB: LeaderboardEntry | null = null;
+  private isNewBest = false;
 
   constructor(
     container: HTMLElement,
@@ -23,6 +27,10 @@ export class GameOverScreen {
     this.state = state;
     this.onRestart = onRestart;
     this.onLeaderboard = onLeaderboard;
+    this.priorPB = getPersonalBest(state.playerName);
+    const newWaves = state.runStats.wavesCleared;
+    const priorWaves = this.priorPB?.score_waves ?? 0;
+    this.isNewBest = !this.priorPB || newWaves > priorWaves;
   }
 
   mount(): void {
@@ -69,8 +77,13 @@ export class GameOverScreen {
         <div class="gover-head">
           <div>
             <div class="kicker">Field log · Final entry</div>
-            <h2>The last Pokémon fainted on Wave ${wave}.</h2>
+            <h2>The last Pokémon fainted on Wave ${wave}.${this.isNewBest ? ` <span class="gover-newbest-pill">★ NEW PERSONAL BEST</span>` : ''}</h2>
             <div class="gover-subhead">${escapeHtml(progress.subheadLabel)}</div>
+            ${this.isNewBest ? `<div class="gover-pb-delta">${
+              this.priorPB
+                ? `Previous best · Wave ${this.priorPB.score_waves} → +${s.wavesCleared - this.priorPB.score_waves} waves`
+                : `Your first record — Wave ${s.wavesCleared}.`
+            }</div>` : ''}
           </div>
           <div style="font-family:var(--font-mono);font-size:11px;letter-spacing:.18em;color:var(--ink-3);text-transform:uppercase;text-align:right">
             Starter · ${s.starterName}<br/>

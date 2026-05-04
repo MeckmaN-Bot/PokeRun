@@ -2116,6 +2116,26 @@ html[data-reduce-motion="on"] *::after {
   letter-spacing: 0.22em; text-transform: uppercase;
   color: var(--ink-3); margin-top: 4px;
 }
+.gover-newbest-pill {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 2px 9px;
+  background: var(--gold, #d6a84a);
+  color: var(--ink, #1a1a1a);
+  font-family: var(--font-mono); font-size: 10px; font-weight: 800;
+  letter-spacing: 0.18em;
+  border: 1.5px solid var(--ink, #1a1a1a);
+  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+  transform: rotate(-1deg);
+  vertical-align: middle;
+  text-transform: uppercase;
+}
+.gover-pb-delta {
+  font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--gold, #b8862e); margin-top: 4px;
+  font-style: italic;
+}
 .gover-badge-row {
   display: inline-flex; gap: 4px; vertical-align: middle; margin-right: 6px;
 }
