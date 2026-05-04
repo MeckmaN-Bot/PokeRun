@@ -791,14 +791,11 @@ function showBattleScreen(): void {
         if (gymLeaderWin.id === 'brock') {
           tryUnlockAchievement(state.playerName, 'boulder_master');
         }
-        // Mono Master — alive teammates all share primary type at this victory moment.
+        // Mono Master — at least 2 alive teammates sharing primary type at victory.
+        // 1-mon survivors are trivially mono and would cheapen the unlock.
         const aliveMons = state.team.filter(m => m.battleHp > 0);
-        if (aliveMons.length > 0) {
-          const lead = aliveMons[0].types[0];
-          const allMono = aliveMons.every(m => m.types[0] === lead);
-          if (allMono) {
-            tryUnlockAchievement(state.playerName, 'mono_master');
-          }
+        if (aliveMons.length >= 2 && aliveMons.every(m => m.types[0] === aliveMons[0].types[0])) {
+          tryUnlockAchievement(state.playerName, 'mono_master');
         }
       }
       // Leader fight ends the arena gauntlet — clear it so normal flow resumes.
