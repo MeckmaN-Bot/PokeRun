@@ -1282,11 +1282,100 @@ html[data-reduce-motion="on"] *::after {
   font-style: italic;
 }
 .ss-discovery-line {
+  display: block;
   margin: 4px 0 10px;
-  padding: 0 4px;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px dashed var(--paper-edge, rgba(0,0,0,0.18));
   font-family: var(--font-mono); font-size: 10px;
   letter-spacing: 0.22em; text-transform: uppercase;
   color: var(--ink-3, #6b5e44);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.ss-discovery-line:hover {
+  background: color-mix(in srgb, var(--paper, #f4f1e8) 92%, var(--ink, #1a1a1a) 4%);
+  color: var(--ink, #1a1a1a);
+}
+
+/* Synergy Codex modal */
+.codex-modal {
+  max-width: 760px;
+  width: 92vw;
+  max-height: 84vh;
+  display: flex; flex-direction: column;
+}
+.codex-eyebrow {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.32em; text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+  text-align: center;
+  margin-bottom: 4px;
+}
+.codex-progress {
+  font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+  text-align: center;
+  margin: 4px 0 14px;
+}
+.codex-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.codex-card {
+  padding: 10px 12px;
+  background: var(--paper, #f4f1e8);
+  border: 2px solid var(--ink, #1a1a1a);
+  box-shadow: 3px 3px 0 var(--ink, #1a1a1a);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.codex-card.locked {
+  background: color-mix(in srgb, var(--paper, #f4f1e8) 80%, var(--ink, #1a1a1a) 6%);
+  border-style: dashed;
+  opacity: 0.6;
+}
+.codex-card-head {
+  display: flex; align-items: center; gap: 8px;
+}
+.codex-card-icon {
+  display: inline-grid; place-items: center;
+  width: 28px; height: 28px;
+  font-size: 16px; font-weight: 800;
+  border: 1.5px solid var(--ink, #1a1a1a);
+  background: var(--paper, #f4f1e8);
+}
+.codex-card.found.syn-gold   .codex-card-icon { background: var(--gold, #c9962b); color: var(--ink); }
+.codex-card.found.syn-blue   .codex-card-icon { background: var(--cobalt, #3a4a8a); color: var(--paper); }
+.codex-card.found.syn-green  .codex-card-icon { background: #4a8a3a; color: var(--paper); }
+.codex-card.found.syn-red    .codex-card-icon { background: var(--oxblood, #c0392b); color: var(--paper); }
+.codex-card.found.syn-purple .codex-card-icon { background: #6a3a8a; color: var(--paper); }
+.codex-card.found.syn-orange .codex-card-icon { background: #c97a2b; color: var(--paper); }
+.codex-card-name {
+  font-family: var(--font-display); font-weight: 800; font-style: italic;
+  font-size: 15px; color: var(--ink, #1a1a1a);
+  letter-spacing: 0.02em;
+}
+.codex-card.locked .codex-card-name {
+  color: var(--ink-3, #6b5e44);
+  font-style: normal; letter-spacing: 0.18em;
+}
+.codex-card-desc {
+  font-family: var(--font-mono); font-size: 10.5px;
+  line-height: 1.4; color: var(--ink-2, #3a3a3a);
+  margin: 0;
+}
+.codex-card.locked .codex-card-desc {
+  color: var(--ink-3, #6b5e44);
+  font-style: italic;
+}
+@media (max-width: 700px) {
+  .codex-grid { grid-template-columns: 1fr; }
+  .codex-modal { max-width: 96vw; }
 }
 @media (max-width: 700px) {
   .ss-pb-row { grid-template-columns: repeat(2, 1fr); }

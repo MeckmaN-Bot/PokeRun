@@ -11,7 +11,8 @@ import { escapeHtml, safeUrl } from '../../util/sanitize';
 import { hasSavedRun, loadRun, clearRun } from '../../systems/saveRun';
 import { loadSettings, saveSettings } from '../../systems/userSettings';
 import { getPersonalBest } from '../../systems/leaderboard';
-import { getDiscoveredCount, TOTAL_SYNERGIES } from '../../systems/discoveries';
+import { getDiscoveredCount, getDiscoveredSet, TOTAL_SYNERGIES } from '../../systems/discoveries';
+import { SYNERGY_CATALOG } from '../../systems/synergies';
 import { formatAct, formatBadges } from '../../util/runProgress';
 import { BADGES } from '../../data/badges';
 import { badgeSprite, imgErrorFallback } from '../../data/sprites';
@@ -227,7 +228,7 @@ export class StartScreen {
   private renderPersonalBest(): string {
     const pb = getPersonalBest(this.playerName);
     const discovered = getDiscoveredCount(this.playerName);
-    const discoveryLine = `<div class="ss-discovery-line">Synergies discovered · ${discovered} / ${TOTAL_SYNERGIES}</div>`;
+    const discoveryLine = `<button type="button" class="ss-discovery-line" id="ss-discovery-open" title="Open Synergy Codex">Synergies discovered · ${discovered} / ${TOTAL_SYNERGIES} →</button>`;
     if (!pb) {
       return `
         <div class="ss-personal-best" data-empty="true">
@@ -250,6 +251,49 @@ export class StartScreen {
       </div>
       ${discoveryLine}
     `;
+  }
+
+  private openSynergyCodex(): void {
+    const discovered = getDiscoveredSet(this.playerName);
+    const cards = SYNERGY_CATALOG.map(entry => {
+      const found = discovered.has(entry.id);
+      if (found) {
+        return `
+          <div class="codex-card found syn-${entry.color}">
+            <div class="codex-card-head">
+              <span class="codex-card-icon">${entry.icon}</span>
+              <span class="codex-card-name">${escapeHtml(entry.name)}</span>
+            </div>
+            <p class="codex-card-desc">${escapeHtml(entry.description)}</p>
+          </div>
+        `;
+      }
+      return `
+        <div class="codex-card locked">
+          <div class="codex-card-head">
+            <span class="codex-card-icon">·</span>
+            <span class="codex-card-name">???</span>
+          </div>
+          <p class="codex-card-desc">Trigger this synergy to reveal.</p>
+        </div>
+      `;
+    }).join('');
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay codex-overlay';
+    overlay.innerHTML = `
+      <div class="modal codex-modal">
+        <button class="modal-close" id="codex-close" type="button">✕</button>
+        <div class="codex-eyebrow">— Field Reference —</div>
+        <h2 class="modal-title">Synergy <em>Codex</em></h2>
+        <div class="codex-progress">${discovered.size} / ${SYNERGY_CATALOG.length} discovered</div>
+        <div class="codex-grid">${cards}</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#codex-close')?.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   }
 
   private wireHtpPager(modalEl: HTMLElement): void {
@@ -619,6 +663,10 @@ export class StartScreen {
     const howtoplayModal = this.container.querySelector('#howtoplay-modal')!;
     const closeHowtoplay = this.container.querySelector('#close-howtoplay')!;
     const logoutBtn      = this.container.querySelector('#logout-btn');
+
+    // Synergy Codex — click discovery line to open the catalog modal
+    this.container.querySelector<HTMLButtonElement>('#ss-discovery-open')
+      ?.addEventListener('click', () => this.openSynergyCodex());
 
     // Trainer chip — click cycles gender
     const trainerChip = this.container.querySelector<HTMLButtonElement>('#trainer-chip');

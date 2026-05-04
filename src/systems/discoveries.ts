@@ -7,21 +7,15 @@
  * model). Sticky-guest accrues across sessions; clearGuestIdentity does NOT
  * port discoveries — by design.
  *
- * Single source of truth for the canonical id list lives here. Any addition
- * to src/systems/synergies.ts MUST also be added to ALL_SYNERGY_IDS below,
- * otherwise the new id will be silently dropped on save (filtered) and the
- * count will not include it.
+ * Canonical id list is derived from SYNERGY_CATALOG in synergies.ts so the
+ * codex display and the discovered-count cannot drift.
  */
+
+import { SYNERGY_CATALOG } from './synergies';
 
 const KEY_PREFIX = 'pokerun_discovered_synergies_';
 
-const ALL_SYNERGY_IDS = [
-  'lead_vanguard', 'last_stand', 'mono_legion', 'type_trio', 'type_bond',
-  'trinity', 'brute_force', 'mind_surge', 'berserker', 'vampire_strike',
-  'precision_hunter', 'synergy_stone', 'rally_band', 'type_enhancer',
-  'momentum_badge', 'royal_arsenal', 'gilded_crown', 'phoenix_oath',
-  'brilliant_beam', 'formation_crest',
-] as const;
+const ALL_SYNERGY_IDS = SYNERGY_CATALOG.map(e => e.id);
 
 export const TOTAL_SYNERGIES = ALL_SYNERGY_IDS.length;
 
@@ -60,4 +54,10 @@ export function markDiscovered(username: string, ids: string[]): void {
 export function getDiscoveredCount(username: string): number {
   if (!username) return 0;
   return readSet(username).size;
+}
+
+/** Codex consumer — returns the validated set of discovered ids. */
+export function getDiscoveredSet(username: string): Set<string> {
+  if (!username) return new Set();
+  return readSet(username);
 }
