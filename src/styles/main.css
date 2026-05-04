@@ -2066,6 +2066,54 @@ html[data-reduce-motion="on"] *::after {
   border-top: 3px double var(--ink); padding-top: 10px;
 }
 
+/* Run-end progress display */
+.gover-subhead {
+  font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--ink-3); margin-top: 4px;
+}
+.gover-badge-row {
+  display: inline-flex; gap: 4px; vertical-align: middle; margin-right: 6px;
+}
+.gover-badge-row .badge-pip {
+  width: 18px; height: 18px;
+  display: inline-grid; place-items: center;
+  border: 1px solid var(--ink, #1a1a1a);
+  background: color-mix(in srgb, var(--badge-color, #3a3a3a) 18%, var(--paper));
+  box-shadow: 1px 1px 0 var(--ink, #1a1a1a);
+}
+.gover-badge-row .badge-pip-sprite {
+  width: 100%; height: 100%; image-rendering: pixelated; object-fit: contain;
+}
+.gover-badge-row .badge-pip-icon { font-size: 10px; }
+.gover-badge-count {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--ink-3); letter-spacing: 0.1em;
+}
+.gover-league-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em;
+}
+.gover-league-cell {
+  padding: 2px 6px;
+  border: 1px solid var(--ink, #1a1a1a);
+  background: var(--paper, #f4f1e8);
+  color: var(--ink-3, #6b5e44);
+  text-transform: uppercase;
+}
+.gover-league-cell.done {
+  background: var(--ink, #1a1a1a);
+  color: var(--paper, #f4f1e8);
+}
+.gover-league-cell.current {
+  background: color-mix(in srgb, var(--cobalt, #3a4a8a) 25%, var(--paper, #f4f1e8));
+  color: var(--ink, #1a1a1a);
+  font-weight: 700;
+}
+.gover-league-arrow {
+  color: var(--ink-3, #6b5e44); font-weight: 700;
+}
+
 @media (max-width: 800px) {
   .gover-wrap { padding-left: 18px; padding-right: 18px; }
   .gover-body { grid-template-columns: 1fr; }

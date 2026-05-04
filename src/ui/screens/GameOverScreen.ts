@@ -1,6 +1,10 @@
 import type { GameState, LeaderboardEntry } from '../../types';
 import { submitScore, getTopScores } from '../../systems/leaderboard';
 import { fadeIn } from '../animations';
+import { getGymForAct } from '../../data/gymLeaders';
+import { getEliteByIndex, ELITE_FOUR } from '../../data/eliteFour';
+import { BADGES } from '../../data/badges';
+import { badgeSprite, imgErrorFallback } from '../../data/sprites';
 
 export class GameOverScreen {
   private container: HTMLElement;
@@ -33,6 +37,30 @@ export class GameOverScreen {
   private renderHTML(): string {
     const s = this.state.runStats;
     const wave = this.state.wave;
+    const progress = this.computeProgress();
+    const ownedBadges = new Set(this.state.badges ?? []);
+    const ownedBadgeList = BADGES.filter(b => ownedBadges.has(b.id));
+    const badgeIconsHtml = ownedBadgeList.map(b => {
+      const url = badgeSprite(b.id);
+      const inner = url
+        ? `<img src="${url}" alt="${b.name}" class="badge-pip-sprite" onerror="${imgErrorFallback(b.icon)}" />`
+        : `<span class="badge-pip-icon" aria-hidden="true">${b.icon}</span>`;
+      return `<span class="badge-pip owned" title="${b.name}" style="--badge-color:${b.color}">${inner}</span>`;
+    }).join('');
+    const badgeCellHtml = ownedBadgeList.length > 0
+      ? `<div class="v"><span class="gover-badge-row">${badgeIconsHtml}</span><span class="gover-badge-count">${ownedBadgeList.length} / ${BADGES.length}</span></div>`
+      : `<div class="v">${ownedBadgeList.length} / ${BADGES.length}</div>`;
+
+    const leagueRowHtml = (this.state.badges?.length ?? 0) >= 8
+      ? (() => {
+          const cleared = this.state.leagueStep ?? 0;
+          const cells = ELITE_FOUR.map((step, i) => {
+            const status = i < cleared ? 'done' : i === cleared ? 'current' : '';
+            return `<span class="gover-league-cell ${status}" title="${step.name}">${step.icon} ${step.name.split(' ')[0]}</span>`;
+          }).join('<span class="gover-league-arrow">→</span>');
+          return `<div class="stat-row"><div class="k">League progress</div><div class="v"><div class="gover-league-row">${cells}</div></div></div>`;
+        })()
+      : '';
 
     return `
       <div class="gover-wrap screen">
@@ -42,6 +70,7 @@ export class GameOverScreen {
           <div>
             <div class="kicker">Field log · Final entry</div>
             <h2>The last Pokémon fainted on Wave ${wave}.</h2>
+            <div class="gover-subhead">${escapeHtml(progress.subheadLabel)}</div>
           </div>
           <div style="font-family:var(--font-mono);font-size:11px;letter-spacing:.18em;color:var(--ink-3);text-transform:uppercase;text-align:right">
             Starter · ${s.starterName}<br/>
@@ -53,6 +82,9 @@ export class GameOverScreen {
           <div class="gover-stats">
             <div class="h">Run stats</div>
             <div class="stat-row"><div class="k">Waves cleared</div><div class="v">${s.wavesCleared}</div></div>
+            <div class="stat-row"><div class="k">Act reached</div><div class="v">${escapeHtml(progress.actLabel)}</div></div>
+            <div class="stat-row"><div class="k">Badges earned</div>${badgeCellHtml}</div>
+            ${leagueRowHtml}
             <div class="stat-row"><div class="k">Total KOs</div><div class="v">${s.totalKOs}</div></div>
             <div class="stat-row"><div class="k">Damage dealt</div><div class="v">${s.totalDamageDealt.toLocaleString()}</div></div>
             <div class="stat-row"><div class="k">Items collected</div><div class="v">${s.itemsCollected}</div></div>
@@ -81,10 +113,44 @@ export class GameOverScreen {
     `;
   }
 
+  /**
+   * Resolve the player's story progress for display.
+   *  - 1..8 (gym): "Act N · LeaderName" + numeric act for the score payload
+   *  - badges>=8 in league: "League · StepName" + actReached=9
+   *  - leagueStep===5 (champion cleared): "Champion ✓" + actReached=10
+   */
+  private computeProgress(): {
+    actLabel: string;
+    subheadLabel: string;
+    actReached: number;
+  } {
+    const badges = this.state.badges?.length ?? 0;
+    const leagueStep = this.state.leagueStep ?? 0;
+    if (badges >= 8 && leagueStep >= 5) {
+      return { actLabel: 'Champion ✓', subheadLabel: 'League · Champion', actReached: 10 };
+    }
+    if (badges >= 8) {
+      const step = getEliteByIndex(leagueStep);
+      const name = step?.name ?? `Step ${leagueStep + 1}`;
+      return { actLabel: `League · ${name}`, subheadLabel: `League · ${name}`, actReached: 9 };
+    }
+    const act = this.state.currentAct;
+    const leader = getGymForAct(act);
+    if (leader) {
+      return {
+        actLabel: `Act ${act} · ${leader.name}`,
+        subheadLabel: `Act ${act} · ${leader.city}`,
+        actReached: act,
+      };
+    }
+    return { actLabel: `Act ${act}`, subheadLabel: `Act ${act}`, actReached: act };
+  }
+
   private async autoSubmitScore(): Promise<void> {
     if (this.submitted) return;
     this.submitted = true;
     const statusEl = this.container.querySelector<HTMLElement>('#submit-status');
+    const progress = this.computeProgress();
 
     try {
       await submitScore({
@@ -96,6 +162,8 @@ export class GameOverScreen {
           itemsCollected: this.state.runStats.itemsCollected,
           perksCollected: this.state.runStats.perksCollected,
           totalDamageDealt: this.state.runStats.totalDamageDealt,
+          actReached: progress.actReached,
+          badgesEarned: this.state.badges?.length ?? 0,
         },
       });
       if (statusEl) statusEl.textContent = '✓ Score submitted';
@@ -141,7 +209,9 @@ export class GameOverScreen {
     });
     this.container.querySelector('#copy-btn')?.addEventListener('click', () => {
       const s = this.state.runStats;
-      const text = `PokeRun — ${this.state.playerName}\nWaves: ${s.wavesCleared} | KOs: ${s.totalKOs} | Starter: ${s.starterName}`;
+      const progress = this.computeProgress();
+      const badgesEarned = this.state.badges?.length ?? 0;
+      const text = `PokeRun — ${this.state.playerName}\nWaves: ${s.wavesCleared} | Act: ${progress.actLabel} | Badges: ${badgesEarned}/${BADGES.length} | KOs: ${s.totalKOs} | Starter: ${s.starterName}`;
       navigator.clipboard.writeText(text).catch(() => {});
     });
   }

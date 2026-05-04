@@ -693,6 +693,9 @@ export interface LeaderboardEntry {
     itemsCollected: number;
     perksCollected: number;
     totalDamageDealt: number;
+    /** 1..8 = gym act reached, 9 = league in progress, 10 = champion cleared. */
+    actReached?: number;
+    badgesEarned?: number;
   };
   created_at?: string;
 }
