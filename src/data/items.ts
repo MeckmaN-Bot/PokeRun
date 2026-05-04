@@ -497,7 +497,7 @@ export const ALL_ITEMS: Item[] = [
   {
     id: 'pokemon_food', name: 'Pokémon Food', rarity: 'common', itemType: 'consumable',
     icon: '✚',
-    pokeapiName: 'poke-puff',
+    pokeapiName: 'casteliacone',
     description: 'Restores 30 HP to one Pokémon.',
     effect: { trigger: 'manual', healAmount: 30 },
   },

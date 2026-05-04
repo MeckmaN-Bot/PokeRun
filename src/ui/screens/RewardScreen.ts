@@ -3,15 +3,16 @@ import { renderTypeBadges } from '../components/TypeBadge';
 import { getRarityClass, getRarityLabel } from '../../systems/rewards';
 import { fadeIn, staggerRevealCards } from '../animations';
 import { toBattlePokemon } from '../../systems/battle';
+import { imgErrorFallback } from '../../data/sprites';
 
 const ITEM_BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const POKEAPI_ITEMS = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/';
 function itemArt(item: Item): string {
   if (item.pokeapiName) {
-    return `<img src="${POKEAPI_ITEMS}${item.pokeapiName}.png" alt="${item.name}" class="item-sprite" draggable="false">`;
+    return `<img src="${POKEAPI_ITEMS}${item.pokeapiName}.png" alt="${item.name}" class="item-sprite" draggable="false" onerror="${imgErrorFallback(item.icon)}">`;
   }
   if (item.sprite) {
-    return `<img src="${ITEM_BASE}${item.sprite}" alt="${item.name}" class="item-sprite" draggable="false">`;
+    return `<img src="${ITEM_BASE}${item.sprite}" alt="${item.name}" class="item-sprite" draggable="false" onerror="${imgErrorFallback(item.icon)}">`;
   }
   return `<div class="glyph">${item.icon}</div>`;
 }
@@ -101,7 +102,7 @@ export class RewardScreen {
     if (reward.type === 'pokemon') {
       const p = reward.pokemon as Pokemon;
       tag = 'NEW CREATURE';
-      artHtml = `<img src="${p.sprite}" alt="${p.displayName}" />`;
+      artHtml = `<img src="${p.sprite}" alt="${p.displayName}" onerror="${imgErrorFallback('◆')}" />`;
       nameHtml = p.displayName;
       typesHtml = renderTypeBadges(p.types);
       descHtml = `Lv.${p.level} · BST ${p.bst} · ${p.isFullyEvolved ? '★ Fully Evolved' : '◇ Can Evolve'}`;
