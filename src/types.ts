@@ -81,7 +81,10 @@ export interface ArenaState {
   index: number;
 }
 
-export type Generation = 'gen1' | 'gen2' | 'endless';
+/** Run-mode id. 'endless' is a special non-region mode; gen1..gen9 are the
+ *  region tours (only 'live' status entries from data/generations.ts are
+ *  valid at runtime — resolveGen() in main.ts enforces). */
+export type Generation = 'gen1' | 'gen2' | 'gen3' | 'gen4' | 'gen5' | 'gen6' | 'gen7' | 'gen8' | 'gen9' | 'endless';
 
 export type RewardType = 'pokemon' | 'perk' | 'item';
 

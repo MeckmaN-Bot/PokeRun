@@ -21,13 +21,22 @@ import type { GameState, BattlePokemon } from './types';
 import { prefetchStarters, fetchPokemon, fetchPokemonBatch } from './api/pokeapi';
 import { getWaveConfig, getEnemyLevel, selectEnemyIds, getWaveCoins } from './systems/scaling';
 import type { Generation } from './types';
+import { GENERATIONS, getGenById, getNextGen, unlockNextGen } from './data/generations';
+
+/** Validate state.generation against the registry — only 'live' gens are
+ *  accepted at runtime; 'endless' is a special non-region mode. Built once
+ *  at module load; future 'gen3' → 'live' promotion needs no edits here. */
+const VALID_GEN_IDS: Set<string> = new Set([
+  ...GENERATIONS.filter(g => g.status === 'live').map(g => g.id),
+  'endless',
+]);
 
 /** Resolve gameState.generation to a known Generation value — old saves
- *  may have undefined; corrupt saves could carry a non-union string. */
-function resolveGen(state: { generation?: Generation } | null | undefined): Generation {
+ *  may have undefined; corrupt saves could carry a non-union string;
+ *  saves that picked a not-yet-live gen fall back to gen1. */
+function resolveGen(state: { generation?: string } | null | undefined): Generation {
   const g = state?.generation;
-  if (g === 'gen1' || g === 'gen2' || g === 'endless') return g;
-  return 'gen1';
+  return (g && VALID_GEN_IDS.has(g)) ? (g as Generation) : 'gen1';
 }
 import { generateRewards } from './systems/rewards';
 import { generateShop, generateShopPacks, generateShopVouchers } from './systems/shop';
@@ -65,7 +74,6 @@ import { markBlindDiscovered } from './systems/discoveries';
 import { tryUnlock as tryUnlockAchievement } from './systems/achievements';
 import { bumpChampionClears } from './systems/championClears';
 import { unlockNextStake } from './systems/stakes';
-import { getGenById, getNextGen, unlockNextGen } from './data/generations';
 import { showChampionVictoryScreen } from './ui/screens/ChampionVictoryScreen';
 import { applySettings } from './systems/userSettings';
 import { getEliteStep } from './data/eliteFour';

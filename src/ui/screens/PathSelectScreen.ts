@@ -111,8 +111,11 @@ export class PathSelectScreen {
     // Eyebrow shifts when the league is in play.
     const inLeague = (this.state.badges?.length ?? 0) >= 8 && (this.state.leagueStep ?? 0) < 5;
     const currentGen = getGenById(this.state.generation ?? 'gen1');
+    const isLiveGen = currentGen?.status === 'live';
     const isEndless = this.state.generation === 'endless';
-    const isNonKantoGen = !!currentGen && currentGen.id !== 'gen1' && !isEndless;
+    // Only render region eyebrow for live, non-Kanto gens. Non-live ids
+    // (corrupt save / future planned gen) fall back to Crossroads.
+    const isNonKantoGen = isLiveGen && currentGen.id !== 'gen1' && !isEndless;
     const stagesPerAct = this.state.deckMods?.stagesPerAct ?? 4;
     const headerEyebrow = inLeague
       ? `— Pokémon League · Step ${(this.state.leagueStep ?? 0) + 1} of 5 —`
