@@ -9,8 +9,10 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(26, 22, 18, 0.62);
-  backdrop-filter: blur(2px);
+  /* 0.88 obscures the underlying battle scene fully — at 0.62 a bright
+   * sprite (Bulbasaur etc.) was bleeding through onto the picker card. */
+  background: rgba(26, 22, 18, 0.88);
+  backdrop-filter: blur(4px);
   opacity: 0;
   pointer-events: none;
   transition: opacity 180ms ease;

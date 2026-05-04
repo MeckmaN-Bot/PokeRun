@@ -1905,9 +1905,18 @@ html[data-reduce-motion="on"] *::after {
   width: 9px; height: 9px; border: 1.5px solid var(--ink); background: var(--paper);
   padding: 0; cursor: pointer; transition: all 0.12s;
   border-radius: 0;
+  position: relative;
 }
 .htp-pip:hover { background: var(--paper-2); }
 .htp-pip.active { background: var(--oxblood); border-color: var(--oxblood); transform: scale(1.2); }
+/* Mobile hit slop — the visible pip stays small but the tap target is 44×44. */
+@media (max-width: 520px) {
+  .htp-pip::after {
+    content: '';
+    position: absolute;
+    inset: -17.5px;
+  }
+}
 
 @media (max-width: 520px) {
   .htp-grid { grid-template-columns: 1fr; }

@@ -54,10 +54,15 @@ body.is-mobile .path-card:hover {
   box-shadow: var(--m-shadow);
 }
 
-/* Universal: every primary button is tap-friendly */
+/* Universal: every primary button is tap-friendly. !important wins against
+ * later .ink-btn.sm overrides that ship with their own padding rules. */
 body.is-mobile .ink-btn,
-body.is-mobile button:not(.modal-close):not(.starter-dot):not(.starter-nav) {
-  min-height: var(--m-tap);
+body.is-mobile button:not(.modal-close):not(.starter-dot):not(.starter-nav):not(.htp-pip):not(.stc-order-btn) {
+  min-height: var(--m-tap) !important;
+  min-width: var(--m-tap);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ============================================================
@@ -165,7 +170,7 @@ body.is-mobile .starter-nav {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 36px; height: 56px;
+  width: 44px; height: 56px;
   border: 1.5px solid var(--ink);
   background: var(--paper);
   box-shadow: 2px 2px 0 var(--ink);
@@ -197,10 +202,17 @@ body.is-mobile .starter-dots { display: flex; }
   padding: 0;
   cursor: pointer;
   transition: background 0.15s, transform 0.15s;
+  position: relative;
 }
 .starter-dot.active {
   background: var(--cobalt);
   transform: scale(1.25);
+}
+/* Hidden 44×44 hit slop so the small visual dot is still tap-friendly. */
+body.is-mobile .starter-dot::after {
+  content: '';
+  position: absolute;
+  inset: -17.5px;
 }
 
 body.is-mobile .start-footer {

@@ -10,6 +10,7 @@ import {
 import { getBossBlindById, blindDisablesItems } from '../../data/bossBlinds';
 import { evaluateSynergies, type ActiveSynergy } from '../../systems/synergies';
 import { markDiscovered } from '../../systems/discoveries';
+import { loadSettings, saveSettings } from '../../systems/userSettings';
 import { ALL_ITEMS } from '../../data/items';
 import { attachTooltipDelegation } from '../components/Tooltip';
 import { getEffectivenessLabel } from '../../data/typeChart';
@@ -171,6 +172,10 @@ export class BattleScreen {
           </div>
           <div class="battle-controls">
             <div id="battle-bag-row">${this.renderBagButtons()}</div>
+            <button class="ink-btn ghost sm" id="battle-speed-btn" type="button"
+                    aria-label="Cycle battle animation speed">
+              ${this.renderSpeedLabel()}
+            </button>
             ${godModeBtn}
           </div>
         </div>
@@ -318,6 +323,24 @@ export class BattleScreen {
         </div>
       </div>
     `).join('');
+  }
+
+  private renderSpeedLabel(): string {
+    const s = loadSettings();
+    return `${s.animationSpeed}× speed`;
+  }
+
+  private cycleSpeed(): void {
+    // Cycle 1× → 1.5× → 2× → 0.5× → 1×. animationSpeed allowed values are
+    // [0.5, 1, 1.5, 2] per userSettings.ts; cycle order chosen so the most
+    // common values come first.
+    const order = [1, 1.5, 2, 0.5];
+    const cur = loadSettings();
+    const idx = order.indexOf(cur.animationSpeed);
+    const next = order[(idx + 1) % order.length];
+    saveSettings({ ...cur, animationSpeed: next });
+    const btn = this.container.querySelector<HTMLElement>('#battle-speed-btn');
+    if (btn) btn.textContent = `${next}× speed`;
   }
 
   private renderBagButtons(): string {
@@ -499,6 +522,9 @@ export class BattleScreen {
     }
 
     // God Mode
+    this.container.querySelector('#battle-speed-btn')
+      ?.addEventListener('click', () => this.cycleSpeed());
+
     const godBtn = this.container.querySelector('#god-mode-btn');
     if (godBtn) {
       godBtn.addEventListener('click', () => this.activateGodMode());

@@ -358,6 +358,15 @@
   font-family: var(--font-mono); font-size: 12px; color: var(--ink);
   cursor: pointer; display: grid; place-items: center;
   transition: transform 0.08s;
+  position: relative;
+}
+/* Mobile hit slop — visible button stays compact but tap target is 44×44. */
+@media (max-width: 520px) {
+  .stc-order-btn::after {
+    content: '';
+    position: absolute;
+    inset: -10px;
+  }
 }
 .stc-order-btn:hover { transform: translate(-1px,-1px); }
 
