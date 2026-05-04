@@ -109,9 +109,12 @@ export class PathSelectScreen {
 
     // Eyebrow shifts when the league is in play.
     const inLeague = (this.state.badges?.length ?? 0) >= 8 && (this.state.leagueStep ?? 0) < 5;
+    const isJohto = this.state.generation === 'gen2';
     const headerEyebrow = inLeague
       ? `— Pokémon League · Step ${(this.state.leagueStep ?? 0) + 1} of 5 —`
-      : `— Crossroads · Act ${act} · Step ${step} of 4 —`;
+      : isJohto
+        ? `— Region: Johto · Act ${act} · Step ${step} of 4 —`
+        : `— Crossroads · Act ${act} · Step ${step} of 4 —`;
     const headerTitle = inLeague ? 'Indigo <em>Plateau</em>' : 'Choose your <em>path</em>';
     const headerSub = inLeague
       ? 'No retreat. The next door is the next opponent.'

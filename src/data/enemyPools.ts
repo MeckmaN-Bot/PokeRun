@@ -103,12 +103,48 @@ export const BOSS_POOL_LATE = [
   482, // Azelf
 ];
 
-export function getEnemyPool(wave: number): number[] {
-  if (wave <= 5) return POOL_WAVE_1_5;
-  if (wave <= 10) return POOL_WAVE_6_10;
-  if (wave <= 15) return POOL_WAVE_11_15;
-  if (wave <= 20) return POOL_WAVE_16_20;
-  return POOL_WAVE_21_PLUS;
+/**
+ * Curated Gen 2 picks gated behind the Gen 2 / Endless run flag. Strong
+ * representatives across the wave tiers; baby/pre-evolutions and noisy
+ * mid-tiers are intentionally dropped (the existing arrays carry every
+ * Gen 2 ID, this set narrows the pool that ships to the player).
+ */
+const GEN2_KEEP = new Set<number>([
+  // Wave 6-10 tier — early Johto basics
+  152, 155, 158, 161, 163, 167, 170, 172, 173, 187,
+  // Wave 11-15 tier — mid Johto
+  153, 156, 159, 168, 178, 184, 195, 199, 219, 224,
+  // Wave 16-20 tier — final evos + powerhouses
+  154, 157, 160, 181, 185, 196, 197, 211, 230, 245,
+  // Wave 21+ tier — legendaries
+  248, 249, 250,
+]);
+
+import type { Generation } from '../types';
+
+/**
+ * Wild encounter pool gated by run generation:
+ *   - 'gen1':    only Gen 1 IDs (≤151).
+ *   - 'gen2':    Gen 1 IDs + curated Gen 2 picks.
+ *   - 'endless': same as gen2 + the post-Gen-2 spice (>251) that lives in the
+ *                wave-21+ pool. Endless is score-attack and benefits from
+ *                variety beyond Gen 2.
+ */
+export function getEnemyPool(wave: number, generation: Generation = 'gen1'): number[] {
+  const base =
+    wave <= 5  ? POOL_WAVE_1_5 :
+    wave <= 10 ? POOL_WAVE_6_10 :
+    wave <= 15 ? POOL_WAVE_11_15 :
+    wave <= 20 ? POOL_WAVE_16_20 :
+    POOL_WAVE_21_PLUS;
+  if (generation === 'gen1') {
+    return base.filter(id => id <= 151);
+  }
+  return base.filter(id =>
+    id <= 151 ||
+    GEN2_KEEP.has(id) ||
+    (generation === 'endless' && id > 251)
+  );
 }
 
 export function getBossPool(wave: number): number[] {

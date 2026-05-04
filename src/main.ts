@@ -287,7 +287,7 @@ async function startNewWave(): Promise<void> {
   const node = gameState.currentNode;
   const isStoryBoss = node?.kind === 'gym' || node?.kind === 'elite_four' || node?.kind === 'champion';
   const isBossWave = isStoryBoss || wave === gameState.nextBossWave;
-  const config = getWaveConfig(wave, isBossWave);
+  const config = getWaveConfig(wave, isBossWave, gameState.generation ?? 'gen1');
 
   clearScreen();
 
@@ -731,8 +731,8 @@ function showBattleScreen(): void {
       // Victory — award coins
       const isBossVictory = bs.isBossWave;
       void Audio.playMusic('music.victory', { fadeMs: 200, loop: false, volume: 0.95 });
-      const config = getWaveConfig(state.wave, isBossVictory);
-      const coinEarned = getWaveCoins(state.wave, isBossVictory, state.activePerks);
+      const config = getWaveConfig(state.wave, isBossVictory, state.generation ?? 'gen1');
+      const coinEarned = getWaveCoins(state.wave, isBossVictory, state.activePerks, state.generation ?? 'gen1');
 
       // After a boss wave, schedule the next boss wave randomly 4–7 waves away
       if (isBossVictory) {
@@ -1389,14 +1389,18 @@ function showGenerationGate(): void {
       Audio.play('ui.confirm');
       if (gen === 'gen2') {
         gameState.generation = 'gen2';
-        // Reset run-graph for the second tour but keep team/items/badges visible as legacy
+        // Reset run-graph for the second tour.
         gameState.currentAct = 1;
         gameState.actStep = 0;
         gameState.leagueStep = 0;
-        // Reset blind previews for the new tour.
         gameState.actBossBlind = null;
         gameState.leagueBlinds = [];
-        // Badges array kept as historical record; passive perks remain in activePerks.
+        // Badges fade — fresh Region tour. Per-run gym wins re-trigger as the
+        // player rebuilds. Without this clear, the inLeague guard at
+        // PathSelectScreen.ts:108 (badges>=8 && leagueStep<5) fires immediately
+        // and teleports the player past acts into the league re-run.
+        gameState.badges = [];
+        // Passive perks earned from the first tour remain in activePerks.
         showToast('Welcome to Johto.', 'success');
       } else {
         gameState.generation = 'endless';
