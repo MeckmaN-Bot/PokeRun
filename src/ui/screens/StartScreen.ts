@@ -259,29 +259,39 @@ export class StartScreen {
     `;
   }
 
+  private renderCodexHubButton(): string {
+    const synergies = getDiscoveredCount(this.playerName);
+    const blinds = getDiscoveredBlindCount(this.playerName);
+    const achievements = getUnlockedCount(this.playerName);
+    const total = TOTAL_SYNERGIES + TOTAL_BLINDS + TOTAL_ACHIEVEMENTS;
+    const progress = synergies + blinds + achievements;
+    const ratio = `${progress} / ${total}`;
+    return `
+      <button type="button" class="ss-codex-hub-button" id="ss-codex-hub-open"
+              aria-label="Open Codex hub">
+        <span class="ss-codex-hub-icon" aria-hidden="true">📖</span>
+        <span class="ss-codex-hub-label">Codex</span>
+        <span class="ss-codex-hub-progress">${ratio}</span>
+        <span class="ss-codex-hub-arrow" aria-hidden="true">›</span>
+      </button>
+    `;
+  }
+
+  /** Render a Personal Best stat block — used inside the Codex Hub modal. */
   private renderPersonalBest(): string {
     const pb = getPersonalBest(this.playerName);
-    const discovered = getDiscoveredCount(this.playerName);
-    const blindsFaced = getDiscoveredBlindCount(this.playerName);
-    const achievementsUnlocked = getUnlockedCount(this.playerName);
-    const discoveryLine = `<button type="button" class="ss-discovery-line" id="ss-discovery-open" title="Open Synergy Codex">Synergies discovered · ${discovered} / ${TOTAL_SYNERGIES} →</button>
-      <button type="button" class="ss-discovery-line" id="ss-blind-codex-open" title="Open Field Effect Codex">Field Effects faced · ${blindsFaced} / ${TOTAL_BLINDS} →</button>
-      <button type="button" class="ss-discovery-line" id="ss-achievements-open" title="Open Achievements">Achievements · ${achievementsUnlocked} / ${TOTAL_ACHIEVEMENTS} →</button>
-      <div class="ss-discovery-line champion-clears-line">Champion clears · ${getChampionClears(this.playerName)}</div>
-      ${this.renderNextGoal()}`;
     if (!pb) {
       return `
         <div class="ss-personal-best" data-empty="true">
-          <div class="ss-pb-eyebrow">Personal best</div>
-          <div class="ss-pb-empty">No runs yet — start your first.</div>
+          <div class="ss-pb-eyebrow">Best run</div>
+          <div class="ss-pb-empty">Not yet set — your first wipe writes the record.</div>
         </div>
-        ${discoveryLine}
       `;
     }
     const d = pb.score_details ?? {} as NonNullable<typeof pb.score_details>;
     return `
       <div class="ss-personal-best" data-empty="false">
-        <div class="ss-pb-eyebrow">Personal best</div>
+        <div class="ss-pb-eyebrow">Best run</div>
         <div class="ss-pb-row">
           <div class="ss-pb-stat"><span class="k">Waves</span><span class="v">${pb.score_waves}</span></div>
           <div class="ss-pb-stat"><span class="k">Act</span><span class="v">${formatAct(d.actReached, d.endless)}</span></div>
@@ -289,7 +299,6 @@ export class StartScreen {
           <div class="ss-pb-stat"><span class="k">Starter</span><span class="v">${escapeHtml(d.starterName ?? '—')}</span></div>
         </div>
       </div>
-      ${discoveryLine}
     `;
   }
 
@@ -456,6 +465,155 @@ export class StartScreen {
       case 'mono_type':    return 'Mono Master — beat a gym with 2+ same-type alive';
       default:             return '—';
     }
+  }
+
+  /** Card-grid markup helpers — extracted so the Codex Hub modal can
+   *  render all three tabs from one source. Existing open*Codex methods
+   *  also call these. */
+  private renderSynergyGridHtml(): string {
+    const discovered = getDiscoveredSet(this.playerName);
+    return SYNERGY_CATALOG.map(entry => {
+      const found = discovered.has(entry.id);
+      if (found) {
+        return `
+          <div class="codex-card found syn-${entry.color}">
+            <div class="codex-card-head">
+              <span class="codex-card-icon">${entry.icon}</span>
+              <span class="codex-card-name">${escapeHtml(entry.name)}</span>
+            </div>
+            <p class="codex-card-desc">${escapeHtml(entry.description)}</p>
+          </div>
+        `;
+      }
+      return `
+        <div class="codex-card locked">
+          <div class="codex-card-head">
+            <span class="codex-card-icon">·</span>
+            <span class="codex-card-name">???</span>
+          </div>
+          <p class="codex-card-desc">Trigger this synergy to reveal.</p>
+        </div>
+      `;
+    }).join('');
+  }
+
+  private renderBlindGridHtml(): string {
+    const faced = getDiscoveredBlindSet(this.playerName);
+    return BOSS_BLINDS.map(b => {
+      const found = faced.has(b.id);
+      if (found) {
+        return `
+          <div class="codex-card found codex-blind" style="--blind-color:${b.color}">
+            <div class="codex-card-head">
+              <span class="codex-card-icon">${b.icon}</span>
+              <span class="codex-card-name">${escapeHtml(b.name)}</span>
+            </div>
+            <p class="codex-card-desc">${escapeHtml(b.description)}</p>
+            <p class="codex-card-hint">${escapeHtml(b.tacticalHint)}</p>
+          </div>
+        `;
+      }
+      return `
+        <div class="codex-card locked">
+          <div class="codex-card-head">
+            <span class="codex-card-icon">·</span>
+            <span class="codex-card-name">???</span>
+          </div>
+          <p class="codex-card-desc">Face this Field Effect in battle to reveal.</p>
+        </div>
+      `;
+    }).join('');
+  }
+
+  private renderAchievementsGridHtml(): string {
+    const unlocked = getUnlockedSet(this.playerName);
+    return ACHIEVEMENTS.map(a => {
+      const found = unlocked.has(a.id);
+      if (found) {
+        return `
+          <div class="codex-card found codex-achievement">
+            <div class="codex-card-head">
+              <span class="codex-card-icon">★</span>
+              <span class="codex-card-name">${escapeHtml(a.name)}</span>
+            </div>
+            <div class="codex-card-eyebrow">${escapeHtml(a.eyebrow)}</div>
+            <p class="codex-card-desc">${escapeHtml(a.description)}</p>
+          </div>
+        `;
+      }
+      return `
+        <div class="codex-card locked">
+          <div class="codex-card-head">
+            <span class="codex-card-icon">·</span>
+            <span class="codex-card-name">???</span>
+          </div>
+          <p class="codex-card-desc">Locked. Keep playing to unlock.</p>
+        </div>
+      `;
+    }).join('');
+  }
+
+  /** Codex Hub — consolidates all meta-progression onto one modal with
+   *  goal-hint, PB stats, champion clears, and 3 segmented sub-codex tabs. */
+  private openCodexHub(): void {
+    const goal = getNextGoal(this.playerName);
+    const synergies = getDiscoveredCount(this.playerName);
+    const blinds = getDiscoveredBlindCount(this.playerName);
+    const achievements = getUnlockedCount(this.playerName);
+    const champClears = getChampionClears(this.playerName);
+
+    const goalLine = goal
+      ? `<div class="codex-hub-goal"><span class="codex-hub-goal-eyebrow">Next:</span> ${escapeHtml(goal.title)}</div>`
+      : '';
+
+    const pbBlock = this.renderPersonalBest();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay codex-overlay codex-hub-overlay';
+    overlay.innerHTML = `
+      <div class="modal codex-modal codex-hub-modal">
+        <button class="modal-close" id="codex-close" type="button">✕</button>
+        <div class="codex-eyebrow">— Field Reference —</div>
+        <h2 class="modal-title">Codex <em>Hub</em></h2>
+        ${goalLine}
+        ${pbBlock}
+        <div class="codex-hub-clears">Champion clears · <b>${champClears}</b></div>
+        <div class="codex-hub-tabs" role="tablist">
+          <button type="button" class="codex-hub-tab active" data-hub-tab="synergies" role="tab">
+            <span class="cht-label">Synergies</span>
+            <span class="cht-count">${synergies}/${TOTAL_SYNERGIES}</span>
+          </button>
+          <button type="button" class="codex-hub-tab" data-hub-tab="blinds" role="tab">
+            <span class="cht-label">Field Effects</span>
+            <span class="cht-count">${blinds}/${TOTAL_BLINDS}</span>
+          </button>
+          <button type="button" class="codex-hub-tab" data-hub-tab="achievements" role="tab">
+            <span class="cht-label">Achievements</span>
+            <span class="cht-count">${achievements}/${TOTAL_ACHIEVEMENTS}</span>
+          </button>
+        </div>
+        <div class="codex-grid codex-hub-grid" data-hub-tab-content="synergies">${this.renderSynergyGridHtml()}</div>
+        <div class="codex-grid codex-hub-grid hidden" data-hub-tab-content="blinds">${this.renderBlindGridHtml()}</div>
+        <div class="codex-grid codex-hub-grid hidden" data-hub-tab-content="achievements">${this.renderAchievementsGridHtml()}</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#codex-close')?.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    overlay.querySelectorAll<HTMLButtonElement>('[data-hub-tab]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const id = tab.dataset['hubTab'] ?? 'synergies';
+        overlay.querySelectorAll<HTMLElement>('[data-hub-tab]').forEach(t => {
+          t.classList.toggle('active', t.dataset['hubTab'] === id);
+        });
+        overlay.querySelectorAll<HTMLElement>('[data-hub-tab-content]').forEach(g => {
+          g.classList.toggle('hidden', g.dataset['hubTabContent'] !== id);
+        });
+      });
+    });
   }
 
   private openSynergyCodex(): void {
@@ -668,7 +826,7 @@ export class StartScreen {
           </div>
 
           ${this.renderResumeBanner()}
-          ${this.renderPersonalBest()}
+          ${this.renderCodexHubButton()}
           ${this.renderBadgeTrophyStrip()}
           ${this.renderDeckPicker()}
 
@@ -958,13 +1116,9 @@ export class StartScreen {
     const closeHowtoplay = this.container.querySelector('#close-howtoplay')!;
     const logoutBtn      = this.container.querySelector('#logout-btn');
 
-    // Synergy Codex — click discovery line to open the catalog modal
-    this.container.querySelector<HTMLButtonElement>('#ss-discovery-open')
-      ?.addEventListener('click', () => this.openSynergyCodex());
-    this.container.querySelector<HTMLButtonElement>('#ss-blind-codex-open')
-      ?.addEventListener('click', () => this.openBlindCodex());
-    this.container.querySelector<HTMLButtonElement>('#ss-achievements-open')
-      ?.addEventListener('click', () => this.openAchievementsCodex());
+    // Codex Hub — opens consolidated meta-progression modal.
+    this.container.querySelector<HTMLButtonElement>('#ss-codex-hub-open')
+      ?.addEventListener('click', () => this.openCodexHub());
 
     // Deck picker — clicking unlocked card selects it. Re-render strip so the
     // mono-type sub-picker can appear/disappear.

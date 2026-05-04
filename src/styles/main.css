@@ -1537,6 +1537,114 @@ html[data-reduce-motion="on"] *::after {
 .lb-stake-pill.stake-red   { background: var(--oxblood, #b4352a); color: var(--paper, #f4f1e8); }
 .lb-stake-pill.stake-black { background: var(--ink, #1a1a1a); color: var(--gold, #c9962b); }
 
+/* Codex Hub button (StartScreen) — single consolidated meta-progression entry. */
+.ss-codex-hub-button {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%;
+  margin: 6px 0 10px;
+  padding: 10px 16px;
+  min-height: 44px;
+  background: var(--paper, #f4f1e8);
+  border: 2px dashed var(--ink, #1a1a1a);
+  box-shadow: 3px 3px 0 var(--ink, #1a1a1a);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink, #1a1a1a);
+  font-size: 12px;
+  text-align: left;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+.ss-codex-hub-button:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--ink, #1a1a1a);
+  background: color-mix(in srgb, var(--paper, #f4f1e8) 90%, var(--gold, #c9962b) 6%);
+}
+.ss-codex-hub-icon { font-size: 18px; }
+.ss-codex-hub-label { font-weight: 800; }
+.ss-codex-hub-progress {
+  margin-left: auto;
+  font-family: var(--font-display); font-style: italic; font-weight: 800;
+  font-size: 14px; letter-spacing: 0.04em;
+  color: var(--gold-ink, #8a6412);
+}
+.ss-codex-hub-arrow { font-size: 18px; opacity: 0.6; }
+
+/* Codex Hub modal — wider than the per-codex modals to fit goal+stats+tabs+grid. */
+.codex-hub-modal {
+  max-width: 720px;
+  width: min(720px, 96vw);
+}
+.codex-hub-goal {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--gold, #c9962b) 8%, var(--paper, #f4f1e8));
+  border: 1px dashed var(--gold, #c9962b);
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--ink-2, #2e2822);
+  letter-spacing: 0.04em;
+  font-style: italic;
+}
+.codex-hub-goal-eyebrow {
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-ink, #8a6412);
+  margin-right: 6px;
+  font-size: 10px;
+  font-style: normal;
+}
+.codex-hub-clears {
+  font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+  margin: 6px 0 4px;
+}
+.codex-hub-clears b {
+  font-family: var(--font-display); font-weight: 800; font-size: 16px;
+  color: var(--ink, #1a1a1a);
+}
+.codex-hub-tabs {
+  display: flex; gap: 4px; flex-wrap: wrap;
+  margin: 10px 0 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--paper-edge, rgba(0,0,0,0.2));
+}
+.codex-hub-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  min-height: 40px;
+  background: var(--paper, #f4f1e8);
+  border: 1.5px solid var(--ink, #1a1a1a);
+  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-2, #2e2822);
+  cursor: pointer;
+  flex: 1 1 0;
+  justify-content: center;
+}
+.codex-hub-tab.active {
+  background: var(--ink, #1a1a1a);
+  color: var(--paper, #f4f1e8);
+}
+.codex-hub-tab .cht-count {
+  font-family: var(--font-display); font-weight: 800; font-style: italic;
+  font-size: 12px; letter-spacing: 0;
+  opacity: 0.85;
+}
+.codex-hub-grid.hidden { display: none; }
+.codex-hub-grid {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+@media (max-width: 600px) {
+  .codex-hub-tab { flex-basis: 30%; padding: 5px 6px; font-size: 10px; }
+  .codex-hub-tab .cht-label { font-size: 10px; }
+  .codex-hub-tab .cht-count { font-size: 11px; }
+}
+
 .ss-discovery-line {
   display: block;
   margin: 4px 0 10px;
