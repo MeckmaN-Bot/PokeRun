@@ -874,39 +874,25 @@ export class StartScreen {
       <div class="start-screen screen">
         <div class="start-content">
 
-          <!-- Headline: eyebrow + big title | side note -->
-          <div class="game-logo">
-            <div>
-              <div class="logo-subtitle">Issue 001 · Field Guide Edition</div>
-              <h1 class="logo-title">A <em>ROGUELIKE</em><br>GAUNTLET.</h1>
+          <!-- Header: title-area + icon row (replaces old footer button row) -->
+          <header class="game-logo">
+            <div class="logo-title-area">
+              <h1 class="logo-title">Poké<em>Run</em></h1>
+              <div class="logo-tagline">A Roguelike Gauntlet</div>
             </div>
-            <div class="start-issue">
-              <b>How it works</b>
-              Choose a starter. Clear waves.<br>
-              Pick rewards. Survive longer than<br>
-              the last person who tried.
-            </div>
-          </div>
+            <nav class="logo-icons" aria-label="Quick actions">
+              <button id="ss-htp-icon" class="logo-icon-btn" type="button" aria-label="How to play" title="How to play">?</button>
+              <button id="ss-lb-icon" class="logo-icon-btn" type="button" aria-label="Leaderboard" title="Leaderboard">📊</button>
+              <button id="ss-settings-icon" class="logo-icon-btn" type="button" aria-label="Settings" title="Settings">⚙</button>
+              <a id="ss-support-icon" class="logo-icon-btn" href="${safeUrl(DONATION_URL)}" target="_blank" rel="noopener noreferrer" aria-label="Support" title="Support">♥</a>
+            </nav>
+          </header>
 
-          <!-- Logged-in user banner -->
-          <div class="start-user-banner">
-            <div class="start-user-name">
-              <span class="kicker">${this.isGuest ? 'Playing as guest' : 'Logged in as'}</span>
-              ${escapeHtml(this.playerName)}
-            </div>
-            <button class="trainer-chip" id="trainer-chip" type="button" title="Click to switch trainer">
-              <span class="tc-sprite-wrap">
-                <img class="tc-sprite" src="${getTrainerSprite(this.trainerGender)}" alt="" draggable="false" />
-              </span>
-              <span class="tc-meta">
-                <span class="tc-kicker">Trainer</span>
-                <span class="tc-name">${TRAINER_NAMES[this.trainerGender]} ${this.trainerGender === 'male' ? '♂' : '♀'}</span>
-              </span>
-              <span class="tc-swap" aria-hidden="true">↻</span>
-            </button>
-            <button class="ink-btn ghost sm" id="logout-btn" style="font-size:11px">
-              ${this.isGuest ? '← Back' : 'Log out'}
-            </button>
+          <!-- Compressed user banner -->
+          <div class="start-user-banner ss-user-banner-compact">
+            <span class="suh-label">${this.isGuest ? 'Guest' : 'Trainer'}</span>
+            <span class="suh-username">${escapeHtml(this.playerName)}</span>
+            <button class="suh-logout-link" id="logout-btn" type="button">${this.isGuest ? 'Switch' : 'Sign out'}</button>
           </div>
 
           ${this.renderResumeBanner()}
@@ -956,22 +942,10 @@ export class StartScreen {
             </div>
           </div>
 
-          <!-- Footer -->
-          <div class="start-footer">
-            <div class="logo-subtitle kb-hints" style="text-transform:uppercase;letter-spacing:.08em">
-              ► D-pad select<br>► Start begins run
-            </div>
-            <div style="display:flex;gap:10px;justify-self:center;flex-wrap:wrap;align-items:center">
-              <button class="ink-btn ghost" id="howtoplay-btn">How to play</button>
-              <button class="ink-btn ghost" id="leaderboard-btn">Leaderboard</button>
-              <button class="ink-btn ghost" id="settings-btn" title="Display + audio settings">⚙ Settings</button>
-              <a class="ink-btn ghost donate-chip" id="donate-link" href="${safeUrl(DONATION_URL)}" target="_blank" rel="noopener noreferrer" title="Support server costs">♥ Support</a>
-              <button class="ink-btn primary" id="start-btn">Begin run →</button>
-            </div>
-            <div class="logo-subtitle" style="text-align:right;letter-spacing:.08em;text-transform:uppercase">
-              Trainer · ${escapeHtml(this.playerName)}<br>Wave — · —¢
-              <a href="#" id="legal-btn" class="footer-legal-link">Legal &amp; Disclaimer</a>
-            </div>
+          <!-- Begin-Run primary CTA + Legal sub-link -->
+          <div class="start-cta-row">
+            <button class="ink-btn primary" id="start-btn" type="button">Begin run →</button>
+            <a href="#" id="legal-btn" class="ss-legal-link">Legal &amp; Disclaimer</a>
           </div>
 
         </div>
@@ -1195,8 +1169,9 @@ export class StartScreen {
 
   private attachEvents(): void {
     const startBtn       = this.container.querySelector<HTMLButtonElement>('#start-btn')!;
-    const leaderboardBtn = this.container.querySelector('#leaderboard-btn')!;
-    const howtoplayBtn   = this.container.querySelector('#howtoplay-btn')!;
+    // Header icon row replaces old footer buttons. Same handlers, new ids.
+    const leaderboardBtn = this.container.querySelector('#ss-lb-icon')!;
+    const howtoplayBtn   = this.container.querySelector('#ss-htp-icon')!;
     const howtoplayModal = this.container.querySelector('#howtoplay-modal')!;
     const closeHowtoplay = this.container.querySelector('#close-howtoplay')!;
     const logoutBtn      = this.container.querySelector('#logout-btn');
@@ -1333,8 +1308,8 @@ export class StartScreen {
       this.onLogout();
     });
 
-    // Settings modal
-    const settingsBtn = this.container.querySelector('#settings-btn');
+    // Settings modal — opened via header icon row.
+    const settingsBtn = this.container.querySelector('#ss-settings-icon');
     const settingsModal = this.container.querySelector('#settings-modal');
     const closeSettings = this.container.querySelector('#close-settings');
     settingsBtn?.addEventListener('click', () => settingsModal?.classList.remove('hidden'));
