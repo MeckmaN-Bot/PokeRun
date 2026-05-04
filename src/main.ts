@@ -778,8 +778,10 @@ function showBattleScreen(): void {
         }
       }
       // Leader fight ends the arena gauntlet — clear it so normal flow resumes.
+      // Also clear the previewed blind so ensureBlindsRolled rolls fresh for the next act.
       if (gymLeaderWin) {
         state.arenaState = null;
+        state.actBossBlind = null;
       }
       // Elite Four / Champion → advance league progression.
       if (eliteStepWin) {
@@ -1057,8 +1059,9 @@ function showPathSelect(): void {
       if (gameState.actStep >= 4) {
         gameState.actStep = 0;
         gameState.currentAct += 1;
-        // New act → fresh blind preview on the next path screen.
-        gameState.actBossBlind = null;
+        // NOTE: actBossBlind is cleared on gym-leader victory (not here),
+        // because the arena gauntlet's Leader sub-step still needs to read
+        // this act's blind after the act counter has wrapped.
       }
     }
     gameState.nodeOptions = [];
