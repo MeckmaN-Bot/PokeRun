@@ -26,19 +26,19 @@ export interface Stake {
 export const STAKES: Stake[] = [
   {
     id: 'white',
-    name: 'Rookie Trainer',
+    name: 'Rookie',
     description: 'Standard difficulty. The starting trial.',
   },
   {
     id: 'red',
-    name: 'Veteran Trainer',
+    name: 'Veteran',
     unlockAfter: 'white',
     description: 'Field Effects carry +50% HP. Coins reward +50%.',
     mods: { bossBlindHpMult: 1.5, coinRewardMult: 1.5 },
   },
   {
     id: 'black',
-    name: 'Ace Trainer',
+    name: 'Ace',
     unlockAfter: 'red',
     description: 'Shop prices +50%. Enemy speed +25%. Coins reward +100%.',
     mods: { shopPriceMult: 1.5, enemySpeedMult: 1.25, coinRewardMult: 2.0 },

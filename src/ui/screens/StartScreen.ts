@@ -523,7 +523,7 @@ export class StartScreen {
             <span class="codex-card-icon">·</span>
             <span class="codex-card-name">???</span>
           </div>
-          <p class="codex-card-desc">Face this blind in battle to reveal.</p>
+          <p class="codex-card-desc">Face this Field Effect in battle to reveal.</p>
         </div>
       `;
     }).join('');

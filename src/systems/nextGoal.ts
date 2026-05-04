@@ -75,11 +75,11 @@ export function getNextGoal(username: string, currentGenId?: string): Goal | nul
   }
   // 7. Trainer Rank cascade — Veteran.
   if (!stakesUnlocked.has('red')) {
-    return { id: 'stake_red', title: 'Beat the Champion as Rookie Trainer to unlock Veteran Rank.' };
+    return { id: 'stake_red', title: 'Beat the Champion as Rookie to unlock Veteran rank.' };
   }
   // 8. Trainer Rank cascade — Ace.
   if (!stakesUnlocked.has('black')) {
-    return { id: 'stake_black', title: 'Beat the Champion as Veteran Trainer to unlock Ace Rank.' };
+    return { id: 'stake_black', title: 'Beat the Champion as Veteran to unlock Ace rank.' };
   }
   // 9. Synergy codex completion.
   if (synergies < TOTAL_SYNERGIES) {
