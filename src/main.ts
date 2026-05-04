@@ -426,9 +426,10 @@ async function startNewWave(): Promise<void> {
   const stageProgressIntroHtml = stageLeaderForIntro
     ? (() => {
         const accent = stageLeaderForIntro.accent;
-        const stopsLeft = Math.max(0, 4 - waveStep);
-        const pips = [0, 1, 2, 3].map(i => {
-          const isGym = i === 3;
+        const stagesPerAct = gameState.deckMods?.stagesPerAct ?? 4;
+        const stopsLeft = Math.max(0, stagesPerAct - waveStep);
+        const pips = Array.from({ length: stagesPerAct }, (_, i) => i).map(i => {
+          const isGym = i === stagesPerAct - 1;
           const isDone = i < waveStep;
           const isCurrent = i === waveStep;
           const cls = ['stage-pip', isGym ? 'gym' : '', isDone ? 'done' : '', isCurrent ? 'current' : '']

@@ -111,13 +111,14 @@ export class PathSelectScreen {
     const inLeague = (this.state.badges?.length ?? 0) >= 8 && (this.state.leagueStep ?? 0) < 5;
     const isJohto = this.state.generation === 'gen2';
     const isEndless = this.state.generation === 'endless';
+    const stagesPerAct = this.state.deckMods?.stagesPerAct ?? 4;
     const headerEyebrow = inLeague
       ? `— Pokémon League · Step ${(this.state.leagueStep ?? 0) + 1} of 5 —`
       : isEndless
         ? `— Endless${wave > 30 ? ' · Deep run' : ''} · Wave ${wave} —`
         : isJohto
-          ? `— Region: Johto · Act ${act} · Step ${step} of 4 —`
-          : `— Crossroads · Act ${act} · Step ${step} of 4 —`;
+          ? `— Region: Johto · Act ${act} · Step ${step} of ${stagesPerAct} —`
+          : `— Crossroads · Act ${act} · Step ${step} of ${stagesPerAct} —`;
     const headerTitle = inLeague ? 'Indigo <em>Plateau</em>' : 'Choose your <em>path</em>';
     const headerSub = inLeague
       ? 'No retreat. The next door is the next opponent.'
@@ -126,7 +127,7 @@ export class PathSelectScreen {
     // Big stage progress strip — 4 pips representing the act, with the gym leader portrait.
     // Hidden in endless: no gym leader, no act ladder.
     const nextGymLeader = !inLeague && !isEndless && act >= 1 && act <= 8 ? getGymForAct(act) : undefined;
-    const stopsToGym = nextGymLeader ? Math.max(0, 4 - step) : 0;
+    const stopsToGym = nextGymLeader ? Math.max(0, stagesPerAct - step) : 0;
     const lensCount = (this.state.inventory ?? [])
       .filter(inv => inv.item.id === 'blind_lens')
       .reduce((sum, inv) => sum + inv.quantity, 0);
@@ -138,9 +139,9 @@ export class PathSelectScreen {
     const stageProgressHtml = nextGymLeader
       ? (() => {
           const accent = nextGymLeader.accent;
-          // Step 1..3 are normal nodes, step 4 is the gym arena.
-          const pips = [0, 1, 2, 3].map(i => {
-            const isGym = i === 3;
+          // Steps 1..(stagesPerAct - 1) are normal nodes, last step is the gym arena.
+          const pips = Array.from({ length: stagesPerAct }, (_, i) => i).map(i => {
+            const isGym = i === stagesPerAct - 1;
             const isDone = i < this.state.actStep; // already completed
             const isCurrent = i === this.state.actStep; // up next
             const cls = [
