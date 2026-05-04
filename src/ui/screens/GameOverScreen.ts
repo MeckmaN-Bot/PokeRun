@@ -204,7 +204,7 @@ export class GameOverScreen {
               <div class="n">${escapeHtml(e.name)}</div>
               <div class="sub">Starter · ${escapeHtml(e.score_details?.starterName ?? '—')}</div>
             </div>
-            <div class="wv">W${e.score_waves}</div>
+            <div class="wv">W${e.score_waves ?? 0}</div>
           </div>
         `;
       }).join('');
