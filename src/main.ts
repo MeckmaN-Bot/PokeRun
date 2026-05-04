@@ -23,7 +23,7 @@ import { getWaveConfig, getEnemyLevel, selectEnemyIds, getWaveCoins } from './sy
 import { generateRewards } from './systems/rewards';
 import { generateShop, generateShopPacks, generateShopVouchers } from './systems/shop';
 import { toBattlePokemon, monHasItem, getSlotItems } from './systems/battle';
-import { pickRandomBossBlind } from './data/bossBlinds';
+import { pickRandomBossBlind, pickDistinctBossBlinds } from './data/bossBlinds';
 import { pickRandomTag, getTagById } from './data/tags';
 import { ALL_ITEMS } from './data/items';
 
@@ -1007,7 +1007,7 @@ function ensureBlindsRolled(state: GameState): void {
   const inLeague = (state.badges?.length ?? 0) >= 8 && (state.leagueStep ?? 0) < 5;
   if (inLeague) {
     if (!state.leagueBlinds || state.leagueBlinds.length < 5) {
-      state.leagueBlinds = Array.from({ length: 5 }, () => pickRandomBossBlind().id);
+      state.leagueBlinds = pickDistinctBossBlinds(5);
     }
     return;
   }
