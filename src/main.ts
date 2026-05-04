@@ -510,7 +510,7 @@ async function startNewWave(): Promise<void> {
       levelDelta = gymLeader.levelDelta;
     } else if (trainerArchetype) {
       const allowed = new Set(config.enemyPool);
-      const biasedRaw = poolForTypes(trainerArchetype.typeBias);
+      const biasedRaw = poolForTypes(node?.rosterTypeBias ?? trainerArchetype.typeBias);
       const biased = biasedRaw.filter(id => allowed.has(id));
       teamSize = node?.teamSizeOverride ?? trainerArchetype.teamSize ?? config.enemyCount;
       enemyIds = biased.length > 0

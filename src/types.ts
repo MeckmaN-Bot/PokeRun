@@ -67,6 +67,9 @@ export interface NodeInstance {
   arenaRank?: string;
   /** Cap the trainer team size for this node — used by early-act onboarding. */
   teamSizeOverride?: number;
+  /** When set, overrides trainerArchetype.typeBias for roster picking
+   *  (used by arena Junior/Senior trainers to follow the gym leader's bias). */
+  rosterTypeBias?: PokemonType[];
 }
 
 export interface ArenaState {

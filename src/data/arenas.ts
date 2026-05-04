@@ -48,6 +48,10 @@ function makeArenaTrainer(leader: GymLeader, act: number, rank: 'Junior' | 'Seni
     spriteUrl: arc.spriteSlug ? trainerSpriteUrl(arc.spriteSlug) : undefined,
     arenaRank: rank,
     teamSizeOverride: teamCap,
+    // Tighten the roster pool to the gym leader's bias — keeps Mankey out of
+    // Brock's gauntlet etc. Archetype identity (sprite, name, level/coin deltas)
+    // is unchanged.
+    rosterTypeBias: [...leader.bias],
   };
 }
 
