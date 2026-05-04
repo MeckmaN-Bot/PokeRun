@@ -6,7 +6,6 @@ import { getStaticSprite } from '../../api/sprites';
 import { fadeIn } from '../animations';
 import { toBattlePokemon } from '../../systems/battle';
 import { logout } from '../../systems/auth';
-import { getTrainerSprite, TRAINER_NAMES } from '../../data/trainers';
 import { mountAudioControls } from '../../audio/AudioSettingsPanel';
 import { escapeHtml, safeUrl } from '../../util/sanitize';
 import { hasSavedRun, loadRun, clearRun } from '../../systems/saveRun';
@@ -870,43 +869,60 @@ export class StartScreen {
   }
 
   private renderHTML(): string {
+    const trainerColor = this.trainerGender === 'female' ? 'BLUE' : 'RED';
     return `
       <div class="start-screen screen">
         <div class="start-content">
 
-          <!-- Header: title-area + icon row (replaces old footer button row) -->
-          <header class="game-logo">
-            <div class="logo-title-area">
-              <h1 class="logo-title">Poké<em>Run</em></h1>
-              <div class="logo-tagline">A Roguelike Gauntlet</div>
+          <!-- ISSUE eyebrow -->
+          <div class="ss-issue-eyebrow">— ISSUE 001 · FIELD GUIDE EDITION —</div>
+
+          <!-- Magazine Header: title left + How-it-works right -->
+          <header class="ss-mag-header">
+            <div class="ss-mag-title-area">
+              <h1 class="ss-mag-title">A <em class="ss-mag-accent">ROGUELIKE</em><br/>GAUNTLET.</h1>
             </div>
-            <nav class="logo-icons" aria-label="Quick actions">
-              <button id="ss-htp-icon" class="logo-icon-btn" type="button" aria-label="How to play" title="How to play">?</button>
-              <button id="ss-lb-icon" class="logo-icon-btn" type="button" aria-label="Leaderboard" title="Leaderboard">📊</button>
-              <button id="ss-settings-icon" class="logo-icon-btn" type="button" aria-label="Settings" title="Settings">⚙</button>
-              <a id="ss-support-icon" class="logo-icon-btn" href="${safeUrl(DONATION_URL)}" target="_blank" rel="noopener noreferrer" aria-label="Support" title="Support">♥</a>
-            </nav>
+            <aside class="ss-mag-howitworks">
+              <div class="ss-mag-eyebrow">HOW IT WORKS</div>
+              <p class="ss-mag-copy">Choose a starter. Clear waves. Pick rewards. Survive longer than the last person who tried.</p>
+            </aside>
           </header>
 
-          <!-- Compressed user banner -->
-          <div class="start-user-banner ss-user-banner-compact">
-            <span class="suh-label">${this.isGuest ? 'Guest' : 'Trainer'}</span>
-            <span class="suh-username">${escapeHtml(this.playerName)}</span>
-            <button class="suh-logout-link" id="logout-btn" type="button">${this.isGuest ? 'Switch' : 'Sign out'}</button>
+          <hr class="ss-mag-divider" />
+
+          <!-- User-Strip (2-line + trainer-chip + ← BACK) -->
+          <div class="ss-mag-user-strip">
+            <div class="ss-mag-user-left">
+              <div class="ss-mag-user-eyebrow">${this.isGuest ? 'PLAYING AS GUEST' : 'PLAYING AS TRAINER'}</div>
+              <div class="ss-mag-user-name">${escapeHtml(this.playerName)}</div>
+            </div>
+            <div class="ss-mag-user-right">
+              <div class="ss-mag-trainer-chip">
+                <span class="ss-tc-eyebrow">TRAINER · <span id="ss-tc-color">${trainerColor}</span></span>
+                <button class="ss-tc-cycle" id="ss-trainer-cycle" type="button" aria-label="Switch trainer">↕</button>
+              </div>
+              <button class="ink-btn ghost sm ss-mag-back" id="ss-back-to-auth" type="button">← BACK</button>
+            </div>
           </div>
 
           ${this.renderResumeBanner()}
-          ${this.renderCodexHubButton()}
-          ${this.renderBadgeTrophyStrip()}
-          ${this.renderFieldKitCompactRow()}
-          ${this.renderStakePickerRow()}
+
+          <!-- Section-headline above starters -->
+          <div class="ss-mag-section-head">
+            <h2 class="ss-mag-section-title">Choose your starter</h2>
+            <div class="ss-mag-section-meta">${this.starterData.length} AVAILABLE · PRESS A TO CONFIRM</div>
+          </div>
+
+          <!-- TEMPORARY 3-cell placeholder (Slice B replaces this) -->
+          <div class="ss-mag-three-cell-placeholder">
+            ${this.renderCodexHubButton()}
+            ${this.renderBadgeTrophyStrip()}
+            ${this.renderFieldKitCompactRow()}
+            ${this.renderStakePickerRow()}
+          </div>
 
           <!-- Starter selection -->
           <div class="starter-section">
-            <div class="starter-heading">
-              <div class="h">Choose your starter</div>
-              <div class="s">${this.starterData.length} available · press A to confirm</div>
-            </div>
             <div class="starter-carousel">
               <button class="starter-nav prev" id="starter-prev" type="button" aria-label="Previous starter">‹</button>
               <div class="starter-grid" id="starter-grid">
@@ -942,11 +958,24 @@ export class StartScreen {
             </div>
           </div>
 
-          <!-- Begin-Run primary CTA + Legal sub-link -->
-          <div class="start-cta-row">
-            <button class="ink-btn primary" id="start-btn" type="button">Begin run →</button>
-            <a href="#" id="legal-btn" class="ss-legal-link">Legal &amp; Disclaimer</a>
-          </div>
+          <!-- Magazine Footer: 3-col (keyboard-hint left, button row center, info right) -->
+          <footer class="ss-mag-footer">
+            <div class="ss-mag-footer-left">
+              <div>▶ D-PAD SELECT</div>
+              <div>▶ START BEGINS RUN</div>
+            </div>
+            <div class="ss-mag-footer-center">
+              <button id="ss-htp-btn" class="ink-btn ghost sm" type="button">HOW TO PLAY</button>
+              <button id="ss-lb-btn" class="ink-btn ghost sm" type="button">LEADERBOARD</button>
+              <button id="ss-settings-btn" class="ink-btn ghost sm" type="button">◈ SETTINGS</button>
+              <a id="ss-support-btn" class="ink-btn ghost sm" href="${safeUrl(DONATION_URL)}" target="_blank" rel="noopener noreferrer">● ♥ SUPPORT</a>
+              <button id="start-btn" class="ink-btn primary" type="button">BEGIN RUN →</button>
+            </div>
+            <div class="ss-mag-footer-right">
+              <div>TRAINER · <span class="upper">${escapeHtml(this.playerName)}</span></div>
+              <div>WAVE — · — ¢ · <a href="#" id="ss-legal-link">LEGAL &amp; DISCLAIMER</a></div>
+            </div>
+          </footer>
 
         </div>
 
@@ -1169,12 +1198,12 @@ export class StartScreen {
 
   private attachEvents(): void {
     const startBtn       = this.container.querySelector<HTMLButtonElement>('#start-btn')!;
-    // Header icon row replaces old footer buttons. Same handlers, new ids.
-    const leaderboardBtn = this.container.querySelector('#ss-lb-icon')!;
-    const howtoplayBtn   = this.container.querySelector('#ss-htp-icon')!;
+    // Magazine-footer button row.
+    const leaderboardBtn = this.container.querySelector('#ss-lb-btn')!;
+    const howtoplayBtn   = this.container.querySelector('#ss-htp-btn')!;
     const howtoplayModal = this.container.querySelector('#howtoplay-modal')!;
     const closeHowtoplay = this.container.querySelector('#close-howtoplay')!;
-    const logoutBtn      = this.container.querySelector('#logout-btn');
+    const logoutBtn      = this.container.querySelector('#ss-back-to-auth');
 
     // Codex Hub — opens consolidated meta-progression modal.
     this.container.querySelector<HTMLButtonElement>('#ss-codex-hub-open')
@@ -1195,17 +1224,12 @@ export class StartScreen {
       });
     });
 
-    // Trainer chip — click cycles gender
-    const trainerChip = this.container.querySelector<HTMLButtonElement>('#trainer-chip');
-    trainerChip?.addEventListener('click', () => {
+    // Trainer-cycle button — toggle gender, refresh eyebrow color label.
+    const trainerCycle = this.container.querySelector<HTMLButtonElement>('#ss-trainer-cycle');
+    trainerCycle?.addEventListener('click', () => {
       this.trainerGender = this.trainerGender === 'male' ? 'female' : 'male';
-      const img = trainerChip.querySelector<HTMLImageElement>('.tc-sprite');
-      const name = trainerChip.querySelector<HTMLElement>('.tc-name');
-      if (img) img.src = getTrainerSprite(this.trainerGender);
-      if (name) name.textContent = `${TRAINER_NAMES[this.trainerGender]} ${this.trainerGender === 'male' ? '♂' : '♀'}`;
-      trainerChip.classList.remove('pulse');
-      void trainerChip.offsetWidth;
-      trainerChip.classList.add('pulse');
+      const colorLabel = this.container.querySelector<HTMLElement>('#ss-tc-color');
+      if (colorLabel) colorLabel.textContent = this.trainerGender === 'female' ? 'BLUE' : 'RED';
     });
 
     // Starter selection (cards + dots + nav buttons)
@@ -1291,7 +1315,7 @@ export class StartScreen {
       window.setTimeout(() => startFirstRunTour(true), 220);
     });
 
-    const legalBtn = this.container.querySelector('#legal-btn');
+    const legalBtn = this.container.querySelector('#ss-legal-link');
     const legalModal = this.container.querySelector('#legal-modal');
     const closeLegal = this.container.querySelector('#close-legal');
     legalBtn?.addEventListener('click', e => {
@@ -1308,8 +1332,8 @@ export class StartScreen {
       this.onLogout();
     });
 
-    // Settings modal — opened via header icon row.
-    const settingsBtn = this.container.querySelector('#ss-settings-icon');
+    // Settings modal — opened via magazine-footer button.
+    const settingsBtn = this.container.querySelector('#ss-settings-btn');
     const settingsModal = this.container.querySelector('#settings-modal');
     const closeSettings = this.container.querySelector('#close-settings');
     settingsBtn?.addEventListener('click', () => settingsModal?.classList.remove('hidden'));
