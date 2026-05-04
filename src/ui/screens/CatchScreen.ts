@@ -412,6 +412,10 @@ export class CatchScreen {
       const nextLocked = mon.itemSlots.findIndex(s => !s.unlocked);
       if (nextLocked >= 0) mon.itemSlots[nextLocked].unlocked = true;
     }
+    // Iron Trainer deck — slot 2 unlocked by default for every new team member.
+    if (this.state.deckMods?.startWithSlot2 && mon.itemSlots?.[1]) {
+      mon.itemSlots[1].unlocked = true;
+    }
     if (this.state.team.length < MAX_TEAM_SIZE) {
       this.state.team.push(mon);
       this.state.pendingCatch = null;

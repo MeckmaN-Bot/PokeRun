@@ -1159,6 +1159,10 @@ export class ShopScreen {
           return;
         }
         this.state.pc.splice(idx, 1);
+        // Iron Trainer deck — slot 2 unlocked by default.
+        if (this.state.deckMods?.startWithSlot2 && mon.itemSlots?.[1]) {
+          mon.itemSlots[1].unlocked = true;
+        }
         this.state.team.push(mon);
         showToast(`${mon.displayName} added to team!`, 'success');
         this.refreshTeamList();
@@ -1323,7 +1327,7 @@ export class ShopScreen {
 
     // Immediate effect: Overstock → re-roll shop items with new voucher
     if (sv.voucherId === 'overstock') {
-      this.state.shopItems = rerollShop(this.state.wave, [], this.state.vouchers);
+      this.state.shopItems = rerollShop(this.state.wave, [], this.state.vouchers, { excludeConsumables: !!this.state.deckMods?.shopExcludeConsumables });
     }
     // Immediate effect: Grabber → unlock slot 2 for every current team member
     if (sv.voucherId === 'grabber') {
@@ -1783,7 +1787,7 @@ export class ShopScreen {
     } else {
       this.state.freeRerollsLeft = Math.max(0, (this.state.freeRerollsLeft ?? 0) - 1);
     }
-    this.state.shopItems = rerollShop(this.state.wave, [], this.state.vouchers ?? []);
+    this.state.shopItems = rerollShop(this.state.wave, [], this.state.vouchers ?? [], { excludeConsumables: !!this.state.deckMods?.shopExcludeConsumables });
     const coinEl = this.container.querySelector<HTMLElement>('#shop-coin-display');
     if (coinEl && !freeNow) animateCoinGain(coinEl, oldCoins, this.state.coins);
     this.refreshShop();
@@ -2041,7 +2045,7 @@ export class ShopScreen {
       });
       showToast('Team Vitals healed 50% HP for your whole team!', 'success');
     } else if (item.id === 'reroll_token') {
-      this.state.shopItems = rerollShop(this.state.wave, [], this.state.vouchers ?? []);
+      this.state.shopItems = rerollShop(this.state.wave, [], this.state.vouchers ?? [], { excludeConsumables: !!this.state.deckMods?.shopExcludeConsumables });
       this.refreshShop();
       showToast('Shop rerolled (free)!', 'info');
     }

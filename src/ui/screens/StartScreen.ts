@@ -1,5 +1,6 @@
 import type { GameState, TrainerGender } from '../../types';
 import { STARTERS } from '../../data/enemyPools';
+import { ALL_ITEMS } from '../../data/items';
 import { fetchPokemon } from '../../api/pokeapi';
 import { getStaticSprite } from '../../api/sprites';
 import { fadeIn } from '../animations';
@@ -41,6 +42,16 @@ interface StarterDisplay {
   types?: string[];
   bst?: number;
 }
+
+/** Pinned type for each of the 5 default starter ids. Used by Mono-Type deck
+ *  to filter the carousel before async type-data has loaded. */
+const STARTER_PRIMARY_TYPE: Record<number, PokemonType> = {
+  1: 'grass',     // Bulbasaur
+  4: 'fire',      // Charmander
+  7: 'water',     // Squirtle
+  25: 'electric', // Pikachu
+  133: 'normal',  // Eevee
+};
 
 export class StartScreen {
   private container: HTMLElement;
@@ -85,6 +96,8 @@ export class StartScreen {
     document.body.classList.add('start-active');
     fadeIn(this.container);
     this.attachEvents();
+    // Apply mono-type starter filter on initial mount (deck remembered).
+    this.refreshStarterFilter();
     const audioSlot = this.container.querySelector<HTMLElement>('#settings-audio-slot');
     if (audioSlot) this.destroyAudioBtn = mountAudioControls(audioSlot);
     this.loadStarterData();
@@ -289,6 +302,7 @@ export class StartScreen {
           this.selectedDeck = id;
           saveLastDeck(this.playerName, id);
           this.refreshDeckPicker();
+          this.refreshStarterFilter();
         });
       });
       next.querySelectorAll<HTMLButtonElement>('[data-mono-type]').forEach(btn => {
@@ -297,7 +311,38 @@ export class StartScreen {
           this.selectedMonoType = t;
           saveLastMonoType(this.playerName, t);
           this.refreshDeckPicker();
+          this.refreshStarterFilter();
         });
+      });
+    }
+  }
+
+  /** Mono-Type deck narrows the starter carousel to just the matching starter.
+   *  Other decks show all 5. Applied via inline display:none so we don't have
+   *  to fully re-render the starter section. Auto-selects the first visible. */
+  private refreshStarterFilter(): void {
+    const grid = this.container.querySelector<HTMLElement>('#starter-grid');
+    const dots = this.container.querySelector<HTMLElement>('#starter-dots');
+    const monoFilter = this.selectedDeck === 'mono_type' ? this.selectedMonoType : null;
+    let firstVisible = -1;
+    this.starterData.forEach((s, i) => {
+      const matches = monoFilter == null || STARTER_PRIMARY_TYPE[s.id] === monoFilter;
+      const card = grid?.querySelector<HTMLElement>(`[data-starter="${i}"]`);
+      const dot  = dots?.querySelector<HTMLElement>(`[data-dot="${i}"]`);
+      if (card) card.style.display = matches ? '' : 'none';
+      if (dot)  dot.style.display  = matches ? '' : 'none';
+      if (matches && firstVisible < 0) firstVisible = i;
+    });
+    if (firstVisible >= 0 && this.starterData[this.selectedStarterIndex] &&
+        monoFilter != null &&
+        STARTER_PRIMARY_TYPE[this.starterData[this.selectedStarterIndex].id] !== monoFilter) {
+      // Current selection is now hidden — move to first visible.
+      this.selectedStarterIndex = firstVisible;
+      this.container.querySelectorAll<HTMLElement>('[data-starter]').forEach((c, i) => {
+        c.classList.toggle('selected', i === firstVisible);
+      });
+      this.container.querySelectorAll<HTMLElement>('[data-dot]').forEach((d, i) => {
+        d.classList.toggle('active', i === firstVisible);
       });
     }
   }
@@ -1055,16 +1100,44 @@ export class StartScreen {
 
       const battlePokemon = toBattlePokemon(pokemon, []);
 
+      // ── Resolve deck mods at run-start ────────────────────────────────
+      const deckMods: NonNullable<GameState['deckMods']> = {};
+      let bonusCoins = 0;
+      const bonusInventory: { itemId: string; qty: number }[] = [];
+      if (this.selectedDeck === 'speedrunner') {
+        bonusCoins = 100;
+        bonusInventory.push({ itemId: 'reroll_token', qty: 1 });
+        deckMods.stagesPerAct = 3;
+      } else if (this.selectedDeck === 'iron_trainer') {
+        deckMods.shopExcludeConsumables = true;
+        deckMods.startWithSlot2 = true;
+        // Apply slot-2 unlock to the chosen starter immediately so the player
+        // sees the benefit on wave 1.
+        if (battlePokemon.itemSlots?.[1]) {
+          battlePokemon.itemSlots[1].unlocked = true;
+        }
+      } else if (this.selectedDeck === 'mono_type') {
+        deckMods.monoType = this.selectedMonoType;
+        deckMods.monoDamageBoost = true;
+      }
+      // Build any starter-bonus inventory entries by looking up the items.
+      const startInventory = bonusInventory
+        .map(({ itemId, qty }) => {
+          const item = ALL_ITEMS.find(i => i.id === itemId);
+          return item ? { item, quantity: qty } : null;
+        })
+        .filter((x): x is NonNullable<typeof x> => x != null);
+
       const initialState: GameState = {
         phase: 'wave_intro',
         playerName: this.playerName,
         trainerGender: this.trainerGender,
         wave: 1,
-        coins: 100,
+        coins: 100 + bonusCoins,
         team: [battlePokemon],
         pc: [],
         pendingCatch: null,
-        inventory: [],
+        inventory: startInventory,
         activePerks: [],
         battleState: null,
         pendingRewards: [],
@@ -1102,11 +1175,7 @@ export class StartScreen {
         actBossBlind: null,
         leagueBlinds: [],
         deck: this.selectedDeck,
-        // deckMods D.2 — populated when the modifier wiring lands. For D.1 we
-        // just stash the chosen mono-type so the future boost can read it.
-        deckMods: this.selectedDeck === 'mono_type'
-          ? { monoType: this.selectedMonoType }
-          : {},
+        deckMods,
       };
 
       this.onStart(initialState);

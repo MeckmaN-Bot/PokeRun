@@ -162,7 +162,9 @@ function makeLeagueOption(leagueIdx: number): NodeInstance | null {
  *
  * Special routing:
  *   - If badges >= 8 → league step (E4 idx 0..3, then Champion at 4).
- *   - Else if actStep === 3 (4th step of an act) → gym leader for this act.
+ *   - Else if actStep === stagesPerAct - 1 → gym leader for this act.
+ *     (Default stagesPerAct=4 → gym at step 3. Speedrunner deck overrides
+ *     to stagesPerAct=3 → gym at step 2.)
  *   - Otherwise → normal weighted mix.
  */
 export function generateNodeOptions(
@@ -170,14 +172,15 @@ export function generateNodeOptions(
   actStep: number,
   badgeCount: number = 0,
   leagueStep: number = 0,
+  stagesPerAct: number = 4,
 ): NodeInstance[] {
   // League takes priority once unlocked. Single-option (no fake choice).
   if (badgeCount >= 8 && leagueStep < 5) {
     const opt = makeLeagueOption(leagueStep);
     if (opt) return [opt];
   }
-  // Gym occupies step 4 (actStep === 3) of acts 1..8. Single card, no choice.
-  if (actStep === 3 && act >= 1 && act <= 8) {
+  // Gym occupies the LAST step of the act (acts 1..8). Single card, no choice.
+  if (actStep === stagesPerAct - 1 && act >= 1 && act <= 8) {
     const opt = makeGymOption(act);
     if (opt) return [opt];
   }

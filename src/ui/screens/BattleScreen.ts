@@ -732,6 +732,7 @@ export class BattleScreen {
       bossBlind: bs.bossBlind,
       isPlayerAttacker: side === 'player',
       typeLevels: this.state.typeLevels,
+      monoDamageBoost: !!this.state.deckMods?.monoDamageBoost,
     };
     // The Ox — "first player attack of battle" flag (battle-scoped, not first-turn move)
     const isFirstPlayerAttack = side === 'player' && !bs.hasUsedFirstAttack;

@@ -84,6 +84,8 @@ export function calculateDamage(
     bossBlind: import('../data/bossBlinds').BossBlindId | null;
     isPlayerAttacker: boolean;
     typeLevels?: Partial<Record<PokemonType, number>>;
+    /** Mono-Type deck — when true, boost fires if alive team is fully one type. */
+    monoDamageBoost?: boolean;
   }
 ): DamageResult {
   if (move.power === 0 || move.category === 'status') {
@@ -306,6 +308,20 @@ export function calculateDamage(
     (attacker as any)._activeSynergies = activeSynergies;
   } else if (teamCtx) {
     (attacker as any)._activeSynergies = [];
+  }
+
+  // === Mono-Type deck damage boost (player side only) ===
+  // +25% all damage when the alive team shares one primary type. Solo last-mon
+  // counts as mono — committed to the deck.
+  if (battleCtx?.monoDamageBoost && teamCtx) {
+    const alive = teamCtx.team.filter(p => p.battleHp > 0);
+    if (alive.length > 0) {
+      const lead = alive[0].types[0];
+      const allMono = alive.every(p => p.types[0] === lead);
+      if (allMono) {
+        damage = Math.floor(damage * 1.25);
+      }
+    }
   }
 
   // Minimum 1 damage

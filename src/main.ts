@@ -972,8 +972,9 @@ function showShopScreen(): void {
     const teamHpRatio = totalHp / totalMaxHp;
     const healingPity = (gameState.shopsWithoutHealing ?? 0) >= 3;
     const epicPity = (gameState.shopsWithoutEpic ?? 0) >= 3;
+    const excludeConsumables = !!gameState.deckMods?.shopExcludeConsumables;
     gameState.shopItems = generateShop(gameState.wave, [], ownedVouchers, {
-      teamHpRatio, healingPity, epicPity,
+      teamHpRatio, healingPity, epicPity, excludeConsumables,
     });
     // Update pity counters based on what showed up
     const HEALING_IDS = ['potion', 'super_potion', 'hyper_potion', 'full_restore', 'pokemon_food', 'max_potion'];
@@ -984,7 +985,9 @@ function showShopScreen(): void {
   }
   if (!gameState.shopPacks || gameState.shopPacks.length === 0) {
     const freeMega = !!gameState.pendingCharmPack;
-    gameState.shopPacks = generateShopPacks(gameState.wave, freeMega, ownedVouchers);
+    gameState.shopPacks = generateShopPacks(gameState.wave, freeMega, ownedVouchers, {
+      excludeConsumables: !!gameState.deckMods?.shopExcludeConsumables,
+    });
     gameState.pendingCharmPack = false;
   }
   if (!gameState.shopVouchers || gameState.shopVouchers.length === 0) {
@@ -1170,6 +1173,7 @@ function showPathSelect(): void {
       gameState.actStep,
       gameState.badges?.length ?? 0,
       gameState.leagueStep ?? 0,
+      gameState.deckMods?.stagesPerAct ?? 4,
     );
   }
   gameState.phase = 'path_select';
@@ -1192,7 +1196,8 @@ function showPathSelect(): void {
     // currentAct readers) sees the act the player is actually fighting in.
     if (consumesStep && node.kind !== 'gym') {
       gameState.actStep += 1;
-      if (gameState.actStep >= 4) {
+      const stagesPerAct = gameState.deckMods?.stagesPerAct ?? 4;
+      if (gameState.actStep >= stagesPerAct) {
         gameState.actStep = 0;
         gameState.currentAct += 1;
       }

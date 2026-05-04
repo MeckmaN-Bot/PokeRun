@@ -32,12 +32,18 @@ export function generateShop(
   wave: number,
   existingItemIds: string[] = [],
   vouchers: VoucherId[] = [],
-  opts?: { teamHpRatio?: number; epicPity?: boolean; healingPity?: boolean },
+  opts?: { teamHpRatio?: number; epicPity?: boolean; healingPity?: boolean; excludeConsumables?: boolean },
 ): ShopItem[] {
   const items: ShopItem[] = [];
   const usedIds = new Set<string>(existingItemIds);
   const discount = vouchers.includes('clearance_sale') ? 0.25 : 0;
   const overstock = vouchers.includes('overstock') ? 2 : 0;
+  // Iron Trainer deck — strip every consumable from the pool so the shop is
+  // held-items only. The healing-pity branch below still tries to add a healing
+  // item, so we pre-filter ALL_ITEMS here once and reuse the filtered base.
+  const itemPool = opts?.excludeConsumables
+    ? ALL_ITEMS.filter(i => i.itemType !== 'consumable')
+    : ALL_ITEMS;
 
   // 3-4 items + overstock bonus
   const count = 3 + (Math.random() < 0.5 ? 1 : 0) + overstock;
@@ -61,7 +67,7 @@ export function generateShop(
   }
 
   for (const rarity of shuffledRarities) {
-    const pool = ALL_ITEMS.filter(
+    const pool = itemPool.filter(
       i => i.rarity === rarity && !usedIds.has(i.id) && !i.rewardOnly
     );
 
@@ -77,9 +83,10 @@ export function generateShop(
     });
   }
 
-  // Guarantee at least one healing item in the shop
+  // Guarantee at least one healing item in the shop — UNLESS Iron Trainer
+  // mode is on (consumables forbidden by design).
   const hasHealing = items.some(s => HEALING_ITEM_IDS.includes(s.item.id));
-  if (!hasHealing) {
+  if (!hasHealing && !opts?.excludeConsumables) {
     // Pity escalates the floor: low team HP or 3+ shops without healing → at least Hyper Potion
     const teamLowHp = (opts?.teamHpRatio ?? 1) < 0.6;
     const lowHpFloor = ['hyper_potion', 'full_restore'];
@@ -135,7 +142,7 @@ export function rerollShop(
   wave: number,
   existingItemIds: string[] = [],
   vouchers: VoucherId[] = [],
-  opts?: { teamHpRatio?: number; epicPity?: boolean; healingPity?: boolean },
+  opts?: { teamHpRatio?: number; epicPity?: boolean; healingPity?: boolean; excludeConsumables?: boolean },
 ): ShopItem[] {
   return generateShop(wave, existingItemIds, vouchers, opts);
 }
@@ -148,6 +155,7 @@ export function generateShopPacks(
   wave: number,
   guaranteeFreeMega = false,
   vouchers: VoucherId[] = [],
+  opts?: { excludeConsumables?: boolean },
 ): ShopPack[] {
   const packs: ShopPack[] = [];
   if (guaranteeFreeMega) {
@@ -162,6 +170,9 @@ export function generateShopPacks(
 
   const pool = BOOSTER_PACKS.filter(p => {
     if (p.id === 'premier_ball') return wave >= 5;
+    // Iron Trainer deck — Great Ball pack is "3 consumables", incompatible
+    // with the no-consumables rule. Hide it.
+    if (opts?.excludeConsumables && p.id === 'great_ball') return false;
     return true;
   });
 
