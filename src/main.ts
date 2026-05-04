@@ -20,6 +20,15 @@ import { registerAudioAssets } from './audio/registry';
 import type { GameState, BattlePokemon } from './types';
 import { prefetchStarters, fetchPokemon, fetchPokemonBatch } from './api/pokeapi';
 import { getWaveConfig, getEnemyLevel, selectEnemyIds, getWaveCoins } from './systems/scaling';
+import type { Generation } from './types';
+
+/** Resolve gameState.generation to a known Generation value — old saves
+ *  may have undefined; corrupt saves could carry a non-union string. */
+function resolveGen(state: { generation?: Generation } | null | undefined): Generation {
+  const g = state?.generation;
+  if (g === 'gen1' || g === 'gen2' || g === 'endless') return g;
+  return 'gen1';
+}
 import { generateRewards } from './systems/rewards';
 import { generateShop, generateShopPacks, generateShopVouchers } from './systems/shop';
 import { toBattlePokemon, monHasItem, getSlotItems } from './systems/battle';
@@ -287,7 +296,7 @@ async function startNewWave(): Promise<void> {
   const node = gameState.currentNode;
   const isStoryBoss = node?.kind === 'gym' || node?.kind === 'elite_four' || node?.kind === 'champion';
   const isBossWave = isStoryBoss || wave === gameState.nextBossWave;
-  const config = getWaveConfig(wave, isBossWave, gameState.generation ?? 'gen1');
+  const config = getWaveConfig(wave, isBossWave, resolveGen(gameState));
 
   clearScreen();
 
@@ -731,8 +740,8 @@ function showBattleScreen(): void {
       // Victory — award coins
       const isBossVictory = bs.isBossWave;
       void Audio.playMusic('music.victory', { fadeMs: 200, loop: false, volume: 0.95 });
-      const config = getWaveConfig(state.wave, isBossVictory, state.generation ?? 'gen1');
-      const coinEarned = getWaveCoins(state.wave, isBossVictory, state.activePerks, state.generation ?? 'gen1');
+      const config = getWaveConfig(state.wave, isBossVictory, resolveGen(state));
+      const coinEarned = getWaveCoins(state.wave, isBossVictory, state.activePerks, resolveGen(state));
 
       // After a boss wave, schedule the next boss wave randomly 4–7 waves away
       if (isBossVictory) {

@@ -88,7 +88,7 @@ export function getWaveConfig(wave: number, isBossWave: boolean, generation: Gen
     levelMax,
     isBossWave,
     enemyPool: getEnemyPool(wave, generation),
-    bossPool: getBossPool(wave),
+    bossPool: getBossPool(wave, generation),
     coinReward,
     threatMultiplier,
   };

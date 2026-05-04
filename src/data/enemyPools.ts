@@ -147,11 +147,29 @@ export function getEnemyPool(wave: number, generation: Generation = 'gen1'): num
   );
 }
 
-export function getBossPool(wave: number): number[] {
-  if (wave <= 5)  return BOSS_POOL_WAVE_5;
-  if (wave <= 10) return BOSS_POOL_EARLY;
-  if (wave <= 20) return BOSS_POOL_MID;
-  return BOSS_POOL_LATE;
+export function getBossPool(wave: number, generation: Generation = 'gen1'): number[] {
+  const base =
+    wave <= 5  ? BOSS_POOL_WAVE_5 :
+    wave <= 10 ? BOSS_POOL_EARLY :
+    wave <= 20 ? BOSS_POOL_MID :
+    BOSS_POOL_LATE;
+  // Mirror getEnemyPool's gating so a Gen 1 run can't pull a Cyndaquil.
+  let filtered: number[];
+  if (generation === 'gen1') {
+    filtered = base.filter(id => id <= 151);
+  } else {
+    filtered = base.filter(id =>
+      id <= 151 ||
+      GEN2_KEEP.has(id) ||
+      (generation === 'endless' && id > 251)
+    );
+  }
+  // Safety: if filtering empties the pool (e.g. Gen 1 vs BOSS_POOL_MID where
+  // every entry is >151), fall back to BOSS_POOL_EARLY which is pure Gen 1.
+  if (filtered.length === 0) {
+    return BOSS_POOL_EARLY.filter(id => id <= 151);
+  }
+  return filtered;
 }
 
 export function getRandomFromPool(pool: number[], count: number): number[] {
