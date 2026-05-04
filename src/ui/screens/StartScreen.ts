@@ -265,7 +265,7 @@ export class StartScreen {
     const blindsFaced = getDiscoveredBlindCount(this.playerName);
     const achievementsUnlocked = getUnlockedCount(this.playerName);
     const discoveryLine = `<button type="button" class="ss-discovery-line" id="ss-discovery-open" title="Open Synergy Codex">Synergies discovered · ${discovered} / ${TOTAL_SYNERGIES} →</button>
-      <button type="button" class="ss-discovery-line" id="ss-blind-codex-open" title="Open Boss Blind Codex">Boss Blinds faced · ${blindsFaced} / ${TOTAL_BLINDS} →</button>
+      <button type="button" class="ss-discovery-line" id="ss-blind-codex-open" title="Open Field Effect Codex">Field Effects faced · ${blindsFaced} / ${TOTAL_BLINDS} →</button>
       <button type="button" class="ss-discovery-line" id="ss-achievements-open" title="Open Achievements">Achievements · ${achievementsUnlocked} / ${TOTAL_ACHIEVEMENTS} →</button>
       <div class="ss-discovery-line champion-clears-line">Champion clears · ${getChampionClears(this.playerName)}</div>
       ${this.renderNextGoal()}`;
@@ -400,7 +400,7 @@ export class StartScreen {
     // Cascade hint — first locked stake's prereq, visible (not just title-attr).
     const firstLockedStake = STAKES.find(s => !stakeUnlocked.has(s.id));
     const stakeHintHtml = firstLockedStake?.unlockAfter
-      ? `<div class="stake-picker-hint">Unlock ${escapeHtml(firstLockedStake.name)} by clearing Champion on ${escapeHtml(this.stakeNameForId(firstLockedStake.unlockAfter))}.</div>`
+      ? `<div class="stake-picker-hint">Unlock ${escapeHtml(firstLockedStake.name)} rank by clearing Champion as ${escapeHtml(this.stakeNameForId(firstLockedStake.unlockAfter))}.</div>`
       : '';
     const stakePills = STAKES.map(s => {
       const isUnlocked = stakeUnlocked.has(s.id);
@@ -420,13 +420,13 @@ export class StartScreen {
     return `
       <div class="deck-picker-section">
         <div class="deck-picker-header">
-          <span class="deck-picker-title">Choose your deck</span>
-          <span class="deck-picker-hint">Decks bend the rules — unlocked via achievements.</span>
+          <span class="deck-picker-title">Choose your field kit</span>
+          <span class="deck-picker-hint">Field kits bend the rules — unlocked via achievements.</span>
         </div>
         <div class="deck-picker-grid">${cards}</div>
         ${monoSubpicker}
         <div class="stake-picker-row">
-          <span class="stake-picker-label">Stake</span>
+          <span class="stake-picker-label">Trainer Rank</span>
           ${stakePills}
         </div>
         ${stakeHintHtml}
@@ -534,7 +534,7 @@ export class StartScreen {
       <div class="modal codex-modal">
         <button class="modal-close" id="codex-close" type="button">✕</button>
         <div class="codex-eyebrow">— Field Reference —</div>
-        <h2 class="modal-title">Boss Blind <em>Codex</em></h2>
+        <h2 class="modal-title">Field Effect <em>Codex</em></h2>
         <div class="codex-progress">${faced.size} / ${BOSS_BLINDS.length} faced</div>
         <div class="codex-grid">${cards}</div>
       </div>

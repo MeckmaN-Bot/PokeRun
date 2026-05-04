@@ -27,14 +27,14 @@ export interface Deck {
 export const DECKS: Deck[] = [
   {
     id: 'standard',
-    name: 'Standard Deck',
+    name: 'Standard Field Kit',
     eyebrow: 'Default',
     icon: '◇',
     description: 'The classic field manual. All 5 starters, no twists.',
   },
   {
     id: 'speedrunner',
-    name: 'Speedrunner Deck',
+    name: 'Speedrunner Field Kit',
     eyebrow: 'Wave 30+',
     icon: '»',
     unlockAchievement: 'hall_of_records',
@@ -42,7 +42,7 @@ export const DECKS: Deck[] = [
   },
   {
     id: 'iron_trainer',
-    name: 'Iron Trainer Deck',
+    name: 'Iron Trainer Field Kit',
     eyebrow: 'Act 5',
     icon: '◆',
     unlockAchievement: 'survivor',
@@ -50,7 +50,7 @@ export const DECKS: Deck[] = [
   },
   {
     id: 'mono_type',
-    name: 'Mono-Type Deck',
+    name: 'Mono-Type Field Kit',
     eyebrow: 'Pure of type',
     icon: '◈',
     unlockAchievement: 'mono_master',

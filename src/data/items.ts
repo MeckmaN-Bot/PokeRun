@@ -520,7 +520,7 @@ export const ALL_ITEMS: Item[] = [
     id: 'blind_lens', name: 'Blind Lens', rarity: 'epic', itemType: 'consumable',
     icon: '◎',
     pokeapiName: 'lens-case',
-    description: 'Re-roll the upcoming gym arena\'s Boss Blind. Single use.',
+    description: 'Re-roll the upcoming gym arena\'s Field Effect. Single use.',
     effect: { trigger: 'manual' },
   },
   {

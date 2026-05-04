@@ -221,7 +221,7 @@ export class BattleScreen {
     const cells = visible.map(slot => {
       if (!slot.item) return `<span class="bts-slot empty" title="Empty slot">·</span>`;
       const cls = `bts-slot filled${disabled ? ' disabled' : ''}`;
-      const tt = disabled ? `${slot.item.name} (disabled — Boss Blind)` : slot.item.name;
+      const tt = disabled ? `${slot.item.name} (disabled — Field Effect)` : slot.item.name;
       return `<span class="${cls}" title="${tt}" data-tooltip-item-id="${slot.item.id}">${itemArt(slot.item)}</span>`;
     }).join('');
     return `<div class="bts-items${disabled ? ' all-disabled' : ''}">${cells}</div>`;
@@ -242,7 +242,7 @@ export class BattleScreen {
       <div class="boss-blind-banner" style="--blind-color:${blind.color}">
         <div class="bb-icon">${blind.icon}</div>
         <div class="bb-text">
-          <div class="bb-name">Boss Blind · ${blind.name}</div>
+          <div class="bb-name">Field Effect · ${blind.name}</div>
           <div class="bb-desc">${blind.description}</div>
         </div>
         <div class="bb-hint">${blind.tacticalHint}</div>

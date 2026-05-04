@@ -286,10 +286,10 @@ function renderBlindChip(
        </button>`
     : '';
   return `
-    <div class="po-blind-chip" style="--blind-color:${b.color}" aria-label="Boss Blind: ${b.name}">
+    <div class="po-blind-chip" style="--blind-color:${b.color}" aria-label="Field Effect: ${b.name}">
       <div class="po-blind-chip-icon" aria-hidden="true">${b.icon}</div>
       <div class="po-blind-chip-body">
-        <div class="po-blind-chip-eyebrow">Boss Blind</div>
+        <div class="po-blind-chip-eyebrow">Field Effect</div>
         <div class="po-blind-chip-name">${b.name}</div>
         <div class="po-blind-chip-desc">${b.description}</div>
         <div class="po-blind-chip-hint">${b.tacticalHint}</div>

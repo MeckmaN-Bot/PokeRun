@@ -43,15 +43,15 @@ export function getNextGoal(username: string, currentGenId?: string): Goal | nul
   }
   // 3. Reach Act 5 (post-Erika).
   if (!ach.has('survivor')) {
-    return { id: 'survivor', title: 'Reach Act 5 (defeat Erika) to unlock the Iron Trainer Deck.' };
+    return { id: 'survivor', title: 'Reach Act 5 (defeat Erika) to unlock the Iron Trainer Field Kit.' };
   }
   // 4. Hall of Records — survive 30 waves in one run.
   if (!ach.has('hall_of_records')) {
-    return { id: 'hall_of_records', title: 'Survive 30+ waves in a single run to unlock the Speedrunner Deck.' };
+    return { id: 'hall_of_records', title: 'Survive 30+ waves in a single run to unlock the Speedrunner Field Kit.' };
   }
   // 5. Mono-team gym victory.
   if (!ach.has('mono_master')) {
-    return { id: 'mono_master', title: 'Defeat a gym leader with 2+ same-type alive teammates to unlock the Mono-Type Deck.' };
+    return { id: 'mono_master', title: 'Defeat a gym leader with 2+ same-type alive teammates to unlock the Mono-Type Field Kit.' };
   }
   // 6. First Champion clear — phrased per current gen if available.
   if (!ach.has('champion')) {
@@ -73,13 +73,13 @@ export function getNextGoal(username: string, currentGenId?: string): Goal | nul
       };
     }
   }
-  // 7. Stake cascade — Red.
+  // 7. Trainer Rank cascade — Veteran.
   if (!stakesUnlocked.has('red')) {
-    return { id: 'stake_red', title: 'Beat the Champion on White Stake to unlock Red Stake.' };
+    return { id: 'stake_red', title: 'Beat the Champion as Rookie Trainer to unlock Veteran Rank.' };
   }
-  // 8. Stake cascade — Black.
+  // 8. Trainer Rank cascade — Ace.
   if (!stakesUnlocked.has('black')) {
-    return { id: 'stake_black', title: 'Beat the Champion on Red Stake to unlock Black Stake.' };
+    return { id: 'stake_black', title: 'Beat the Champion as Veteran Trainer to unlock Ace Rank.' };
   }
   // 9. Synergy codex completion.
   if (synergies < TOTAL_SYNERGIES) {
@@ -89,12 +89,12 @@ export function getNextGoal(username: string, currentGenId?: string): Goal | nul
       title: `Trigger ${remaining} more synerg${remaining === 1 ? 'y' : 'ies'} to complete the Synergy Codex.`,
     };
   }
-  // 10. Boss blind codex completion.
+  // 10. Field-effect codex completion.
   if (blinds < TOTAL_BLINDS) {
     const remaining = TOTAL_BLINDS - blinds;
     return {
       id: 'field_reference',
-      title: `Face ${remaining} more Boss Blind${remaining === 1 ? '' : 's'} to complete the Boss Blind Codex.`,
+      title: `Face ${remaining} more Field Effect${remaining === 1 ? '' : 's'} to complete the Field Effect Codex.`,
     };
   }
   // All progression complete.

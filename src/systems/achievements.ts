@@ -36,7 +36,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'synergist',        name: 'Synergist',        eyebrow: 'Catalogue complete.',
     description: 'Trigger every synergy at least once.' },
   { id: 'field_reference',  name: 'Field Reference',  eyebrow: 'Catalogue complete.',
-    description: 'Face every Boss Blind at least once.' },
+    description: 'Face every Field Effect at least once.' },
 ];
 
 export const TOTAL_ACHIEVEMENTS = ACHIEVEMENTS.length;

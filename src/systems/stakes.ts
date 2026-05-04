@@ -26,19 +26,19 @@ export interface Stake {
 export const STAKES: Stake[] = [
   {
     id: 'white',
-    name: 'White Stake',
+    name: 'Rookie Trainer',
     description: 'Standard difficulty. The starting trial.',
   },
   {
     id: 'red',
-    name: 'Red Stake',
+    name: 'Veteran Trainer',
     unlockAfter: 'white',
-    description: 'Boss Blinds carry +50% HP. Coins reward +50%.',
+    description: 'Field Effects carry +50% HP. Coins reward +50%.',
     mods: { bossBlindHpMult: 1.5, coinRewardMult: 1.5 },
   },
   {
     id: 'black',
-    name: 'Black Stake',
+    name: 'Ace Trainer',
     unlockAfter: 'red',
     description: 'Shop prices +50%. Enemy speed +25%. Coins reward +100%.',
     mods: { shopPriceMult: 1.5, enemySpeedMult: 1.25, coinRewardMult: 2.0 },
@@ -107,7 +107,7 @@ export function unlockNextStake(username: string, currentStake: string | undefin
   try {
     localStorage.setItem(unlockedKey(username), JSON.stringify([...set]));
   } catch { return; }
-  showToast(`${next.name} unlocked!`, 'success');
+  showToast(`${next.name} rank unlocked!`, 'success');
 }
 
 /** Display helper for the leaderboard pill. White → null (no pill). */

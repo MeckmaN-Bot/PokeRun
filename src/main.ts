@@ -1113,7 +1113,7 @@ function showRerollBlindModal(): void {
   overlay.innerHTML = `
     <div class="path-modal-card" style="--blind-color:${oldBlind.color}">
       <div class="path-eyebrow">— Use Blind Lens —</div>
-      <h2 class="path-title">Re-roll <em>${gymName}'s</em> Boss Blind</h2>
+      <h2 class="path-title">Re-roll <em>${gymName}'s</em> Field Effect</h2>
       <div class="po-blind-modal-current">
         <span class="po-blind-modal-label">Current:</span>
         <span class="po-blind-modal-name" style="color:${oldBlind.color}">
@@ -1142,7 +1142,7 @@ function showRerollBlindModal(): void {
     const next = pickRandomBossBlind([oldBlindId]);
     gameState.actBossBlind = next.id;
     Audio.play('ui.coin');
-    showToast(`Boss Blind re-rolled: ${next.name}`, 'success');
+    showToast(`Field Effect re-rolled: ${next.name}`, 'success');
     saveRun(gameState);
     close();
     showPathSelect(); // re-render so the chip refreshes + the pill count updates
