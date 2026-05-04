@@ -128,7 +128,7 @@ export class LeaderboardScreen {
         <div class="wv">W${entry.score_waves ?? 0}</div>
         <div class="lb-cell-starter">${escapeHtml(entry.score_details?.starterName ?? '—')}</div>
         <div class="lb-cell-kos">${entry.score_details?.totalKOs ?? 0}</div>
-        <div class="lb-cell-act">${formatAct(entry.score_details?.actReached)}</div>
+        <div class="lb-cell-act">${formatAct(entry.score_details?.actReached, entry.score_details?.endless)}</div>
         <div class="lb-cell-badges">${formatBadges(entry.score_details?.badgesEarned)}</div>
         <div class="lb-cell-date">${date}</div>
       </div>

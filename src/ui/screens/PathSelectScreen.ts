@@ -110,18 +110,22 @@ export class PathSelectScreen {
     // Eyebrow shifts when the league is in play.
     const inLeague = (this.state.badges?.length ?? 0) >= 8 && (this.state.leagueStep ?? 0) < 5;
     const isJohto = this.state.generation === 'gen2';
+    const isEndless = this.state.generation === 'endless';
     const headerEyebrow = inLeague
       ? `— Pokémon League · Step ${(this.state.leagueStep ?? 0) + 1} of 5 —`
-      : isJohto
-        ? `— Region: Johto · Act ${act} · Step ${step} of 4 —`
-        : `— Crossroads · Act ${act} · Step ${step} of 4 —`;
+      : isEndless
+        ? `— Endless${wave > 30 ? ' · Deep run' : ''} · Wave ${wave} —`
+        : isJohto
+          ? `— Region: Johto · Act ${act} · Step ${step} of 4 —`
+          : `— Crossroads · Act ${act} · Step ${step} of 4 —`;
     const headerTitle = inLeague ? 'Indigo <em>Plateau</em>' : 'Choose your <em>path</em>';
     const headerSub = inLeague
       ? 'No retreat. The next door is the next opponent.'
       : `Wave ${String(wave).padStart(2, '0')} awaits. Three trails diverge.`;
 
     // Big stage progress strip — 4 pips representing the act, with the gym leader portrait.
-    const nextGymLeader = !inLeague && act >= 1 && act <= 8 ? getGymForAct(act) : undefined;
+    // Hidden in endless: no gym leader, no act ladder.
+    const nextGymLeader = !inLeague && !isEndless && act >= 1 && act <= 8 ? getGymForAct(act) : undefined;
     const stopsToGym = nextGymLeader ? Math.max(0, 4 - step) : 0;
     const lensCount = (this.state.inventory ?? [])
       .filter(inv => inv.item.id === 'blind_lens')

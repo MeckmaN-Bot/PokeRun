@@ -255,7 +255,7 @@ export class StartScreen {
         <div class="ss-pb-eyebrow">Personal best</div>
         <div class="ss-pb-row">
           <div class="ss-pb-stat"><span class="k">Waves</span><span class="v">${pb.score_waves}</span></div>
-          <div class="ss-pb-stat"><span class="k">Act</span><span class="v">${formatAct(d.actReached)}</span></div>
+          <div class="ss-pb-stat"><span class="k">Act</span><span class="v">${formatAct(d.actReached, d.endless)}</span></div>
           <div class="ss-pb-stat"><span class="k">Badges</span><span class="v">${formatBadges(d.badgesEarned)}</span></div>
           <div class="ss-pb-stat"><span class="k">Starter</span><span class="v">${escapeHtml(d.starterName ?? '—')}</span></div>
         </div>

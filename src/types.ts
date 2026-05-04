@@ -702,6 +702,8 @@ export interface LeaderboardEntry {
     /** 1..8 = gym act reached, 9 = league in progress, 10 = champion cleared. */
     actReached?: number;
     badgesEarned?: number;
+    /** Run was in endless mode at end. Takes precedence over actReached for display. */
+    endless?: boolean;
   };
   created_at?: string;
 }

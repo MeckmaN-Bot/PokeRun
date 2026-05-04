@@ -387,9 +387,16 @@ async function startNewWave(): Promise<void> {
     introSub = trainerArchetypeForIntro.flavour;
     extraClass = ' trainer';
   } else {
-    introEyebrow = config.isBossWave ? 'Boss encounter' : 'Incoming wave';
+    const isEndless = resolveGen(gameState) === 'endless';
+    introEyebrow = config.isBossWave
+      ? 'Boss encounter'
+      : isEndless
+        ? `Endless${wave > 30 ? ' · Deep run' : ''}`
+        : 'Incoming wave';
     introMain = `<div class="wn">WAVE <em>${String(wave).padStart(2, '0')}</em></div>`;
-    introSub = config.isBossWave ? 'A monstrous challenger blocks the route.' : 'Wild creatures ahead.';
+    introSub = config.isBossWave
+      ? 'A monstrous challenger blocks the route.'
+      : isEndless ? 'No retreat. The waves keep coming.' : 'Wild creatures ahead.';
   }
 
   // Arena progress banner — only when inside a gauntlet.
@@ -414,7 +421,8 @@ async function startNewWave(): Promise<void> {
   // the player always knows how many stops until the next gym.
   const waveAct = gameState.currentAct;
   const waveStep = gameState.actStep;
-  const stageLeaderForIntro = !arena && waveAct >= 1 && waveAct <= 8 ? GYM_LEADERS[waveAct - 1] : undefined;
+  const stageLeaderForIntro = !arena && resolveGen(gameState) !== 'endless' && waveAct >= 1 && waveAct <= 8
+    ? GYM_LEADERS[waveAct - 1] : undefined;
   const stageProgressIntroHtml = stageLeaderForIntro
     ? (() => {
         const accent = stageLeaderForIntro.accent;

@@ -128,6 +128,7 @@ export class GameOverScreen {
 
   /**
    * Resolve the player's story progress for display.
+   *  - endless: "Endless · Wave N" overrides everything else
    *  - 1..8 (gym): "Act N · LeaderName" + numeric act for the score payload
    *  - badges>=8 in league: "League · StepName" + actReached=9
    *  - leagueStep===5 (champion cleared): "Champion ✓" + actReached=10
@@ -136,16 +137,27 @@ export class GameOverScreen {
     actLabel: string;
     subheadLabel: string;
     actReached: number;
+    endless: boolean;
   } {
+    const isEndless = this.state.generation === 'endless';
+    const wavesCleared = this.state.runStats.wavesCleared;
+    if (isEndless) {
+      return {
+        actLabel: 'Endless',
+        subheadLabel: `Endless · Wave ${wavesCleared}`,
+        actReached: this.state.runStats.wavesCleared, // for sort ordering on endless rows
+        endless: true,
+      };
+    }
     const badges = this.state.badges?.length ?? 0;
     const leagueStep = this.state.leagueStep ?? 0;
     if (badges >= 8 && leagueStep >= 5) {
-      return { actLabel: 'Champion ✓', subheadLabel: 'League · Champion', actReached: 10 };
+      return { actLabel: 'Champion ✓', subheadLabel: 'League · Champion', actReached: 10, endless: false };
     }
     if (badges >= 8) {
       const step = getEliteByIndex(leagueStep);
       const name = step?.name ?? `Step ${leagueStep + 1}`;
-      return { actLabel: `League · ${name}`, subheadLabel: `League · ${name}`, actReached: 9 };
+      return { actLabel: `League · ${name}`, subheadLabel: `League · ${name}`, actReached: 9, endless: false };
     }
     const act = this.state.currentAct;
     const leader = getGymForAct(act);
@@ -154,9 +166,10 @@ export class GameOverScreen {
         actLabel: `Act ${act} · ${leader.name}`,
         subheadLabel: `Act ${act} · ${leader.city}`,
         actReached: act,
+        endless: false,
       };
     }
-    return { actLabel: `Act ${act}`, subheadLabel: `Act ${act}`, actReached: act };
+    return { actLabel: `Act ${act}`, subheadLabel: `Act ${act}`, actReached: act, endless: false };
   }
 
   private async autoSubmitScore(): Promise<void> {
@@ -177,6 +190,7 @@ export class GameOverScreen {
           totalDamageDealt: this.state.runStats.totalDamageDealt,
           actReached: progress.actReached,
           badgesEarned: this.state.badges?.length ?? 0,
+          endless: progress.endless,
         },
       });
       if (statusEl) statusEl.textContent = '✓ Score submitted';

@@ -9,7 +9,10 @@
  *   10+  → champion cleared
  */
 
-export function formatAct(n: number | undefined | null): string {
+export function formatAct(n: number | undefined | null, isEndless = false): string {
+  // Endless flag takes precedence — endless runs render 'Endless' regardless
+  // of where actReached landed (pre- or post-Champion entry to endless mode).
+  if (isEndless) return 'Endless';
   if (n == null) return '—';
   if (n >= 10) return 'Champion ✓';
   if (n === 9) return 'League';
