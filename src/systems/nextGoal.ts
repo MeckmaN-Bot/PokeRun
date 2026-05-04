@@ -17,6 +17,7 @@ import {
   getDiscoveredCount, TOTAL_SYNERGIES,
   getDiscoveredBlindCount, TOTAL_BLINDS,
 } from './discoveries';
+import { getUnlockedGens, getGenById, getNextGen } from '../data/generations';
 
 export interface Goal {
   id: string;
@@ -24,10 +25,11 @@ export interface Goal {
   hint?: string;
 }
 
-export function getNextGoal(username: string): Goal | null {
+export function getNextGoal(username: string, currentGenId?: string): Goal | null {
   if (!username) return null;
   const ach = getAchievements(username);
   const stakesUnlocked = getUnlockedStakes(username);
+  const gensUnlocked = getUnlockedGens(username);
   const synergies = getDiscoveredCount(username);
   const blinds = getDiscoveredBlindCount(username);
 
@@ -51,9 +53,25 @@ export function getNextGoal(username: string): Goal | null {
   if (!ach.has('mono_master')) {
     return { id: 'mono_master', title: 'Defeat a gym leader with 2+ same-type alive teammates to unlock the Mono-Type Deck.' };
   }
-  // 6. First Champion clear.
+  // 6. First Champion clear — phrased per current gen if available.
   if (!ach.has('champion')) {
-    return { id: 'champion', title: 'Defeat the Champion to unlock Endless and Gen 2.' };
+    const cur = currentGenId ? getGenById(currentGenId) : undefined;
+    const region = cur?.region ?? 'Kanto';
+    return { id: 'champion', title: `Defeat the Champion in ${region} to unlock the next region and Endless.` };
+  }
+  // 6a. Champion cleared — encourage the next live gen if not yet unlocked
+  // (this fires when the Champion-clear cascade fired but the player hasn't
+  // started the new gen yet — informational nudge).
+  // Cascade through unlocked gens; if next live gen is unlocked but not yet
+  // visited, surface it. If next gen is coming-soon, surface a teaser line.
+  if (currentGenId) {
+    const next = getNextGen(currentGenId);
+    if (next?.status === 'coming_soon' && gensUnlocked.has(currentGenId)) {
+      return {
+        id: `region_${next.id}`,
+        title: `Beat the Champion in ${getGenById(currentGenId)?.region ?? 'this region'} — ${next.region} coming soon.`,
+      };
+    }
   }
   // 7. Stake cascade — Red.
   if (!stakesUnlocked.has('red')) {

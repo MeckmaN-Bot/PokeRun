@@ -8,6 +8,7 @@ import { trainerSpriteUrl } from '../../data/trainerArchetypes';
 import { renderTypeBadge } from '../components/TypeBadge';
 import { getBossBlindById, type BossBlindId } from '../../data/bossBlinds';
 import { getEliteByIndex } from '../../data/eliteFour';
+import { getGenById } from '../../data/generations';
 
 /**
  * Path-select screen — three thematic node cards. The player picks one;
@@ -109,15 +110,16 @@ export class PathSelectScreen {
 
     // Eyebrow shifts when the league is in play.
     const inLeague = (this.state.badges?.length ?? 0) >= 8 && (this.state.leagueStep ?? 0) < 5;
-    const isJohto = this.state.generation === 'gen2';
+    const currentGen = getGenById(this.state.generation ?? 'gen1');
     const isEndless = this.state.generation === 'endless';
+    const isNonKantoGen = !!currentGen && currentGen.id !== 'gen1' && !isEndless;
     const stagesPerAct = this.state.deckMods?.stagesPerAct ?? 4;
     const headerEyebrow = inLeague
       ? `— Pokémon League · Step ${(this.state.leagueStep ?? 0) + 1} of 5 —`
       : isEndless
         ? `— Endless${wave > 30 ? ' · Deep run' : ''} · Wave ${wave} —`
-        : isJohto
-          ? `— Region: Johto · Act ${act} · Step ${step} of ${stagesPerAct} —`
+        : isNonKantoGen
+          ? `— Region: ${currentGen.region} · Act ${act} · Step ${step} of ${stagesPerAct} —`
           : `— Crossroads · Act ${act} · Step ${step} of ${stagesPerAct} —`;
     const headerTitle = inLeague ? 'Indigo <em>Plateau</em>' : 'Choose your <em>path</em>';
     const headerSub = inLeague

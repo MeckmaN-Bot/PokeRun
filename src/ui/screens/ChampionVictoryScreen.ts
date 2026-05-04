@@ -32,7 +32,7 @@ export function showChampionVictoryScreen(state: GameState, clears: number, onCl
       </div>
       <div class="champion-victory-clears">Champion clears: <b>${clears}</b></div>
       ${(() => {
-        const goal = getNextGoal(state.playerName);
+        const goal = getNextGoal(state.playerName, state.generation);
         return goal
           ? `<div class="champion-victory-next-goal"><span class="cv-next-eyebrow">Next:</span> ${goal.title}</div>`
           : '';

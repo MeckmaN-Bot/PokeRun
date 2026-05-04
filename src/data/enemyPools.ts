@@ -103,24 +103,8 @@ export const BOSS_POOL_LATE = [
   482, // Azelf
 ];
 
-/**
- * Curated Gen 2 picks gated behind the Gen 2 / Endless run flag. Strong
- * representatives across the wave tiers; baby/pre-evolutions and noisy
- * mid-tiers are intentionally dropped (the existing arrays carry every
- * Gen 2 ID, this set narrows the pool that ships to the player).
- */
-const GEN2_KEEP = new Set<number>([
-  // Wave 6-10 tier — early Johto basics
-  152, 155, 158, 161, 163, 167, 170, 172, 173, 187,
-  // Wave 11-15 tier — mid Johto
-  153, 156, 159, 168, 178, 184, 195, 199, 219, 224,
-  // Wave 16-20 tier — final evos + powerhouses
-  154, 157, 160, 181, 185, 196, 197, 211, 230, 245,
-  // Wave 21+ tier — legendaries
-  248, 249, 250,
-]);
-
 import type { Generation } from '../types';
+import { getLiveCuratedKeep } from './generations';
 
 /**
  * Wild encounter pool gated by run generation:
@@ -140,9 +124,11 @@ export function getEnemyPool(wave: number, generation: Generation = 'gen1'): num
   if (generation === 'gen1') {
     return base.filter(id => id <= 151);
   }
+  // Live curated picks (gen2 today, gen3+ when they go live in the registry).
+  const liveCurated = getLiveCuratedKeep();
   return base.filter(id =>
     id <= 151 ||
-    GEN2_KEEP.has(id) ||
+    liveCurated.has(id) ||
     (generation === 'endless' && id > 251)
   );
 }
@@ -158,9 +144,10 @@ export function getBossPool(wave: number, generation: Generation = 'gen1'): numb
   if (generation === 'gen1') {
     filtered = base.filter(id => id <= 151);
   } else {
+    const liveCurated = getLiveCuratedKeep();
     filtered = base.filter(id =>
       id <= 151 ||
-      GEN2_KEEP.has(id) ||
+      liveCurated.has(id) ||
       (generation === 'endless' && id > 251)
     );
   }

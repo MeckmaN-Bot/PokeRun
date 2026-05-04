@@ -65,6 +65,7 @@ import { markBlindDiscovered } from './systems/discoveries';
 import { tryUnlock as tryUnlockAchievement } from './systems/achievements';
 import { bumpChampionClears } from './systems/championClears';
 import { unlockNextStake } from './systems/stakes';
+import { getGenById, getNextGen, unlockNextGen } from './data/generations';
 import { showChampionVictoryScreen } from './ui/screens/ChampionVictoryScreen';
 import { applySettings } from './systems/userSettings';
 import { getEliteStep } from './data/eliteFour';
@@ -857,6 +858,9 @@ function showBattleScreen(): void {
           state.pendingChampionClears = bumpChampionClears(state.playerName);
           state.pendingChampionVictoryScreen = true;
           unlockNextStake(state.playerName, state.stake);
+          // Cascade-unlock the next live gen (e.g. clearing Champion in Kanto
+          // unlocks Johto). Coming-Soon gens are skipped — not playable yet.
+          unlockNextGen(state.playerName, resolveGen(state));
         }
       }
 
@@ -1392,6 +1396,58 @@ function showGenerationGate(): void {
   if (!gameState) return;
   gameState.pendingGenGate = false;
 
+  // Resolve which gen is next from the registry. nextGen may be 'live' (player
+  // can pick it), 'coming_soon' (visible teaser), or undefined (no next gen).
+  const currentGenId = resolveGen(gameState);
+  const nextGen = getNextGen(currentGenId);
+
+  // Sprite picker per region — the registry doesn't carry sprites yet.
+  const cardSpriteId: Record<string, number> = {
+    gen2: 249, // Lugia
+    gen3: 384, // Rayquaza
+    gen4: 483, // Dialga
+    gen5: 644, // Zekrom
+    gen6: 716, // Xerneas
+    gen7: 791, // Solgaleo
+    gen8: 888, // Zacian
+    gen9: 1007, // Koraidon
+  };
+
+  const renderNextCard = () => {
+    if (!nextGen) return '';
+    const accent = nextGen.themeAccent;
+    const sprite = pokemonSprite(cardSpriteId[nextGen.id] ?? 151);
+    if (nextGen.status === 'live') {
+      return `
+        <button class="path-card gen-gate-card has-sprite" data-gen="${nextGen.id}" type="button" style="--card-accent:${accent}">
+          <span class="path-card-corner tl"></span><span class="path-card-corner tr"></span>
+          <span class="path-card-corner bl"></span><span class="path-card-corner br"></span>
+          <div class="path-card-eyebrow">New Generation</div>
+          <div class="path-card-portrait">
+            <img src="${sprite}" alt="" class="path-card-sprite" onerror="${imgErrorFallback('◇')}" />
+          </div>
+          <h3 class="path-card-title">${nextGen.region} · Gen ${nextGen.ordinal}</h3>
+          <p class="path-card-hint">Reset acts, badges fade — Pokémon roster expands to ${nextGen.region}.</p>
+          <div class="path-card-foot"><span class="path-card-tag">Continue</span><span class="path-card-cta">Choose →</span></div>
+        </button>
+      `;
+    }
+    // Coming-soon: visible-but-disabled teaser card.
+    return `
+      <button class="path-card gen-gate-card gen-gate-coming-soon has-sprite" data-coming-soon="${nextGen.id}" type="button" style="--card-accent:${accent}">
+        <span class="path-card-corner tl"></span><span class="path-card-corner tr"></span>
+        <span class="path-card-corner bl"></span><span class="path-card-corner br"></span>
+        <div class="path-card-eyebrow">Coming soon</div>
+        <div class="path-card-portrait">
+          <img src="${sprite}" alt="" class="path-card-sprite" onerror="${imgErrorFallback('◇')}" />
+        </div>
+        <h3 class="path-card-title">${nextGen.region} · Gen ${nextGen.ordinal}</h3>
+        <p class="path-card-hint">${nextGen.flavorText ?? 'In development.'}</p>
+        <div class="path-card-foot"><span class="path-card-tag">Planned</span><span class="path-card-cta">Tap for info</span></div>
+      </button>
+    `;
+  };
+
   const overlay = document.createElement('div');
   overlay.className = 'path-overlay gen-gate-overlay';
   overlay.innerHTML = `
@@ -1400,17 +1456,7 @@ function showGenerationGate(): void {
       <h2 class="gen-gate-title">Where to <em>next</em>?</h2>
       <p class="gen-gate-sub">You stand atop the Indigo Plateau. A new generation calls — or you press deeper into Endless.</p>
       <div class="gen-gate-cards">
-        <button class="path-card gen-gate-card has-sprite" data-gen="gen2" type="button" style="--card-accent:#6c8a3a">
-          <span class="path-card-corner tl"></span><span class="path-card-corner tr"></span>
-          <span class="path-card-corner bl"></span><span class="path-card-corner br"></span>
-          <div class="path-card-eyebrow">New Generation</div>
-          <div class="path-card-portrait">
-            <img src="${pokemonSprite(249)}" alt="" class="path-card-sprite" onerror="${imgErrorFallback('🌳')}" />
-          </div>
-          <h3 class="path-card-title">Johto · Gen 2</h3>
-          <p class="path-card-hint">Reset acts, badges fade — but Pokémon roster expands to Gen 1+2 (IDs 1–251).</p>
-          <div class="path-card-foot"><span class="path-card-tag">Continue</span><span class="path-card-cta">Choose →</span></div>
-        </button>
+        ${renderNextCard()}
         <button class="path-card gen-gate-card has-sprite" data-gen="endless" type="button" style="--card-accent:#7a3f8a">
           <span class="path-card-corner tl"></span><span class="path-card-corner tr"></span>
           <span class="path-card-corner bl"></span><span class="path-card-corner br"></span>
@@ -1429,32 +1475,36 @@ function showGenerationGate(): void {
 
   overlay.querySelectorAll<HTMLButtonElement>('[data-gen]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const gen = btn.dataset['gen'] as 'gen2' | 'endless';
+      const gen = btn.dataset['gen'] ?? 'endless';
       if (!gameState) return;
       Audio.play('ui.confirm');
-      if (gen === 'gen2') {
-        gameState.generation = 'gen2';
-        // Reset run-graph for the second tour.
+      const picked = getGenById(gen);
+      if (gen === 'endless') {
+        gameState.generation = 'endless';
+        gameState.leagueStep = 5; // skip generator's league branch
+        showToast('Endless mode engaged.', 'success');
+      } else if (picked && picked.status === 'live') {
+        gameState.generation = picked.id as typeof gameState.generation;
         gameState.currentAct = 1;
         gameState.actStep = 0;
         gameState.leagueStep = 0;
         gameState.actBossBlind = null;
         gameState.leagueBlinds = [];
-        // Badges fade — fresh Region tour. Per-run gym wins re-trigger as the
-        // player rebuilds. Without this clear, the inLeague guard at
-        // PathSelectScreen.ts:108 (badges>=8 && leagueStep<5) fires immediately
-        // and teleports the player past acts into the league re-run.
         gameState.badges = [];
-        // Passive perks earned from the first tour remain in activePerks.
-        showToast('Welcome to Johto.', 'success');
-      } else {
-        gameState.generation = 'endless';
-        gameState.leagueStep = 5; // skip generator's league branch
-        showToast('Endless mode engaged.', 'success');
+        showToast(`Welcome to ${picked.region}.`, 'success');
       }
       gameState.nodeOptions = [];
       overlay.remove();
       showPathSelect();
+    });
+  });
+  // Coming-soon click → flavor toast, no state mutation.
+  overlay.querySelectorAll<HTMLButtonElement>('[data-coming-soon]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset['comingSoon'] ?? '';
+      const g = getGenById(id);
+      const msg = g?.flavorText ?? `${g?.region ?? 'That region'} is in development.`;
+      showToast(msg, 'info');
     });
   });
 }

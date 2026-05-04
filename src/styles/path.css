@@ -367,6 +367,28 @@
   .stage-pip.gym { min-width: 48px; height: 26px; padding: 0 8px; font-size: 9px; }
 }
 
+/* Gen-gate Coming-Soon teaser card variant — visible but visually muted. */
+.gen-gate-card.gen-gate-coming-soon {
+  opacity: 0.55;
+  cursor: pointer;
+  filter: grayscale(0.4);
+}
+.gen-gate-card.gen-gate-coming-soon::after {
+  content: 'COMING SOON';
+  position: absolute;
+  top: 8px; right: 8px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  padding: 2px 6px;
+  background: var(--ink, #1a1a1a);
+  color: var(--paper, #f4f1e8);
+  border: 1px solid var(--ink, #1a1a1a);
+}
+.gen-gate-card.gen-gate-coming-soon:hover {
+  opacity: 0.75;
+}
+
 /* ── Boss Blind preview chip (path stage progress) ──── */
 .po-blind-chip {
   display: flex; align-items: stretch; gap: 10px;
