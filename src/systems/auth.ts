@@ -4,6 +4,7 @@
 
 const ACCOUNTS_KEY = 'pokerun_accounts';
 const SESSION_KEY  = 'pokerun_session';
+const LAST_GUEST_KEY = 'pokerun_last_guest_username';
 
 export interface Account {
   username: string;
@@ -91,7 +92,22 @@ export async function login(
   return { ok: true };
 }
 
-export function loginAsGuest(): void {
-  const id = Math.random().toString(36).slice(2, 6).toUpperCase();
-  setSession({ username: `Guest_${id}`, isGuest: true });
+export function loginAsGuest(): string {
+  let username: string;
+  let stored: string | null = null;
+  try { stored = localStorage.getItem(LAST_GUEST_KEY); } catch { /* storage unavailable */ }
+  if (stored && /^Guest_[A-Z0-9]{4}$/.test(stored)) {
+    username = stored;
+  } else {
+    const id = Math.random().toString(36).slice(2, 6).toUpperCase();
+    username = `Guest_${id}`;
+    try { localStorage.setItem(LAST_GUEST_KEY, username); } catch { /* ignore */ }
+  }
+  setSession({ username, isGuest: true });
+  return username;
+}
+
+/** Wipe the sticky-guest username so the next loginAsGuest generates a new id. */
+export function clearGuestIdentity(): void {
+  try { localStorage.removeItem(LAST_GUEST_KEY); } catch { /* ignore */ }
 }

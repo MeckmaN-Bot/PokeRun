@@ -175,11 +175,10 @@ export class AuthScreen {
       }
     });
 
-    // Guest
+    // Guest — sticky id (loginAsGuest returns the resolved/persisted username)
     guestBtn.addEventListener('click', () => {
-      loginAsGuest();
-      const session = { username: `Guest_${Math.random().toString(36).slice(2,6).toUpperCase()}`, isGuest: true };
-      this.onAuth(sanitizePlayerName(session.username), true);
+      const username = loginAsGuest();
+      this.onAuth(sanitizePlayerName(username), true);
     });
 
     // Focus username on load
