@@ -503,6 +503,10 @@ export interface GameState {
   pendingGenGate?: boolean;
   /** Active arena gauntlet (multi-step gym sequence), or null if not in one. */
   arenaState?: ArenaState | null;
+  /** Pre-rolled Boss Blind for this act's gym leader. Re-rolled on act change. */
+  actBossBlind?: import('./data/bossBlinds').BossBlindId | null;
+  /** Pre-rolled Boss Blinds for the 5 league steps (E4 x4 + Champion). */
+  leagueBlinds?: import('./data/bossBlinds').BossBlindId[];
 }
 
 // ============================================================

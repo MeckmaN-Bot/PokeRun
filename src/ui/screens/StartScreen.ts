@@ -803,6 +803,8 @@ export class StartScreen {
         generation: 'gen1',
         leagueStep: 0,
         pendingGenGate: false,
+        actBossBlind: null,
+        leagueBlinds: [],
       };
 
       this.onStart(initialState);

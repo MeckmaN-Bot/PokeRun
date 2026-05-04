@@ -6,6 +6,8 @@ import { badgeSprite, imgErrorFallback } from '../../data/sprites';
 import { getGymForAct } from '../../data/gymLeaders';
 import { trainerSpriteUrl } from '../../data/trainerArchetypes';
 import { renderTypeBadge } from '../components/TypeBadge';
+import { getBossBlindById, type BossBlindId } from '../../data/bossBlinds';
+import { getEliteByIndex } from '../../data/eliteFour';
 
 /**
  * Path-select screen — three thematic node cards. The player picks one;
@@ -115,6 +117,9 @@ export class PathSelectScreen {
     // Big stage progress strip — 4 pips representing the act, with the gym leader portrait.
     const nextGymLeader = !inLeague && act >= 1 && act <= 8 ? getGymForAct(act) : undefined;
     const stopsToGym = nextGymLeader ? Math.max(0, 4 - step) : 0;
+    const gymBlindHtml = nextGymLeader
+      ? renderBlindChip(this.state.actBossBlind ?? null)
+      : '';
     const stageProgressHtml = nextGymLeader
       ? (() => {
           const accent = nextGymLeader.accent;
@@ -148,6 +153,33 @@ export class PathSelectScreen {
                 </div>
                 <div class="stage-progress-pips">${pips}</div>
                 <div class="stage-progress-cta">${cta}</div>
+                ${gymBlindHtml}
+              </div>
+            </div>
+          `;
+        })()
+      : '';
+
+    // League progress block — when the league is in play, preview the current step's blind.
+    const leagueProgressHtml = inLeague
+      ? (() => {
+          const idx = this.state.leagueStep ?? 0;
+          const step = getEliteByIndex(idx);
+          if (!step) return '';
+          const blindId = this.state.leagueBlinds?.[idx] ?? null;
+          const accent = step.accent;
+          return `
+            <div class="stage-progress" style="--stage-color:${accent}">
+              <div class="stage-progress-portrait">
+                <img src="${trainerSpriteUrl(step.spriteSlug)}" alt="${step.name}"
+                     onerror="${imgErrorFallback(step.icon)}" />
+              </div>
+              <div class="stage-progress-body">
+                <div class="stage-progress-eyebrow">
+                  <span>${step.title.toUpperCase()} · STEP ${idx + 1}/5</span>
+                </div>
+                <div class="stage-progress-cta">${step.name.toUpperCase()}</div>
+                ${renderBlindChip(blindId)}
               </div>
             </div>
           `;
@@ -162,6 +194,7 @@ export class PathSelectScreen {
             <h1 class="path-title">${headerTitle}</h1>
             <div class="path-sub">${headerSub}</div>
             ${stageProgressHtml}
+            ${leagueProgressHtml}
             ${badgeRowHtml}
           </div>
 
@@ -211,3 +244,20 @@ function kindLabel(kind: NodeInstance['kind']): string {
 
 // keep getBadge import "live" so it stays available for future expansions
 void getBadge;
+
+function renderBlindChip(blindId: BossBlindId | null): string {
+  if (!blindId) return '';
+  const b = getBossBlindById(blindId);
+  if (!b) return '';
+  return `
+    <div class="po-blind-chip" style="--blind-color:${b.color}" aria-label="Boss Blind: ${b.name}">
+      <div class="po-blind-chip-icon" aria-hidden="true">${b.icon}</div>
+      <div class="po-blind-chip-body">
+        <div class="po-blind-chip-eyebrow">Boss Blind</div>
+        <div class="po-blind-chip-name">${b.name}</div>
+        <div class="po-blind-chip-desc">${b.description}</div>
+        <div class="po-blind-chip-hint">${b.tacticalHint}</div>
+      </div>
+    </div>
+  `;
+}

@@ -367,6 +367,54 @@
   .stage-pip.gym { min-width: 48px; height: 26px; padding: 0 8px; font-size: 9px; }
 }
 
+/* ── Boss Blind preview chip (path stage progress) ──── */
+.po-blind-chip {
+  display: flex; align-items: stretch; gap: 10px;
+  margin-top: 8px;
+  padding: 6px 10px 6px 8px;
+  background: color-mix(in srgb, var(--blind-color, #3a3a3a) 10%, var(--paper, #f4f1e8));
+  border: 2px solid var(--ink, #1a1a1a);
+  border-left: 6px solid var(--blind-color, #3a3a3a);
+  box-shadow: 3px 3px 0 var(--ink, #1a1a1a);
+  text-align: left;
+}
+.po-blind-chip-icon {
+  flex: 0 0 auto;
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  background: var(--blind-color, #3a3a3a);
+  color: var(--paper, #f4f1e8);
+  font-size: 18px; font-weight: 800;
+  border: 1.5px solid var(--ink, #1a1a1a);
+  align-self: center;
+}
+.po-blind-chip-body {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; flex-direction: column; gap: 1px; line-height: 1.2;
+}
+.po-blind-chip-eyebrow {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.32em;
+  text-transform: uppercase; color: var(--ink-3, #6b5e44);
+}
+.po-blind-chip-name {
+  font-family: var(--font-display); font-weight: 800; font-style: italic;
+  font-size: 15px; color: var(--blind-color, #3a3a3a);
+  letter-spacing: 0.02em;
+}
+.po-blind-chip-desc {
+  font-family: var(--font-mono); font-size: 11px; color: var(--ink, #1a1a1a);
+}
+.po-blind-chip-hint {
+  font-family: var(--font-mono); font-size: 10px; color: var(--ink-3, #6b5e44);
+  font-style: italic;
+}
+@media (max-width: 600px) {
+  .po-blind-chip-icon { width: 28px; height: 28px; font-size: 15px; }
+  .po-blind-chip-name { font-size: 13px; }
+  .po-blind-chip-desc { font-size: 10px; }
+  .po-blind-chip-hint { font-size: 9px; }
+}
+
 /* Wave-intro variant: tighter, sits inside the dark intro card */
 .wave-intro-stage {
   margin-top: 14px;

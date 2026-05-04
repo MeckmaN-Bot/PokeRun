@@ -287,8 +287,22 @@ async function startNewWave(): Promise<void> {
 
   clearScreen();
 
-  // Pre-roll boss blind so we can preview it in the warning + reuse it later
-  const preRolledBlind = config.isBossWave ? pickRandomBossBlind().id : null;
+  // Pre-roll boss blind so we can preview it in the warning + reuse it later.
+  // Gym/E4/Champion consume the previewed blind so the player saw it on the path;
+  // mid-act surprise boss waves still roll fresh at battle entry.
+  // Arena gauntlet sub-steps (Junior/Senior trainer + Restock shop) are NOT story bosses
+  // — only the final 'Leader' sub-step (kind === 'gym') uses actBossBlind.
+  let preRolledBlind: import('./data/bossBlinds').BossBlindId | null = null;
+  if (config.isBossWave) {
+    if (node?.kind === 'gym') {
+      preRolledBlind = gameState.actBossBlind ?? pickRandomBossBlind().id;
+    } else if (node?.kind === 'elite_four' || node?.kind === 'champion') {
+      const idx = gameState.leagueStep ?? 0;
+      preRolledBlind = gameState.leagueBlinds?.[idx] ?? pickRandomBossBlind().id;
+    } else {
+      preRolledBlind = pickRandomBossBlind().id;
+    }
+  }
 
   // Pre-roll wave tag — consume queued first, else low-chance roll on non-boss waves
   let preRolledTag: import('./data/tags').WaveTagId | null = null;
@@ -979,6 +993,24 @@ function showShopScreen(): void {
 // Path Select Screen — choose one of 3 nodes before each wave
 // ============================================================
 
+/**
+ * Ensure boss-blind previews are populated for the current path screen.
+ * - Acts 1..8: roll one blind per act (re-rolled when act increments).
+ * - League: roll all 5 blinds (E4 x4 + Champion) once on league entry.
+ */
+function ensureBlindsRolled(state: GameState): void {
+  const inLeague = (state.badges?.length ?? 0) >= 8 && (state.leagueStep ?? 0) < 5;
+  if (inLeague) {
+    if (!state.leagueBlinds || state.leagueBlinds.length < 5) {
+      state.leagueBlinds = Array.from({ length: 5 }, () => pickRandomBossBlind().id);
+    }
+    return;
+  }
+  if (state.currentAct >= 1 && state.currentAct <= 8 && !state.actBossBlind) {
+    state.actBossBlind = pickRandomBossBlind().id;
+  }
+}
+
 function showPathSelect(): void {
   if (!gameState) return;
 
@@ -993,6 +1025,8 @@ function showPathSelect(): void {
     runArenaStep();
     return;
   }
+
+  ensureBlindsRolled(gameState);
 
   // Generate options if not already present (e.g. after a load)
   if (!gameState.nodeOptions || gameState.nodeOptions.length === 0) {
@@ -1023,6 +1057,8 @@ function showPathSelect(): void {
       if (gameState.actStep >= 4) {
         gameState.actStep = 0;
         gameState.currentAct += 1;
+        // New act → fresh blind preview on the next path screen.
+        gameState.actBossBlind = null;
       }
     }
     gameState.nodeOptions = [];
@@ -1236,6 +1272,9 @@ function showGenerationGate(): void {
         gameState.currentAct = 1;
         gameState.actStep = 0;
         gameState.leagueStep = 0;
+        // Reset blind previews for the new tour.
+        gameState.actBossBlind = null;
+        gameState.leagueBlinds = [];
         // Badges array kept as historical record; passive perks remain in activePerks.
         showToast('Welcome to Johto.', 'success');
       } else {
