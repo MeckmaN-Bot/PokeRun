@@ -27,6 +27,7 @@ import {
 import {
   STAKES, getUnlockedStakes, getLastStake, saveLastStake, getStakeMods,
 } from '../../systems/stakes';
+import { getNextGoal } from '../../systems/nextGoal';
 import type { PokemonType } from '../../types';
 import { formatAct, formatBadges } from '../../util/runProgress';
 import { BADGES } from '../../data/badges';
@@ -266,7 +267,8 @@ export class StartScreen {
     const discoveryLine = `<button type="button" class="ss-discovery-line" id="ss-discovery-open" title="Open Synergy Codex">Synergies discovered · ${discovered} / ${TOTAL_SYNERGIES} →</button>
       <button type="button" class="ss-discovery-line" id="ss-blind-codex-open" title="Open Boss Blind Codex">Boss Blinds faced · ${blindsFaced} / ${TOTAL_BLINDS} →</button>
       <button type="button" class="ss-discovery-line" id="ss-achievements-open" title="Open Achievements">Achievements · ${achievementsUnlocked} / ${TOTAL_ACHIEVEMENTS} →</button>
-      <div class="ss-discovery-line champion-clears-line">Champion clears · ${getChampionClears(this.playerName)}</div>`;
+      <div class="ss-discovery-line champion-clears-line">Champion clears · ${getChampionClears(this.playerName)}</div>
+      ${this.renderNextGoal()}`;
     if (!pb) {
       return `
         <div class="ss-personal-best" data-empty="true">
@@ -395,6 +397,11 @@ export class StartScreen {
       : '';
 
     const stakeUnlocked = getUnlockedStakes(this.playerName);
+    // Cascade hint — first locked stake's prereq, visible (not just title-attr).
+    const firstLockedStake = STAKES.find(s => !stakeUnlocked.has(s.id));
+    const stakeHintHtml = firstLockedStake?.unlockAfter
+      ? `<div class="stake-picker-hint">Unlock ${escapeHtml(firstLockedStake.name)} by clearing Champion on ${escapeHtml(this.stakeNameForId(firstLockedStake.unlockAfter))}.</div>`
+      : '';
     const stakePills = STAKES.map(s => {
       const isUnlocked = stakeUnlocked.has(s.id);
       const isSelected = this.selectedStake === s.id && isUnlocked;
@@ -422,12 +429,24 @@ export class StartScreen {
           <span class="stake-picker-label">Stake</span>
           ${stakePills}
         </div>
+        ${stakeHintHtml}
       </div>
     `;
   }
 
   private stakeNameForId(id: string): string {
     return STAKES.find(s => s.id === id)?.name ?? id;
+  }
+
+  private renderNextGoal(): string {
+    const goal = getNextGoal(this.playerName);
+    if (!goal) return '';
+    return `
+      <div class="ss-next-goal">
+        <span class="ss-next-goal-eyebrow">Next:</span>
+        <span class="ss-next-goal-title">${escapeHtml(goal.title)}</span>
+      </div>
+    `;
   }
 
   private unlockHintFor(deckId: string): string {

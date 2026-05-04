@@ -1475,6 +1475,56 @@ html[data-reduce-motion="on"] *::after {
   .stake-pill { min-height: 40px; padding: 6px 10px; }
 }
 
+/* Stake-picker locked-cascade hint (visible, beneath the pill row) */
+.stake-picker-hint {
+  margin-top: 6px;
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--ink-3, #6b5e44);
+  font-style: italic;
+  letter-spacing: 0.04em;
+}
+
+/* StartScreen 'Next:' goal line under the meta-progression strip */
+.ss-next-goal {
+  display: block;
+  margin: 6px 0 10px;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--gold, #c9962b) 8%, var(--paper, #f4f1e8));
+  border: 1px dashed var(--gold, #c9962b);
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--ink-2, #2e2822);
+  letter-spacing: 0.04em;
+}
+.ss-next-goal-eyebrow {
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-ink, #8a6412);
+  margin-right: 6px;
+  font-size: 10px;
+}
+.ss-next-goal-title {
+  font-style: italic;
+}
+
+/* Champion-Victory next-goal line (smaller, gold-accented italic) */
+.champion-victory-next-goal {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--ink-2, #2e2822);
+  letter-spacing: 0.04em;
+  font-style: italic;
+  margin-top: 4px;
+}
+.cv-next-eyebrow {
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-ink, #8a6412);
+  margin-right: 4px;
+  font-size: 9px;
+  font-style: normal;
+}
+
 /* Leaderboard stake pill */
 .lb-stake-pill {
   display: inline-block;

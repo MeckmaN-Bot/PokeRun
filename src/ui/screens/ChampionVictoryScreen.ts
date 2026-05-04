@@ -1,6 +1,7 @@
 import type { GameState } from '../../types';
 import { Audio } from '../../audio/AudioManager';
 import { pokemonSprite, imgErrorFallback } from '../../data/sprites';
+import { getNextGoal } from '../../systems/nextGoal';
 
 /**
  * Celebration overlay shown after the Champion-KO and before the
@@ -30,6 +31,12 @@ export function showChampionVictoryScreen(state: GameState, clears: number, onCl
         Defeated the Pokémon League
       </div>
       <div class="champion-victory-clears">Champion clears: <b>${clears}</b></div>
+      ${(() => {
+        const goal = getNextGoal(state.playerName);
+        return goal
+          ? `<div class="champion-victory-next-goal"><span class="cv-next-eyebrow">Next:</span> ${goal.title}</div>`
+          : '';
+      })()}
       <button class="ink-btn primary champion-victory-cta" type="button">Continue →</button>
     </div>
   `;
