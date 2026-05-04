@@ -294,7 +294,7 @@ export class StartScreen {
         <div class="ss-pb-eyebrow">Best run</div>
         <div class="ss-pb-row">
           <div class="ss-pb-stat"><span class="k">Waves</span><span class="v">${pb.score_waves}</span></div>
-          <div class="ss-pb-stat"><span class="k">Act</span><span class="v">${formatAct(d.actReached, d.endless)}</span></div>
+          <div class="ss-pb-stat"><span class="v">${formatAct(d.actReached, d.endless)}</span></div>
           <div class="ss-pb-stat"><span class="k">Badges</span><span class="v">${formatBadges(d.badgesEarned)}</span></div>
           <div class="ss-pb-stat"><span class="k">Starter</span><span class="v">${escapeHtml(d.starterName ?? '—')}</span></div>
         </div>
@@ -302,44 +302,103 @@ export class StartScreen {
     `;
   }
 
-  private refreshDeckPicker(): void {
-    const sec = this.container.querySelector<HTMLElement>('.deck-picker-section');
+  /** Re-render the 4-card deck picker + Mono sub-picker. Targets the
+   *  ELEMENT scope passed in (the modal body) so we don't accidentally
+   *  match a stale .deck-picker-section in the document. */
+  private refreshDeckPicker(scope: HTMLElement): void {
+    const sec = scope.querySelector<HTMLElement>('.deck-picker-section');
     if (!sec) return;
     const wrap = document.createElement('div');
     wrap.innerHTML = this.renderDeckPicker();
     const next = wrap.firstElementChild as HTMLElement;
     if (next) {
       sec.replaceWith(next);
-      // Re-wire the new buttons.
-      next.querySelectorAll<HTMLButtonElement>('[data-deck-id]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          if (btn.disabled) return;
-          const id = btn.dataset['deckId'] ?? 'standard';
-          this.selectedDeck = id;
-          saveLastDeck(this.playerName, id);
-          this.refreshDeckPicker();
-          this.refreshStarterFilter();
-        });
+      this.wireDeckPickerEvents(next);
+    }
+  }
+
+  private wireDeckPickerEvents(scope: HTMLElement): void {
+    scope.querySelectorAll<HTMLButtonElement>('[data-deck-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        const id = btn.dataset['deckId'] ?? 'standard';
+        this.selectedDeck = id;
+        saveLastDeck(this.playerName, id);
+        this.refreshDeckPicker(scope);
+        this.refreshFieldKitCompactRow();
+        this.refreshStarterFilter();
       });
-      next.querySelectorAll<HTMLButtonElement>('[data-mono-type]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const t = btn.dataset['monoType'] as PokemonType;
-          this.selectedMonoType = t;
-          saveLastMonoType(this.playerName, t);
-          this.refreshDeckPicker();
-          this.refreshStarterFilter();
-        });
+    });
+    scope.querySelectorAll<HTMLButtonElement>('[data-mono-type]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = btn.dataset['monoType'] as PokemonType;
+        this.selectedMonoType = t;
+        saveLastMonoType(this.playerName, t);
+        this.refreshDeckPicker(scope);
+        this.refreshFieldKitCompactRow();
+        this.refreshStarterFilter();
       });
+    });
+  }
+
+  /** Update the compact Field Kit row on StartScreen to reflect the
+   *  current selection. Called after the modal updates state. */
+  private refreshFieldKitCompactRow(): void {
+    const row = this.container.querySelector<HTMLElement>('.ss-field-kit-row');
+    if (!row) return;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = this.renderFieldKitCompactRow();
+    const next = wrap.firstElementChild as HTMLElement;
+    if (next) {
+      row.replaceWith(next);
+      next.querySelector<HTMLButtonElement>('#ss-fk-change-open')
+        ?.addEventListener('click', () => this.openFieldKitDetail());
+    }
+  }
+
+  private refreshStakePickerRow(): void {
+    const row = this.container.querySelector<HTMLElement>('.ss-stake-row');
+    if (!row) return;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = this.renderStakePickerRow();
+    const next = wrap.firstElementChild as HTMLElement;
+    if (next) {
+      row.replaceWith(next);
       next.querySelectorAll<HTMLButtonElement>('[data-stake-id]').forEach(btn => {
         btn.addEventListener('click', () => {
           if (btn.disabled) return;
           const id = btn.dataset['stakeId'] ?? 'white';
           this.selectedStake = id;
           saveLastStake(this.playerName, id);
-          this.refreshDeckPicker();
+          this.refreshStakePickerRow();
         });
       });
     }
+  }
+
+  /** Field Kit Detail modal — full 4-card picker + Mono-Type sub-picker
+   *  hosted inside an overlay. Picking a card mutates state, refreshes
+   *  the compact row on StartScreen behind the modal, and stays open
+   *  for further selection. ✕ or backdrop click dismisses. */
+  private openFieldKitDetail(): void {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay codex-overlay field-kit-detail-overlay';
+    overlay.innerHTML = `
+      <div class="modal field-kit-detail-modal">
+        <button class="modal-close" id="fk-close" type="button">✕</button>
+        <div class="codex-eyebrow">— Run configuration —</div>
+        <h2 class="modal-title">Field <em>Kit</em></h2>
+        <p class="fk-modal-sub">Field kits bend the rules — unlocked via achievements.</p>
+        ${this.renderDeckPicker()}
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#fk-close')?.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    this.wireDeckPickerEvents(overlay);
   }
 
   /** Mono-Type deck narrows the starter carousel to just the matching starter.
@@ -372,6 +431,61 @@ export class StartScreen {
     }
   }
 
+  /** Compact row for default StartScreen — selected kit name + Change button.
+   *  Click 'Change ▾' opens openFieldKitDetail() with the full 4-card picker. */
+  private renderFieldKitCompactRow(): string {
+    const selected = DECKS.find(d => d.id === this.selectedDeck) ?? DECKS[0];
+    const monoChip = selected.id === 'mono_type'
+      ? `<span class="ss-fk-mono-chip type-chip type-${this.selectedMonoType}">${escapeHtml(this.selectedMonoType.toUpperCase())}</span>`
+      : '';
+    return `
+      <div class="ss-field-kit-row">
+        <span class="ss-fk-label">Field Kit</span>
+        <span class="ss-fk-selected">
+          <span class="ss-fk-icon" aria-hidden="true">${selected.icon}</span>
+          <span class="ss-fk-name">${escapeHtml(selected.name)}</span>
+          ${monoChip}
+        </span>
+        <button type="button" class="ss-fk-change-btn" id="ss-fk-change-open"
+                aria-label="Change Field Kit">Change ▾</button>
+      </div>
+    `;
+  }
+
+  /** Stake (Trainer Rank) pill row — sits beneath the compact Field Kit row
+   *  on default StartScreen. Lifted from the old renderDeckPicker section. */
+  private renderStakePickerRow(): string {
+    const stakeUnlocked = getUnlockedStakes(this.playerName);
+    const firstLockedStake = STAKES.find(s => !stakeUnlocked.has(s.id));
+    const stakeHintHtml = firstLockedStake?.unlockAfter
+      ? `<div class="stake-picker-hint">Unlock ${escapeHtml(firstLockedStake.name)} rank by clearing Champion as ${escapeHtml(this.stakeNameForId(firstLockedStake.unlockAfter))}.</div>`
+      : '';
+    const stakePills = STAKES.map(s => {
+      const isUnlocked = stakeUnlocked.has(s.id);
+      const isSelected = this.selectedStake === s.id && isUnlocked;
+      const lockHint = !isUnlocked && s.unlockAfter
+        ? `Unlock: clear Champion on ${this.stakeNameForId(s.unlockAfter)}`
+        : s.description;
+      return `<button type="button"
+                      class="stake-pill stake-${s.id}${isSelected ? ' selected' : ''}${!isUnlocked ? ' locked' : ''}"
+                      data-stake-id="${s.id}"
+                      title="${escapeHtml(lockHint)}"
+                      ${!isUnlocked ? 'disabled' : ''}>
+                ${escapeHtml(isUnlocked ? s.name.split(' ')[0] : '???')}
+              </button>`;
+    }).join('');
+    return `
+      <div class="ss-stake-row">
+        <span class="stake-picker-label">Trainer Rank</span>
+        <div class="stake-picker-pills">${stakePills}</div>
+        ${stakeHintHtml}
+      </div>
+    `;
+  }
+
+  /** 4-card picker grid + Mono-Type sub-picker — used inside the
+   *  Field Kit Detail modal. NO stake row inside (that lives on the
+   *  StartScreen below the compact row). */
   private renderDeckPicker(): string {
     const unlocked = getUnlockedDecks(this.playerName);
     const cards = DECKS.map(d => {
@@ -405,40 +519,10 @@ export class StartScreen {
          </div>`
       : '';
 
-    const stakeUnlocked = getUnlockedStakes(this.playerName);
-    // Cascade hint — first locked stake's prereq, visible (not just title-attr).
-    const firstLockedStake = STAKES.find(s => !stakeUnlocked.has(s.id));
-    const stakeHintHtml = firstLockedStake?.unlockAfter
-      ? `<div class="stake-picker-hint">Unlock ${escapeHtml(firstLockedStake.name)} rank by clearing Champion as ${escapeHtml(this.stakeNameForId(firstLockedStake.unlockAfter))}.</div>`
-      : '';
-    const stakePills = STAKES.map(s => {
-      const isUnlocked = stakeUnlocked.has(s.id);
-      const isSelected = this.selectedStake === s.id && isUnlocked;
-      const lockHint = !isUnlocked && s.unlockAfter
-        ? `Unlock: clear Champion on ${this.stakeNameForId(s.unlockAfter)}`
-        : s.description;
-      return `<button type="button"
-                      class="stake-pill stake-${s.id}${isSelected ? ' selected' : ''}${!isUnlocked ? ' locked' : ''}"
-                      data-stake-id="${s.id}"
-                      title="${escapeHtml(lockHint)}"
-                      ${!isUnlocked ? 'disabled' : ''}>
-                ${escapeHtml(isUnlocked ? s.name.split(' ')[0] : '???')}
-              </button>`;
-    }).join('');
-
     return `
       <div class="deck-picker-section">
-        <div class="deck-picker-header">
-          <span class="deck-picker-title">Choose your field kit</span>
-          <span class="deck-picker-hint">Field kits bend the rules — unlocked via achievements.</span>
-        </div>
         <div class="deck-picker-grid">${cards}</div>
         ${monoSubpicker}
-        <div class="stake-picker-row">
-          <span class="stake-picker-label">Trainer Rank</span>
-          ${stakePills}
-        </div>
-        ${stakeHintHtml}
       </div>
     `;
   }
@@ -828,7 +912,8 @@ export class StartScreen {
           ${this.renderResumeBanner()}
           ${this.renderCodexHubButton()}
           ${this.renderBadgeTrophyStrip()}
-          ${this.renderDeckPicker()}
+          ${this.renderFieldKitCompactRow()}
+          ${this.renderStakePickerRow()}
 
           <!-- Starter selection -->
           <div class="starter-section">
@@ -1120,32 +1205,18 @@ export class StartScreen {
     this.container.querySelector<HTMLButtonElement>('#ss-codex-hub-open')
       ?.addEventListener('click', () => this.openCodexHub());
 
-    // Deck picker — clicking unlocked card selects it. Re-render strip so the
-    // mono-type sub-picker can appear/disappear.
-    this.container.querySelectorAll<HTMLButtonElement>('[data-deck-id]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (btn.disabled) return;
-        const id = btn.dataset['deckId'] ?? 'standard';
-        this.selectedDeck = id;
-        saveLastDeck(this.playerName, id);
-        this.refreshDeckPicker();
-      });
-    });
-    this.container.querySelectorAll<HTMLButtonElement>('[data-mono-type]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const t = btn.dataset['monoType'] as PokemonType;
-        this.selectedMonoType = t;
-        saveLastMonoType(this.playerName, t);
-        this.refreshDeckPicker();
-      });
-    });
+    // Field Kit — compact row 'Change ▾' opens the detail modal.
+    this.container.querySelector<HTMLButtonElement>('#ss-fk-change-open')
+      ?.addEventListener('click', () => this.openFieldKitDetail());
+
+    // Trainer Rank pills — pickable directly on the StartScreen.
     this.container.querySelectorAll<HTMLButtonElement>('[data-stake-id]').forEach(btn => {
       btn.addEventListener('click', () => {
         if (btn.disabled) return;
         const id = btn.dataset['stakeId'] ?? 'white';
         this.selectedStake = id;
         saveLastStake(this.playerName, id);
-        this.refreshDeckPicker();
+        this.refreshStakePickerRow();
       });
     });
 

@@ -1537,6 +1537,96 @@ html[data-reduce-motion="on"] *::after {
 .lb-stake-pill.stake-red   { background: var(--oxblood, #b4352a); color: var(--paper, #f4f1e8); }
 .lb-stake-pill.stake-black { background: var(--ink, #1a1a1a); color: var(--gold, #c9962b); }
 
+/* Field Kit compact row (StartScreen) — selected kit + Change button. */
+.ss-field-kit-row {
+  display: flex; align-items: center; gap: 12px;
+  margin: 6px 0;
+  padding: 8px 14px;
+  min-height: 44px;
+  background: var(--paper, #f4f1e8);
+  border: 2px solid var(--ink, #1a1a1a);
+  box-shadow: 3px 3px 0 var(--ink, #1a1a1a);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.ss-fk-label {
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-3, #6b5e44);
+  font-size: 10px;
+  flex: 0 0 auto;
+}
+.ss-fk-selected {
+  display: inline-flex; align-items: center; gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+.ss-fk-icon {
+  font-family: var(--font-display); font-weight: 800; font-size: 18px;
+  color: var(--gold-ink, #8a6412);
+  flex: 0 0 auto;
+}
+.ss-fk-name {
+  font-family: var(--font-display); font-weight: 800; font-style: italic;
+  font-size: 14px; color: var(--ink, #1a1a1a);
+  letter-spacing: 0.02em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ss-fk-mono-chip {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 800;
+  letter-spacing: 0.18em;
+  padding: 2px 6px;
+  border: 1px solid var(--ink, #1a1a1a);
+  flex: 0 0 auto;
+}
+.ss-fk-change-btn {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  min-height: 36px; min-width: 88px;
+  background: var(--paper, #f4f1e8);
+  border: 1.5px solid var(--ink, #1a1a1a);
+  box-shadow: 2px 2px 0 var(--ink, #1a1a1a);
+  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  cursor: pointer;
+  color: var(--ink, #1a1a1a);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.ss-fk-change-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--ink, #1a1a1a);
+}
+@media (max-width: 520px) {
+  .ss-fk-change-btn { min-height: 44px; }
+}
+
+/* Trainer Rank pill row (StartScreen) — sits beneath compact field-kit row. */
+.ss-stake-row {
+  margin: 6px 0 8px;
+  padding: 8px 14px;
+  background: color-mix(in srgb, var(--paper, #f4f1e8) 92%, var(--ink, #1a1a1a) 4%);
+  border: 1.5px solid var(--ink, #1a1a1a);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+}
+.ss-stake-row .stake-picker-pills {
+  display: inline-flex; gap: 6px;
+}
+
+/* Field Kit Detail modal — wraps the existing 4-card picker. */
+.field-kit-detail-modal {
+  max-width: 720px;
+  width: min(720px, 96vw);
+}
+.fk-modal-sub {
+  font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-3, #6b5e44);
+  margin: 4px 0 12px;
+  font-style: italic;
+}
+
 /* Codex Hub button (StartScreen) — single consolidated meta-progression entry. */
 .ss-codex-hub-button {
   display: flex; align-items: center; gap: 12px;
