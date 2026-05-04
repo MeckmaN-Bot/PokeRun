@@ -778,10 +778,13 @@ function showBattleScreen(): void {
         }
       }
       // Leader fight ends the arena gauntlet — clear it so normal flow resumes.
-      // Also clear the previewed blind so ensureBlindsRolled rolls fresh for the next act.
+      // Also clear the previewed blind and advance the act counter (deferred
+      // from the path-click handler so buildArena saw the correct act).
       if (gymLeaderWin) {
         state.arenaState = null;
         state.actBossBlind = null;
+        state.actStep = 0;
+        state.currentAct += 1;
       }
       // Elite Four / Champion → advance league progression.
       if (eliteStepWin) {
@@ -1054,14 +1057,14 @@ function showPathSelect(): void {
     const consumesStep =
       node.kind === 'grass' || node.kind === 'trainer' || node.kind === 'gym' ||
       node.kind === 'elite_four' || node.kind === 'champion' || node.kind === 'forage';
-    if (consumesStep) {
+    // Gym arena entry defers the act advance to the post-victory handler,
+    // so the gauntlet (incl. buildArena's act parameter and any mid-arena
+    // currentAct readers) sees the act the player is actually fighting in.
+    if (consumesStep && node.kind !== 'gym') {
       gameState.actStep += 1;
       if (gameState.actStep >= 4) {
         gameState.actStep = 0;
         gameState.currentAct += 1;
-        // NOTE: actBossBlind is cleared on gym-leader victory (not here),
-        // because the arena gauntlet's Leader sub-step still needs to read
-        // this act's blind after the act counter has wrapped.
       }
     }
     gameState.nodeOptions = [];
