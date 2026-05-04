@@ -1053,6 +1053,12 @@ function showRerollBlindModal(): void {
     saveRun(gameState);
     close();
     showPathSelect(); // re-render so the chip refreshes + the pill count updates
+    // Pulse the freshly re-rendered chip via the existing .shimmer keyframe.
+    const chip = document.querySelector<HTMLElement>('.stage-progress .po-blind-chip');
+    if (chip) {
+      chip.classList.add('shimmer');
+      window.setTimeout(() => chip.classList.remove('shimmer'), 800);
+    }
   });
 }
 
