@@ -12,52 +12,83 @@
  */
 
 import { SYNERGY_CATALOG } from './synergies';
+import { BOSS_BLINDS } from '../data/bossBlinds';
 
-const KEY_PREFIX = 'pokerun_discovered_synergies_';
+// ── Synergy discoveries ─────────────────────────────────────
 
+const SYNERGY_KEY_PREFIX = 'pokerun_discovered_synergies_';
 const ALL_SYNERGY_IDS = SYNERGY_CATALOG.map(e => e.id);
-
 export const TOTAL_SYNERGIES = ALL_SYNERGY_IDS.length;
+const KNOWN_SYNERGIES = new Set<string>(ALL_SYNERGY_IDS);
 
-const KNOWN = new Set<string>(ALL_SYNERGY_IDS);
+// ── Boss blind discoveries ──────────────────────────────────
 
-function key(username: string): string {
-  return `${KEY_PREFIX}${username.toLowerCase()}`;
-}
+const BLIND_KEY_PREFIX = 'pokerun_discovered_blinds_';
+const ALL_BLIND_IDS = BOSS_BLINDS.map(b => b.id);
+export const TOTAL_BLINDS = ALL_BLIND_IDS.length;
+const KNOWN_BLINDS = new Set<string>(ALL_BLIND_IDS);
 
-function readSet(username: string): Set<string> {
+// ── Generic helpers ─────────────────────────────────────────
+
+function readSet(prefix: string, known: Set<string>, username: string): Set<string> {
   try {
-    const arr = JSON.parse(localStorage.getItem(key(username)) ?? '[]');
+    const arr = JSON.parse(localStorage.getItem(`${prefix}${username.toLowerCase()}`) ?? '[]');
     if (!Array.isArray(arr)) return new Set();
-    return new Set<string>(arr.filter((id): id is string => typeof id === 'string' && KNOWN.has(id)));
+    return new Set<string>(arr.filter((id): id is string => typeof id === 'string' && known.has(id)));
   } catch {
     return new Set();
   }
 }
 
-export function markDiscovered(username: string, ids: string[]): void {
+function markIds(
+  prefix: string,
+  known: Set<string>,
+  username: string,
+  ids: string[],
+): void {
   if (!username || ids.length === 0) return;
-  const existing = readSet(username);
+  const existing = readSet(prefix, known, username);
   let changed = false;
   for (const id of ids) {
-    if (KNOWN.has(id) && !existing.has(id)) {
+    if (known.has(id) && !existing.has(id)) {
       existing.add(id);
       changed = true;
     }
   }
   if (!changed) return;
   try {
-    localStorage.setItem(key(username), JSON.stringify([...existing]));
+    localStorage.setItem(`${prefix}${username.toLowerCase()}`, JSON.stringify([...existing]));
   } catch { /* storage unavailable, no-op */ }
+}
+
+// ── Synergy public API ──────────────────────────────────────
+
+export function markDiscovered(username: string, ids: string[]): void {
+  markIds(SYNERGY_KEY_PREFIX, KNOWN_SYNERGIES, username, ids);
 }
 
 export function getDiscoveredCount(username: string): number {
   if (!username) return 0;
-  return readSet(username).size;
+  return readSet(SYNERGY_KEY_PREFIX, KNOWN_SYNERGIES, username).size;
 }
 
-/** Codex consumer — returns the validated set of discovered ids. */
 export function getDiscoveredSet(username: string): Set<string> {
   if (!username) return new Set();
-  return readSet(username);
+  return readSet(SYNERGY_KEY_PREFIX, KNOWN_SYNERGIES, username);
+}
+
+// ── Boss blind public API ───────────────────────────────────
+
+export function markBlindDiscovered(username: string, ids: string[]): void {
+  markIds(BLIND_KEY_PREFIX, KNOWN_BLINDS, username, ids);
+}
+
+export function getDiscoveredBlindCount(username: string): number {
+  if (!username) return 0;
+  return readSet(BLIND_KEY_PREFIX, KNOWN_BLINDS, username).size;
+}
+
+export function getDiscoveredBlindSet(username: string): Set<string> {
+  if (!username) return new Set();
+  return readSet(BLIND_KEY_PREFIX, KNOWN_BLINDS, username);
 }

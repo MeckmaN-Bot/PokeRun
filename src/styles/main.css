@@ -1373,6 +1373,19 @@ html[data-reduce-motion="on"] *::after {
   color: var(--ink-3, #6b5e44);
   font-style: italic;
 }
+.codex-card.codex-blind.found {
+  border-left: 6px solid var(--blind-color, #3a3a3a);
+}
+.codex-card.codex-blind.found .codex-card-icon {
+  background: var(--blind-color, #3a3a3a);
+  color: var(--paper, #f4f1e8);
+}
+.codex-card-hint {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--ink-3, #6b5e44);
+  font-style: italic;
+  margin: 2px 0 0;
+}
 @media (max-width: 700px) {
   .codex-grid { grid-template-columns: 1fr; }
   .codex-modal { max-width: 96vw; }

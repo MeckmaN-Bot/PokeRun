@@ -52,6 +52,7 @@ import { getGymLeader, getGymForAct, GYM_LEADERS } from './data/gymLeaders';
 import { trainerSpriteUrl } from './data/trainerArchetypes';
 import { buildArena } from './data/arenas';
 import { saveRun, loadRun, clearRun } from './systems/saveRun';
+import { markBlindDiscovered } from './systems/discoveries';
 import { applySettings } from './systems/userSettings';
 import { getEliteStep } from './data/eliteFour';
 import { getBadge } from './data/badges';
@@ -654,6 +655,14 @@ async function startNewWave(): Promise<void> {
     // Reset boss-insurance flag at start of each boss wave
     if (config.isBossWave) {
       (gameState as { _bossInsuranceUsed?: boolean })._bossInsuranceUsed = false;
+    }
+
+    // Mark this battle's blind as discovered (only fires when a blind is in play,
+    // i.e. boss waves — gym/E4/champion + mid-act surprise. Reroll-via-Blind-Lens
+    // does NOT count the abandoned blind because the lens path replaces actBossBlind
+    // before any battle is entered).
+    if (preRolledBlind) {
+      markBlindDiscovered(gameState.playerName, [preRolledBlind]);
     }
 
     // Setup battle state
