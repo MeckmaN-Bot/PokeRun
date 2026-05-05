@@ -475,7 +475,11 @@ export class StartScreen {
     const next = wrap.firstElementChild as HTMLElement;
     if (next) {
       sec.replaceWith(next);
-      this.wireDeckPickerEvents(next);
+      // Re-wire from the OUTER scope (modal overlay), not from `next` itself.
+      // Passing `next` makes subsequent refreshes fail: scope.querySelector
+      // ('.deck-picker-section') inside refreshDeckPicker would be searching
+      // INSIDE the section for a section, returning null and early-returning.
+      this.wireDeckPickerEvents(scope);
     }
   }
 
