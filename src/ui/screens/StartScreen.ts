@@ -210,6 +210,10 @@ export class StartScreen {
             <button class="ink-btn ghost sm" id="clear-name-btn" type="button">Clear Saved Name</button>
           </div>
 
+          <div id="settings-field-reference" style="display:contents">
+            ${this.renderFieldReferenceSettingsRows()}
+          </div>
+
           <div class="settings-row" style="border-top:1.5px dashed var(--ink, #1a1a1a); padding-top:14px;">
             <div class="settings-row-label">
               <div class="srl-title">Legal &amp; Disclaimer</div>
@@ -218,6 +222,77 @@ export class StartScreen {
             <button class="ink-btn ghost sm" id="open-legal-btn" type="button">View →</button>
           </div>
         </div>
+      </div>
+    `;
+  }
+
+  /** Refresh the Field Reference rows in Settings to reflect current state.
+   *  Called on each Settings-open so Codex progress + Field Kit name + Trainer
+   *  Rank tier reflect any picks the user just made inside their detail modals. */
+  private refreshFieldReferenceSettingsRows(): void {
+    const wrap = this.container.querySelector<HTMLElement>('#settings-field-reference');
+    if (!wrap) return;
+    wrap.innerHTML = this.renderFieldReferenceSettingsRows();
+    this.wireFieldReferenceSettingsRows();
+  }
+
+  private wireFieldReferenceSettingsRows(): void {
+    const settingsModal = this.container.querySelector('#settings-modal');
+    this.container.querySelector('#settings-codex-open')?.addEventListener('click', () => {
+      settingsModal?.classList.add('hidden');
+      this.openCodexHub();
+    });
+    this.container.querySelector('#settings-fieldkit-open')?.addEventListener('click', () => {
+      settingsModal?.classList.add('hidden');
+      this.openFieldKitDetail();
+    });
+    this.container.querySelector('#settings-rank-open')?.addEventListener('click', () => {
+      settingsModal?.classList.add('hidden');
+      this.openTrainerRankDetail();
+    });
+  }
+
+  /** Field Reference Settings section — Codex / Field Kit / Trainer Rank
+   *  menu rows that open their respective modals. Default StartScreen surface
+   *  no longer shows these (Take-3 backup-1:1); Settings is the entry point. */
+  private renderFieldReferenceSettingsRows(): string {
+    const synergies = getDiscoveredCount(this.playerName);
+    const blinds = getDiscoveredBlindCount(this.playerName);
+    const achievements = getUnlockedCount(this.playerName);
+    const codexProgress = synergies + blinds + achievements;
+    const codexTotal = TOTAL_SYNERGIES + TOTAL_BLINDS + TOTAL_ACHIEVEMENTS;
+
+    const selectedDeck = DECKS.find(d => d.id === this.selectedDeck) ?? DECKS[0];
+    const fieldKitShort = selectedDeck.name.replace(/ Field Kit$/, '');
+    const fieldKitSub = selectedDeck.id === 'mono_type'
+      ? `${fieldKitShort} · ${this.selectedMonoType.toUpperCase()}`
+      : fieldKitShort;
+
+    const selectedStake = STAKES.find(s => s.id === this.selectedStake) ?? STAKES[0];
+
+    return `
+      <div class="settings-row" style="border-top:1.5px dashed var(--ink, #1a1a1a); padding-top:14px;">
+        <div class="settings-row-label">
+          <div class="srl-title">Codex</div>
+          <div class="srl-sub">${codexProgress} / ${codexTotal} progress</div>
+        </div>
+        <button class="ink-btn ghost sm" id="settings-codex-open" type="button">View →</button>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-row-label">
+          <div class="srl-title">Field Kit</div>
+          <div class="srl-sub">${escapeHtml(fieldKitSub)}</div>
+        </div>
+        <button class="ink-btn ghost sm" id="settings-fieldkit-open" type="button">View →</button>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-row-label">
+          <div class="srl-title">Trainer Rank</div>
+          <div class="srl-sub">${escapeHtml(selectedStake.name)}</div>
+        </div>
+        <button class="ink-btn ghost sm" id="settings-rank-open" type="button">View →</button>
       </div>
     `;
   }
@@ -1371,7 +1446,12 @@ export class StartScreen {
     const settingsBtn = this.container.querySelector('#settings-btn');
     const settingsModal = this.container.querySelector('#settings-modal');
     const closeSettings = this.container.querySelector('#close-settings');
-    settingsBtn?.addEventListener('click', () => settingsModal?.classList.remove('hidden'));
+    settingsBtn?.addEventListener('click', () => {
+      // Refresh Field Reference rows so Codex progress + selected Field Kit
+      // + Trainer Rank reflect any changes made inside their detail modals.
+      this.refreshFieldReferenceSettingsRows();
+      settingsModal?.classList.remove('hidden');
+    });
     closeSettings?.addEventListener('click', () => settingsModal?.classList.add('hidden'));
     settingsModal?.addEventListener('click', e => {
       if (e.target === settingsModal) settingsModal.classList.add('hidden');
@@ -1384,6 +1464,10 @@ export class StartScreen {
       settingsModalEl?.classList.add('hidden');
       howto?.classList.remove('hidden');
     });
+
+    // Field Reference settings rows — wire initial click handlers. Each
+    // Settings-open re-renders these rows + re-wires via wireFieldReferenceSettingsRows().
+    this.wireFieldReferenceSettingsRows();
 
     const reduceMotionCb = this.container.querySelector<HTMLInputElement>('#setting-reduce-motion');
     reduceMotionCb?.addEventListener('change', () => {
