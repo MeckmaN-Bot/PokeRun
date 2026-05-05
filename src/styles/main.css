@@ -848,6 +848,49 @@ body::after {
   flex-shrink: 0;
 }
 
+/* Field Reference strip — Take-3 Slice 3 final placement.
+ * Sits between .start-user-banner and .starter-section. Cells are
+ * dezent magazine-style (dashed border, ink color, mono eyebrows + small
+ * values) so the 'Choose your starter' headline below keeps focus. */
+.ss-fr-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 14px 0;
+}
+.ss-fr-cell {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1.5px dashed var(--ink, #1a1a1a);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  text-align: left;
+  min-height: 52px;
+  color: inherit;
+  transition: background 0.12s ease;
+}
+.ss-fr-cell:hover { background: rgba(0, 0, 0, 0.04); }
+.ss-fr-cell:active { transform: translate(1px, 1px); }
+.ss-fr-eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-2, var(--ink-3));
+}
+.ss-fr-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+@media (max-width: 600px) {
+  .ss-fr-strip { gap: 8px; }
+  .ss-fr-cell { min-height: 48px; padding: 6px 8px; }
+  .ss-fr-eyebrow { font-size: 9px; }
+  .ss-fr-value { font-size: 12px; }
+}
+
 /* Trainer Rank Detail Modal — kept; Slice 2 opens it from Settings */
 .trd-modal-sub {
   font-family: var(--font-mono); font-style: italic;
