@@ -103,19 +103,60 @@ export const BOSS_POOL_LATE = [
   482, // Azelf
 ];
 
-export function getEnemyPool(wave: number): number[] {
-  if (wave <= 5) return POOL_WAVE_1_5;
-  if (wave <= 10) return POOL_WAVE_6_10;
-  if (wave <= 15) return POOL_WAVE_11_15;
-  if (wave <= 20) return POOL_WAVE_16_20;
-  return POOL_WAVE_21_PLUS;
+import type { Generation } from '../types';
+import { getLiveCuratedKeep } from './generations';
+
+/**
+ * Wild encounter pool gated by run generation:
+ *   - 'gen1':    only Gen 1 IDs (≤151).
+ *   - 'gen2':    Gen 1 IDs + curated Gen 2 picks.
+ *   - 'endless': same as gen2 + the post-Gen-2 spice (>251) that lives in the
+ *                wave-21+ pool. Endless is score-attack and benefits from
+ *                variety beyond Gen 2.
+ */
+export function getEnemyPool(wave: number, generation: Generation = 'gen1'): number[] {
+  const base =
+    wave <= 5  ? POOL_WAVE_1_5 :
+    wave <= 10 ? POOL_WAVE_6_10 :
+    wave <= 15 ? POOL_WAVE_11_15 :
+    wave <= 20 ? POOL_WAVE_16_20 :
+    POOL_WAVE_21_PLUS;
+  if (generation === 'gen1') {
+    return base.filter(id => id <= 151);
+  }
+  // Live curated picks (gen2 today, gen3+ when they go live in the registry).
+  const liveCurated = getLiveCuratedKeep();
+  return base.filter(id =>
+    id <= 151 ||
+    liveCurated.has(id) ||
+    (generation === 'endless' && id > 251)
+  );
 }
 
-export function getBossPool(wave: number): number[] {
-  if (wave <= 5)  return BOSS_POOL_WAVE_5;
-  if (wave <= 10) return BOSS_POOL_EARLY;
-  if (wave <= 20) return BOSS_POOL_MID;
-  return BOSS_POOL_LATE;
+export function getBossPool(wave: number, generation: Generation = 'gen1'): number[] {
+  const base =
+    wave <= 5  ? BOSS_POOL_WAVE_5 :
+    wave <= 10 ? BOSS_POOL_EARLY :
+    wave <= 20 ? BOSS_POOL_MID :
+    BOSS_POOL_LATE;
+  // Mirror getEnemyPool's gating so a Gen 1 run can't pull a Cyndaquil.
+  let filtered: number[];
+  if (generation === 'gen1') {
+    filtered = base.filter(id => id <= 151);
+  } else {
+    const liveCurated = getLiveCuratedKeep();
+    filtered = base.filter(id =>
+      id <= 151 ||
+      liveCurated.has(id) ||
+      (generation === 'endless' && id > 251)
+    );
+  }
+  // Safety: if filtering empties the pool (e.g. Gen 1 vs BOSS_POOL_MID where
+  // every entry is >151), fall back to BOSS_POOL_EARLY which is pure Gen 1.
+  if (filtered.length === 0) {
+    return BOSS_POOL_EARLY.filter(id => id <= 151);
+  }
+  return filtered;
 }
 
 export function getRandomFromPool(pool: number[], count: number): number[] {

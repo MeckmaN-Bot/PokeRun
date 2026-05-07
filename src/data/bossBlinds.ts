@@ -115,6 +115,16 @@ export function pickRandomBossBlind(excludeIds: BossBlindId[] = []): BossBlind {
   return src[Math.floor(Math.random() * src.length)];
 }
 
+/** Fisher-Yates shuffle the catalog and return the first n distinct blind ids. */
+export function pickDistinctBossBlinds(n: number): BossBlindId[] {
+  const pool = [...BOSS_BLINDS];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, Math.min(n, pool.length)).map(b => b.id);
+}
+
 /** Return a list of ignored PokemonTypes (for The Mouth / The Serpent flavour helpers). */
 export function blindDisablesSynergies(blindId: BossBlindId | null | undefined): boolean {
   return blindId === 'the_mouth';

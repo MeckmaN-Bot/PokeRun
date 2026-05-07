@@ -5,9 +5,11 @@ import { renderTypeBadges } from '../components/TypeBadge';
 import { renderHPBar } from '../components/HPBar';
 import { purchaseShopItem, rerollShop, getRerollCost, canAfford } from '../../systems/shop';
 import { fadeIn, animateCoinGain, showToast } from '../animations';
+import { tryUnlock as tryUnlockAchievement } from '../../systems/achievements';
 import { toBattlePokemon, xpForLevel, monHasItem } from '../../systems/battle';
 import { fetchPokemon, learnMovesForLevel } from '../../api/pokeapi';
 import { showEvolutionOverlay } from './EvolutionOverlay';
+import { openMoveManager } from './MoveManagerModal';
 import {
   getPackById,
   pickRandomCurse,
@@ -20,7 +22,7 @@ import {
   type PackId,
 } from '../../data/boosterPacks';
 import { ALL_ITEMS } from '../../data/items';
-import { mountAudioButton } from '../../audio/AudioSettingsPanel';
+import { mountSettingsButton } from '../../audio/AudioSettingsPanel';
 import { ALL_PERKS } from '../../data/perks';
 import { getVoucherById } from '../../data/vouchers';
 import { Audio } from '../../audio/AudioManager';
@@ -45,11 +47,20 @@ function sellValueFor(rarity: Rarity, itemId?: string, lastPaidPrices?: Record<s
 
 function itemArt(item: Item, cls = ''): string {
   const clsStr = cls ? ' ' + cls : '';
+  // PokeAPI doesn't host every item we reference (e.g. Leech Seed is a move,
+  // not an item). Fall back to the icon glyph if the sprite 404s, instead of
+  // letting the browser render its broken-image placeholder. The handler is
+  // embedded in onerror="..." so every " inside the JS body must become &quot;
+  // — otherwise the attribute terminates early and the page hits a parser
+  // SyntaxError mid-render (battle→shop crash).
+  const iconJson = JSON.stringify(item.icon).replace(/"/g, '&quot;');
+  const clsAttr = `item-glyph${clsStr}`.replace(/"/g, '&quot;');
+  const fallback = `this.onerror=null;this.replaceWith(Object.assign(document.createElement('span'),{className:&quot;${clsAttr}&quot;,textContent:${iconJson}}))`;
   if (item.pokeapiName) {
-    return `<img src="${POKEAPI_ITEMS}${item.pokeapiName}.png" alt="${item.name}" class="item-sprite${clsStr}" draggable="false">`;
+    return `<img src="${POKEAPI_ITEMS}${item.pokeapiName}.png" alt="${item.name}" class="item-sprite${clsStr}" draggable="false" onerror="${fallback}">`;
   }
   if (item.sprite) {
-    return `<img src="${ITEM_BASE}${item.sprite}" alt="${item.name}" class="item-sprite${clsStr}" draggable="false">`;
+    return `<img src="${ITEM_BASE}${item.sprite}" alt="${item.name}" class="item-sprite${clsStr}" draggable="false" onerror="${fallback}">`;
   }
   return `<span class="item-glyph${clsStr}">${item.icon}</span>`;
 }
@@ -89,23 +100,53 @@ export class ShopScreen {
     fadeIn(this.container);
     this.attachEvents();
     const audioSlot = this.container.querySelector<HTMLElement>('#shop-audio-slot');
-    if (audioSlot) this.destroyAudioBtn = mountAudioButton(audioSlot);
+    if (audioSlot) this.destroyAudioBtn = mountSettingsButton(audioSlot);
     this.attachMobileTeamDrawer();
+    this.portalPackModal();
     this.processPendingEvolutions();
   }
 
-  /** On mobile: shop-side becomes a bottom drawer. Inject toggle + backdrop. */
+  /** Move #pack-modal out of the shop-wrap into <body>. The shop's
+   *  document-flow chrome (head/foot) was rendering above the fixed overlay
+   *  on iOS Safari — most likely because some ancestor formed a containing
+   *  block (transform/contain) so `position: fixed` resolved to .shop-body's
+   *  rect instead of the viewport. Portaling sidesteps the entire stacking
+   *  issue. Click delegation re-binds because the modal is no longer a
+   *  descendant of `this.container`. */
+  private portalPackModal(): void {
+    const modal = (this.portaledPackModal ?? this.container.querySelector<HTMLElement>('#pack-modal'));
+    if (!modal) return;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', this.handleClick);
+    this.portaledPackModal = modal;
+  }
+
+  /** On mobile: shop-side becomes a bottom drawer. Portal drawer + backdrop
+   *  to document.body so they're not trapped inside a transformed ancestor's
+   *  stacking context (which made the dark backdrop render ABOVE the drawer).
+   *  Desktop keeps shop-side inside the grid so the team panel stretches to
+   *  full sidebar height and refreshTeamList()'s container query resolves. */
   private attachMobileTeamDrawer(): void {
+    const isMobile = window.matchMedia('(max-width: 760px)').matches;
+    if (!isMobile) return;
+
     const side = this.container.querySelector<HTMLElement>('.shop-side');
     const foot = this.container.querySelector<HTMLElement>('.shop-foot');
     const wrap = this.container.querySelector<HTMLElement>('.shop-wrap');
     if (!side || !foot || !wrap) return;
     if (foot.querySelector('#shop-team-toggle')) return;
 
-    // Backdrop element (sits behind drawer, blocks page, taps to close)
+    // Move the drawer itself out of the shop-wrap into <body>. Container's
+    // delegated click handler won't see it after the move, so re-bind to the
+    // drawer directly.
+    document.body.appendChild(side);
+    side.addEventListener('click', this.handleClick);
+    this.mobileDrawer = side;
+
     const backdrop = document.createElement('div');
     backdrop.className = 'shop-side-backdrop mobile-only-btn';
-    wrap.appendChild(backdrop);
+    document.body.appendChild(backdrop);
+    this.mobileBackdrop = backdrop;
 
     const btn = document.createElement('button');
     btn.id = 'shop-team-toggle';
@@ -123,6 +164,10 @@ export class ShopScreen {
     backdrop.addEventListener('click', () => setOpen(false));
 
     foot.insertBefore(btn, foot.firstChild);
+  }
+
+  private openMoveManager(mon: BattlePokemon): void {
+    openMoveManager(mon, () => this.refreshTeamList());
   }
 
   private async processPendingEvolutions(): Promise<void> {
@@ -180,7 +225,7 @@ export class ShopScreen {
               <span class="bag-btn-count" id="bag-btn-count">${this.state.inventory.reduce((s, i) => s + i.quantity, 0)}</span>
             </button>
             <button class="ink-btn ghost bag-btn pc-btn" id="pc-btn" title="Open PC Box">
-              <img class="bag-btn-glyph pc-btn-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/pokemon-box-link.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'bag-btn-glyph',textContent:'📦'}))" />
+              <img class="bag-btn-glyph pc-btn-icon" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/pokemon-box-link.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'bag-btn-glyph',textContent:'◆'}))" />
               <span class="bag-btn-label">PC</span>
               <span class="bag-btn-count" id="pc-btn-count">${this.state.pc.length}</span>
             </button>
@@ -232,7 +277,7 @@ export class ShopScreen {
         <!-- Footer: tip + reroll -->
         <div class="shop-foot">
           <div class="kicker">► Items refresh next shop · Prices rise with depth</div>
-          <button class="ink-btn ghost" id="reroll-btn">Reroll (${getRerollCost(this.state.wave)}¢)</button>
+          <button class="ink-btn ghost" id="reroll-btn">Reroll (${Math.floor(getRerollCost(this.state.wave) * (this.state.stakeMods?.shopPriceMult ?? 1))}¢)</button>
         </div>
 
         <!-- Bag modal (inventory + equip + perks) -->
@@ -695,13 +740,22 @@ export class ShopScreen {
             <span class="stc-drag-handle" title="Drag to reorder">⋮⋮</span>
             <img src="${mon.sprite}" class="stc-sprite" alt="${mon.displayName}" />
             <div class="stc-meta">
-              <span class="stc-name">${mon.displayName}</span>
+              <div class="stc-name-row">
+                <span class="stc-name">${mon.displayName}</span>
+                <span class="stc-types">${renderTypeBadges(mon.types ?? [])}</span>
+              </div>
               <span class="stc-stat">Lv ${mon.level} · ${Math.max(0, mon.battleHp)}/${mon.maxBattleHp}</span>
               <div class="stc-hp-bar">
                 <div class="stc-hp-fill ${hpClass}" style="width:${hpPct}%"></div>
               </div>
             </div>
             <div class="stc-actions">
+              <button class="stc-order-btn stc-moves-btn ${(mon.pendingLearns?.length ?? 0) > 0 ? 'has-pending' : ''}"
+                      data-action="open-moves" data-team-index="${i}"
+                      title="${(mon.pendingLearns?.length ?? 0) > 0 ? `${mon.pendingLearns!.length} move(s) waiting` : 'Manage moves'}">
+                ☰
+                ${(mon.pendingLearns?.length ?? 0) > 0 ? `<span class="stc-moves-badge">${mon.pendingLearns!.length}</span>` : ''}
+              </button>
               ${i > 0
                 ? `<button class="stc-order-btn" data-action="move-up" data-team-index="${i}" title="Move up">↑</button>`
                 : `<span class="stc-order-btn" style="visibility:hidden;pointer-events:none"></span>`}
@@ -793,9 +847,17 @@ export class ShopScreen {
     `).join('');
   }
 
+  private mobileDrawer: HTMLElement | null = null;
+  private mobileBackdrop: HTMLElement | null = null;
+  private portaledPackModal: HTMLElement | null = null;
+  private packFanScrollLeft = 0;
+
   private attachEvents(): void {
-    this.container.addEventListener('click', async (e) => {
-      const target = e.target as HTMLElement;
+    this.container.addEventListener('click', this.handleClick);
+  }
+
+  private handleClick = async (e: Event): Promise<void> => {
+    const target = e.target as HTMLElement;
 
       // ── Bag modal open/close ─────────────────────────────────
       const bagBtn = target.closest('#bag-btn') as HTMLElement | null;
@@ -1026,6 +1088,14 @@ export class ShopScreen {
         return;
       }
 
+      const openMovesBtn = target.closest<HTMLElement>('[data-action="open-moves"]');
+      if (openMovesBtn) {
+        const idx = parseInt(openMovesBtn.dataset['teamIndex'] ?? '0');
+        const mon = this.state.team[idx];
+        if (mon) this.openMoveManager(mon);
+        return;
+      }
+
       if (target.dataset['action'] === 'move-up') {
         const idx = parseInt(target.dataset['teamIndex'] ?? '0');
         if (idx > 0) {
@@ -1089,6 +1159,10 @@ export class ShopScreen {
           return;
         }
         this.state.pc.splice(idx, 1);
+        // Iron Trainer deck — slot 2 unlocked by default.
+        if (this.state.deckMods?.startWithSlot2 && mon.itemSlots?.[1]) {
+          mon.itemSlots[1].unlocked = true;
+        }
         this.state.team.push(mon);
         showToast(`${mon.displayName} added to team!`, 'success');
         this.refreshTeamList();
@@ -1147,14 +1221,13 @@ export class ShopScreen {
         return;
       }
 
-      const useRow = target.closest('[data-use-index]') as HTMLElement | null;
-      if (useRow) {
-        const teamIdx = parseInt(useRow.dataset['useIndex'] ?? '0');
-        this.useConsumable(teamIdx);
-        return;
-      }
-    });
-  }
+    const useRow = target.closest('[data-use-index]') as HTMLElement | null;
+    if (useRow) {
+      const teamIdx = parseInt(useRow.dataset['useIndex'] ?? '0');
+      this.useConsumable(teamIdx);
+      return;
+    }
+  };
 
   private sellTeamPerk(idx: number): void {
     const perks = this.state.activePerks ?? [];
@@ -1254,7 +1327,7 @@ export class ShopScreen {
 
     // Immediate effect: Overstock → re-roll shop items with new voucher
     if (sv.voucherId === 'overstock') {
-      this.state.shopItems = rerollShop(this.state.wave, [], this.state.vouchers);
+      this.state.shopItems = rerollShop(this.state.wave, [], this.state.vouchers, { excludeConsumables: !!this.state.deckMods?.shopExcludeConsumables });
     }
     // Immediate effect: Grabber → unlock slot 2 for every current team member
     if (sv.voucherId === 'grabber') {
@@ -1392,7 +1465,7 @@ export class ShopScreen {
     this.packFanEntered = false;
     this.clearPackTimers();
 
-    const overlay = this.container.querySelector<HTMLElement>('#pack-modal')!;
+    const overlay = (this.portaledPackModal ?? this.container.querySelector<HTMLElement>('#pack-modal'))!;
     overlay.classList.remove('hidden');
     this.renderPackOverlay();
   }
@@ -1425,7 +1498,7 @@ export class ShopScreen {
   }
 
   private renderPackOverlay(): void {
-    const overlay = this.container.querySelector<HTMLElement>('#pack-modal');
+    const overlay = (this.portaledPackModal ?? this.container.querySelector<HTMLElement>('#pack-modal'));
     if (!overlay || !this.packDef) return;
     const def = this.packDef;
     const phase = this.packPhase;
@@ -1543,6 +1616,12 @@ export class ShopScreen {
       ? `<button class="po-close" id="po-close">✕ BACK</button>`
       : '';
 
+    // Preserve the swipe-snap scroll position across re-renders. Without
+    // this, every reveal/pick re-runs innerHTML and the scroll-snapped fan
+    // jumps back to the centre, forcing the player to swipe again.
+    const prevFan = overlay.querySelector<HTMLElement>('.po-fan');
+    if (prevFan) this.packFanScrollLeft = prevFan.scrollLeft;
+
     overlay.innerHTML = `
       <div class="po-halftone"></div>
       <div class="po-vignette"></div>
@@ -1556,6 +1635,20 @@ export class ShopScreen {
       <div class="po-stage">${stage}</div>
       ${actions}
     `;
+
+    if (showFan && this.packFanScrollLeft > 0) {
+      const newFan = overlay.querySelector<HTMLElement>('.po-fan');
+      if (newFan) {
+        // Skip scroll-snap during programmatic restore so the browser
+        // doesn't fight us by re-snapping mid-frame.
+        const prevSnap = newFan.style.scrollSnapType;
+        newFan.style.scrollSnapType = 'none';
+        newFan.scrollLeft = this.packFanScrollLeft;
+        requestAnimationFrame(() => {
+          newFan.style.scrollSnapType = prevSnap;
+        });
+      }
+    }
   }
 
   private startPackTear(): void {
@@ -1650,11 +1743,12 @@ export class ShopScreen {
       (this.state as any).curseTimeDebtWaves = ((this.state as any).curseTimeDebtWaves ?? 0) + 2;
     }
     showToast(`Curse: ${curse.name} — ${curse.description}`, 'error');
+    tryUnlockAchievement(this.state.playerName, 'spectral_dabbler');
   }
 
   private closePackModal(): void {
     this.clearPackTimers();
-    const modal = this.container.querySelector<HTMLElement>('#pack-modal');
+    const modal = (this.portaledPackModal ?? this.container.querySelector<HTMLElement>('#pack-modal'));
     if (modal) {
       modal.classList.add('hidden');
       modal.innerHTML = '';
@@ -1669,6 +1763,7 @@ export class ShopScreen {
     this.packDef = null;
     this.packPhase = 'idle';
     this.packMaxPicks = 0;
+    this.packFanScrollLeft = 0;
     this.refreshTeamList();
   }
 
@@ -1677,7 +1772,8 @@ export class ShopScreen {
     const surplusFree = hasSurplus && !this.state.freeRerollUsed;
     const perkFreeLeft = (this.state.freeRerollsLeft ?? 0) > 0;
     const freeNow = surplusFree || perkFreeLeft;
-    const cost = getRerollCost(this.state.wave);
+    const priceMult = this.state.stakeMods?.shopPriceMult ?? 1;
+    const cost = Math.floor(getRerollCost(this.state.wave) * priceMult);
     if (!freeNow && !canAfford(cost, this.state.coins)) {
       showToast('Not enough coins to reroll!', 'error');
       Audio.play('shop.unaffordable');
@@ -1692,7 +1788,7 @@ export class ShopScreen {
     } else {
       this.state.freeRerollsLeft = Math.max(0, (this.state.freeRerollsLeft ?? 0) - 1);
     }
-    this.state.shopItems = rerollShop(this.state.wave, [], this.state.vouchers ?? []);
+    this.state.shopItems = rerollShop(this.state.wave, [], this.state.vouchers ?? [], { excludeConsumables: !!this.state.deckMods?.shopExcludeConsumables });
     const coinEl = this.container.querySelector<HTMLElement>('#shop-coin-display');
     if (coinEl && !freeNow) animateCoinGain(coinEl, oldCoins, this.state.coins);
     this.refreshShop();
@@ -1760,7 +1856,10 @@ export class ShopScreen {
             <div class="assign-pokemon-header">
               <img src="${mon.sprite}" class="assign-pokemon-sprite" alt="${mon.displayName}" />
               <div style="flex:1;min-width:0">
-                <div class="assign-pokemon-name">${mon.displayName}</div>
+                <div class="assign-pokemon-name-row">
+                  <div class="assign-pokemon-name">${mon.displayName}</div>
+                  <span class="stc-types">${renderTypeBadges(mon.types ?? [])}</span>
+                </div>
                 <div class="assign-pokemon-sub">Lv ${mon.level} · ${Math.max(0, mon.battleHp)}/${mon.maxBattleHp} HP</div>
                 <div class="stc-hp-bar" style="margin-top:5px">
                   <div class="stc-hp-fill ${hpClass}" style="width:${hpPct}%"></div>
@@ -1947,7 +2046,7 @@ export class ShopScreen {
       });
       showToast('Team Vitals healed 50% HP for your whole team!', 'success');
     } else if (item.id === 'reroll_token') {
-      this.state.shopItems = rerollShop(this.state.wave, [], this.state.vouchers ?? []);
+      this.state.shopItems = rerollShop(this.state.wave, [], this.state.vouchers ?? [], { excludeConsumables: !!this.state.deckMods?.shopExcludeConsumables });
       this.refreshShop();
       showToast('Shop rerolled (free)!', 'info');
     }
@@ -2334,6 +2433,22 @@ export class ShopScreen {
     this.destroyAudioBtn?.();
     this.destroyAudioBtn = null;
     document.body.classList.remove('shop-active');
+    if (this.mobileDrawer) {
+      this.mobileDrawer.removeEventListener('click', this.handleClick);
+      this.mobileDrawer.remove();
+      this.mobileDrawer = null;
+    }
+    if (this.mobileBackdrop) {
+      this.mobileBackdrop.remove();
+      this.mobileBackdrop = null;
+    }
+    if (this.portaledPackModal) {
+      this.portaledPackModal.removeEventListener('click', this.handleClick);
+      this.portaledPackModal.remove();
+      this.portaledPackModal = null;
+    }
+    document.body.querySelectorAll('.shop-side-backdrop, #shop-team-toggle').forEach(el => el.remove());
+    document.body.querySelectorAll('.shop-side').forEach(el => el.remove());
     this.container.style.display = 'none';
     this.container.innerHTML = '';
   }

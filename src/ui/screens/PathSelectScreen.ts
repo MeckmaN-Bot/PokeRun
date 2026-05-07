@@ -5,6 +5,10 @@ import { BADGES, getBadge } from '../../data/badges';
 import { badgeSprite, imgErrorFallback } from '../../data/sprites';
 import { getGymForAct } from '../../data/gymLeaders';
 import { trainerSpriteUrl } from '../../data/trainerArchetypes';
+import { renderTypeBadge } from '../components/TypeBadge';
+import { getBossBlindById, type BossBlindId } from '../../data/bossBlinds';
+import { getEliteByIndex } from '../../data/eliteFour';
+import { getGenById } from '../../data/generations';
 
 /**
  * Path-select screen — three thematic node cards. The player picks one;
@@ -17,15 +21,18 @@ export class PathSelectScreen {
   private container: HTMLElement;
   private state: GameState;
   private onChoose: (node: NodeInstance) => void;
+  private onRerollBlind?: () => void;
 
   constructor(
     container: HTMLElement,
     state: GameState,
     onChoose: (node: NodeInstance) => void,
+    onRerollBlind?: () => void,
   ) {
     this.container = container;
     this.state = state;
     this.onChoose = onChoose;
+    this.onRerollBlind = onRerollBlind;
   }
 
   mount(): void {
@@ -103,23 +110,43 @@ export class PathSelectScreen {
 
     // Eyebrow shifts when the league is in play.
     const inLeague = (this.state.badges?.length ?? 0) >= 8 && (this.state.leagueStep ?? 0) < 5;
+    const currentGen = getGenById(this.state.generation ?? 'gen1');
+    const isLiveGen = currentGen?.status === 'live';
+    const isEndless = this.state.generation === 'endless';
+    // Only render region eyebrow for live, non-Kanto gens. Non-live ids
+    // (corrupt save / future planned gen) fall back to Crossroads.
+    const isNonKantoGen = isLiveGen && currentGen.id !== 'gen1' && !isEndless;
+    const stagesPerAct = this.state.deckMods?.stagesPerAct ?? 4;
     const headerEyebrow = inLeague
       ? `— Pokémon League · Step ${(this.state.leagueStep ?? 0) + 1} of 5 —`
-      : `— Crossroads · Act ${act} · Step ${step} of 4 —`;
+      : isEndless
+        ? `— Endless${wave > 30 ? ' · Deep run' : ''} · Wave ${wave} —`
+        : isNonKantoGen
+          ? `— Region: ${currentGen.region} · Act ${act} · Step ${step} of ${stagesPerAct} —`
+          : `— Crossroads · Act ${act} · Step ${step} of ${stagesPerAct} —`;
     const headerTitle = inLeague ? 'Indigo <em>Plateau</em>' : 'Choose your <em>path</em>';
     const headerSub = inLeague
       ? 'No retreat. The next door is the next opponent.'
       : `Wave ${String(wave).padStart(2, '0')} awaits. Three trails diverge.`;
 
     // Big stage progress strip — 4 pips representing the act, with the gym leader portrait.
-    const nextGymLeader = !inLeague && act >= 1 && act <= 8 ? getGymForAct(act) : undefined;
-    const stopsToGym = nextGymLeader ? Math.max(0, 4 - step) : 0;
+    // Hidden in endless: no gym leader, no act ladder.
+    const nextGymLeader = !inLeague && !isEndless && act >= 1 && act <= 8 ? getGymForAct(act) : undefined;
+    const stopsToGym = nextGymLeader ? Math.max(0, stagesPerAct - step) : 0;
+    const lensCount = (this.state.inventory ?? [])
+      .filter(inv => inv.item.id === 'blind_lens')
+      .reduce((sum, inv) => sum + inv.quantity, 0);
+    // Lens reroll is only offered for the per-act gym preview, never the league sequence.
+    const canRerollGymBlind = !!nextGymLeader && !!this.state.actBossBlind && lensCount > 0;
+    const gymBlindHtml = nextGymLeader
+      ? renderBlindChip(this.state.actBossBlind ?? null, { rerollable: canRerollGymBlind, lensCount })
+      : '';
     const stageProgressHtml = nextGymLeader
       ? (() => {
           const accent = nextGymLeader.accent;
-          // Step 1..3 are normal nodes, step 4 is the gym arena.
-          const pips = [0, 1, 2, 3].map(i => {
-            const isGym = i === 3;
+          // Steps 1..(stagesPerAct - 1) are normal nodes, last step is the gym arena.
+          const pips = Array.from({ length: stagesPerAct }, (_, i) => i).map(i => {
+            const isGym = i === stagesPerAct - 1;
             const isDone = i < this.state.actStep; // already completed
             const isCurrent = i === this.state.actStep; // up next
             const cls = [
@@ -141,9 +168,39 @@ export class PathSelectScreen {
                      onerror="${imgErrorFallback(nextGymLeader.icon)}" />
               </div>
               <div class="stage-progress-body">
-                <div class="stage-progress-eyebrow">${nextGymLeader.city.toUpperCase()} · ACT ${act}</div>
+                <div class="stage-progress-eyebrow">
+                  <span>${nextGymLeader.city.toUpperCase()} · ACT ${act}</span>
+                  <span class="stage-progress-type">${renderTypeBadge(nextGymLeader.type)}</span>
+                </div>
                 <div class="stage-progress-pips">${pips}</div>
                 <div class="stage-progress-cta">${cta}</div>
+                ${gymBlindHtml}
+              </div>
+            </div>
+          `;
+        })()
+      : '';
+
+    // League progress block — when the league is in play, preview the current step's blind.
+    const leagueProgressHtml = inLeague
+      ? (() => {
+          const idx = this.state.leagueStep ?? 0;
+          const step = getEliteByIndex(idx);
+          if (!step) return '';
+          const blindId = this.state.leagueBlinds?.[idx] ?? null;
+          const accent = step.accent;
+          return `
+            <div class="stage-progress" style="--stage-color:${accent}">
+              <div class="stage-progress-portrait">
+                <img src="${trainerSpriteUrl(step.spriteSlug)}" alt="${step.name}"
+                     onerror="${imgErrorFallback(step.icon)}" />
+              </div>
+              <div class="stage-progress-body">
+                <div class="stage-progress-eyebrow">
+                  <span>${step.title.toUpperCase()} · STEP ${idx + 1}/5</span>
+                </div>
+                <div class="stage-progress-cta">${step.name.toUpperCase()}</div>
+                ${renderBlindChip(blindId)}
               </div>
             </div>
           `;
@@ -158,6 +215,7 @@ export class PathSelectScreen {
             <h1 class="path-title">${headerTitle}</h1>
             <div class="path-sub">${headerSub}</div>
             ${stageProgressHtml}
+            ${leagueProgressHtml}
             ${badgeRowHtml}
           </div>
 
@@ -188,6 +246,12 @@ export class PathSelectScreen {
         window.setTimeout(() => this.onChoose(node), 280);
       });
     });
+    this.container.querySelector<HTMLButtonElement>('[data-blind-reroll]')
+      ?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        Audio.play('ui.confirm');
+        this.onRerollBlind?.();
+      });
   }
 }
 
@@ -207,3 +271,30 @@ function kindLabel(kind: NodeInstance['kind']): string {
 
 // keep getBadge import "live" so it stays available for future expansions
 void getBadge;
+
+function renderBlindChip(
+  blindId: BossBlindId | null,
+  opts?: { rerollable?: boolean; lensCount?: number },
+): string {
+  if (!blindId) return '';
+  const b = getBossBlindById(blindId);
+  if (!b) return '';
+  const pillHtml = opts?.rerollable
+    ? `<button type="button" class="po-blind-reroll" data-blind-reroll
+              title="Blind Lens — re-roll once, blind will differ from the current one.">
+         ↻ REROLL <span class="po-blind-reroll-count">×${opts.lensCount ?? 1}</span>
+       </button>`
+    : '';
+  return `
+    <div class="po-blind-chip" style="--blind-color:${b.color}" aria-label="Field Effect: ${b.name}">
+      <div class="po-blind-chip-icon" aria-hidden="true">${b.icon}</div>
+      <div class="po-blind-chip-body">
+        <div class="po-blind-chip-eyebrow">Field Effect</div>
+        <div class="po-blind-chip-name">${b.name}</div>
+        <div class="po-blind-chip-desc">${b.description}</div>
+        <div class="po-blind-chip-hint">${b.tacticalHint}</div>
+      </div>
+      ${pillHtml}
+    </div>
+  `;
+}

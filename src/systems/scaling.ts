@@ -1,7 +1,7 @@
-import type { WaveConfig } from '../types';
+import type { Generation, WaveConfig } from '../types';
 import { getEnemyPool, getBossPool, getRandomFromPool } from '../data/enemyPools';
 
-export function getWaveConfig(wave: number, isBossWave: boolean): WaveConfig {
+export function getWaveConfig(wave: number, isBossWave: boolean, generation: Generation = 'gen1'): WaveConfig {
 
   let enemyCount: number;
   let levelMin: number;
@@ -87,8 +87,8 @@ export function getWaveConfig(wave: number, isBossWave: boolean): WaveConfig {
     levelMin,
     levelMax,
     isBossWave,
-    enemyPool: getEnemyPool(wave),
-    bossPool: getBossPool(wave),
+    enemyPool: getEnemyPool(wave, generation),
+    bossPool: getBossPool(wave, generation),
     coinReward,
     threatMultiplier,
   };
@@ -110,8 +110,8 @@ export function selectEnemyIds(config: WaveConfig): number[] {
   return getRandomFromPool(config.enemyPool, config.enemyCount);
 }
 
-export function getWaveCoins(wave: number, isBossWave: boolean, perks: import('../types').Perk[]): number {
-  const config = getWaveConfig(wave, isBossWave);
+export function getWaveCoins(wave: number, isBossWave: boolean, perks: import('../types').Perk[], generation: Generation = 'gen1'): number {
+  const config = getWaveConfig(wave, isBossWave, generation);
   let coins = config.coinReward;
 
   for (const perk of perks) {

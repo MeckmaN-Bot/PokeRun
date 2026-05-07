@@ -497,7 +497,7 @@ export const ALL_ITEMS: Item[] = [
   {
     id: 'pokemon_food', name: 'Pokémon Food', rarity: 'common', itemType: 'consumable',
     icon: '✚',
-    pokeapiName: 'poke-puff',
+    pokeapiName: 'casteliacone',
     description: 'Restores 30 HP to one Pokémon.',
     effect: { trigger: 'manual', healAmount: 30 },
   },
@@ -516,6 +516,13 @@ export const ALL_ITEMS: Item[] = [
     effect: { trigger: 'manual' },
   },
   // ===================== EPIC CONSUMABLES =====================
+  {
+    id: 'blind_lens', name: 'Blind Lens', rarity: 'epic', itemType: 'consumable',
+    icon: '◎',
+    pokeapiName: 'lens-case',
+    description: 'Re-roll the upcoming gym arena\'s Field Effect. Single use.',
+    effect: { trigger: 'manual' },
+  },
   {
     id: 'full_restore', name: 'Full Restore', rarity: 'epic', itemType: 'consumable',
     icon: '✚',
@@ -708,7 +715,7 @@ const PLANET_MAP: Array<{ type: PokemonType; name: string; icon: string }> = [
   { type: 'fire',     name: 'Mars',     icon: '☉' },
   { type: 'water',    name: 'Neptune',  icon: '☋' },
   { type: 'grass',    name: 'Venus',    icon: '☿' },
-  { type: 'electric', name: 'Jupiter',  icon: '⚡' },
+  { type: 'electric', name: 'Jupiter',  icon: '★' },
   { type: 'psychic',  name: 'Mercury',  icon: '☿' },
   { type: 'ice',      name: 'Pluto',    icon: '◌' },
   { type: 'dragon',   name: 'Saturn',   icon: '♄' },

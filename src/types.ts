@@ -67,6 +67,9 @@ export interface NodeInstance {
   arenaRank?: string;
   /** Cap the trainer team size for this node — used by early-act onboarding. */
   teamSizeOverride?: number;
+  /** When set, overrides trainerArchetype.typeBias for roster picking
+   *  (used by arena Junior/Senior trainers to follow the gym leader's bias). */
+  rosterTypeBias?: PokemonType[];
 }
 
 export interface ArenaState {
@@ -78,7 +81,10 @@ export interface ArenaState {
   index: number;
 }
 
-export type Generation = 'gen1' | 'gen2' | 'endless';
+/** Run-mode id. 'endless' is a special non-region mode; gen1..gen9 are the
+ *  region tours (only 'live' status entries from data/generations.ts are
+ *  valid at runtime — resolveGen() in main.ts enforces). */
+export type Generation = 'gen1' | 'gen2' | 'gen3' | 'gen4' | 'gen5' | 'gen6' | 'gen7' | 'gen8' | 'gen9' | 'endless';
 
 export type RewardType = 'pokemon' | 'perk' | 'item';
 
@@ -336,6 +342,11 @@ export interface Pokemon {
   learnsetPool?: LearnsetEntry[];
   /** IDs of moves already taught (so we don't re-teach the same one). */
   learnedMoveIds?: number[];
+  /** Moves the Pokémon has unlocked but couldn't fit into its 4-slot moveset.
+   *  Tapped from the move manager so the player can swap them in later. */
+  movePool?: Move[];
+  /** Moves waiting on the player to choose: replace a slot or skip. */
+  pendingLearns?: Move[];
 }
 
 export interface LearnsetEntry {
@@ -496,8 +507,41 @@ export interface GameState {
   leagueStep?: number;
   /** Pending generation-gate prompt after the champion is defeated. */
   pendingGenGate?: boolean;
+  /** Deck id picked for this run ('standard' default). Drives deckMods. */
+  deck?: string;
+  /** Stake id picked for this run ('white' default). Drives stakeMods. */
+  stake?: string;
+  /** Stake-resolved difficulty/reward multipliers. */
+  stakeMods?: {
+    bossBlindHpMult?: number;
+    coinRewardMult?: number;
+    shopPriceMult?: number;
+    enemySpeedMult?: number;
+  };
+  /** Run-modifier flags resolved from the picked deck at run-start. Optional
+   *  fields apply when set; all consumers should read each field independently. */
+  deckMods?: {
+    startCoins?: number;
+    /** [{itemId, quantity}] resolved into actual InventoryItem entries at run-start. */
+    startInventoryItemIds?: string[];
+    stagesPerAct?: number;
+    shopExcludeConsumables?: boolean;
+    startWithSlot2?: boolean;
+    monoType?: PokemonType;
+    monoDamageBoost?: boolean;
+  };
+  /** Pending Champion-victory celebration overlay; fires before pendingGenGate. */
+  pendingChampionVictoryScreen?: boolean;
+  /** Snapshot of championClears at the moment of the most recent Champion KO,
+   *  so the victory screen can display the same value the bump returned even
+   *  on a save+resume. */
+  pendingChampionClears?: number;
   /** Active arena gauntlet (multi-step gym sequence), or null if not in one. */
   arenaState?: ArenaState | null;
+  /** Pre-rolled Boss Blind for this act's gym leader. Re-rolled on act change. */
+  actBossBlind?: import('./data/bossBlinds').BossBlindId | null;
+  /** Pre-rolled Boss Blinds for the 5 league steps (E4 x4 + Champion). */
+  leagueBlinds?: import('./data/bossBlinds').BossBlindId[];
 }
 
 // ============================================================
@@ -681,6 +725,15 @@ export interface LeaderboardEntry {
     itemsCollected: number;
     perksCollected: number;
     totalDamageDealt: number;
+    /** 1..8 = gym act reached, 9 = league in progress, 10 = champion cleared. */
+    actReached?: number;
+    badgesEarned?: number;
+    /** Run was in endless mode at end. Takes precedence over actReached for display. */
+    endless?: boolean;
+    /** Deck id used for this run. Display-only on leaderboard, not part of rank. */
+    deck?: string;
+    /** Stake id used for this run. Display-only on leaderboard, not part of rank. */
+    stake?: string;
   };
   created_at?: string;
 }

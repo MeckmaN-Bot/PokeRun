@@ -1,0 +1,361 @@
+/* ============================================================
+   MOVE MANAGER MODAL — team-panel move roster editor
+   ============================================================ */
+
+.mmm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(26, 22, 18, 0.62);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+.mmm-overlay.active { opacity: 1; pointer-events: auto; }
+
+.mmm-card {
+  position: relative;
+  width: min(620px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  box-shadow: 8px 8px 0 var(--ink);
+  padding: 22px 22px 18px;
+  background-image:
+    repeating-linear-gradient(
+      135deg,
+      transparent 0 22px,
+      rgba(26, 22, 18, 0.035) 22px 23px
+    );
+  transform: translateY(8px) scale(0.98);
+  transition: transform 220ms cubic-bezier(.22,1,.36,1);
+}
+.mmm-overlay.active .mmm-card { transform: translateY(0) scale(1); }
+
+.mmm-rule {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 6px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--ink) 0 8px,
+    transparent 8px 14px
+  );
+}
+
+.mmm-close {
+  position: absolute;
+  top: 12px; right: 12px;
+  width: 30px; height: 30px;
+  border: 2px solid var(--ink);
+  background: var(--paper-2);
+  box-shadow: 2px 2px 0 var(--ink);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  display: grid; place-items: center;
+  transition: transform 100ms ease, box-shadow 100ms ease;
+}
+.mmm-close:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.mmm-close:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--ink);
+}
+
+.mmm-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 4px 0 10px;
+}
+
+.mmm-headline {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+}
+.mmm-sprite {
+  width: 64px; height: 64px;
+  image-rendering: pixelated;
+  border: 2px solid var(--ink);
+  background: var(--paper-2);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.mmm-name {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 24px;
+  line-height: 1;
+}
+.mmm-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+
+/* ── Pending learns ────────────────────────────────────── */
+.mmm-pending-block {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 2px dashed var(--ink);
+  background: rgba(196, 58, 58, 0.06);
+}
+.mmm-pending-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--oxblood, #c43a3a);
+  margin-bottom: 6px;
+}
+.mmm-pending-list { display: flex; flex-direction: column; gap: 6px; }
+.mmm-pending-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.mmm-pending-name {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 15px;
+}
+
+/* ── Section labels ────────────────────────────────────── */
+.mmm-section-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.mmm-section-label-pool { margin-top: 16px; }
+.mmm-section-hint {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  font-style: italic;
+  font-weight: 400;
+  text-transform: none;
+  color: var(--ink-3);
+}
+
+/* ── Active slots grid ─────────────────────────────────── */
+.mmm-slots {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.mmm-slot {
+  text-align: left;
+  padding: 10px 12px;
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  cursor: pointer;
+  transition: transform 100ms ease, box-shadow 100ms ease, background 100ms ease;
+}
+.mmm-slot:hover:not(.mmm-slot-empty) {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 var(--ink);
+  background: var(--paper-2);
+}
+.mmm-slot.mmm-armed {
+  background: rgba(196, 58, 58, 0.07);
+  outline: 2px dashed var(--oxblood, #c43a3a);
+  outline-offset: -6px;
+}
+.mmm-slot-empty {
+  cursor: default;
+  background: var(--paper-2);
+  opacity: 0.7;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+.mmm-slot-empty-text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+.mmm-slot-num {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.mmm-slot-name {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 15px;
+  margin: 2px 0 6px;
+  line-height: 1.1;
+}
+.mmm-slot-cta {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--oxblood, #c43a3a);
+}
+
+/* ── Stat pills ────────────────────────────────────────── */
+.mmm-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.mmm-stat {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink-2, var(--ink));
+  padding: 1px 5px;
+  border: 1.5px solid var(--ink);
+  background: var(--paper);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.mmm-cat { background: var(--paper-2); }
+.mmm-delta {
+  font-weight: 700;
+}
+.mmm-delta-up   { color: var(--moss, #5f7a3a); }
+.mmm-delta-down { color: var(--oxblood, #c43a3a); }
+
+/* ── Move pool ─────────────────────────────────────────── */
+.mmm-pool {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mmm-pool-row {
+  display: flex;
+  align-items: stretch;
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--ink);
+  transition: transform 100ms ease, box-shadow 100ms ease, background 100ms ease;
+}
+.mmm-pool-row:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 var(--ink);
+  background: var(--paper-2);
+}
+.mmm-pool-row.mmm-selected {
+  background: rgba(196, 58, 58, 0.08);
+  outline: 2px solid var(--oxblood, #c43a3a);
+  outline-offset: -2px;
+}
+.mmm-pool-pick {
+  flex: 1;
+  text-align: left;
+  padding: 8px 10px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.mmm-pool-name {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 900;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+.mmm-drop-btn {
+  width: 32px;
+  border: 0;
+  border-left: 2px solid var(--ink);
+  background: var(--paper-2);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--ink-3);
+  transition: background 100ms ease, color 100ms ease;
+}
+.mmm-drop-btn:hover {
+  background: var(--oxblood, #c43a3a);
+  color: #fff;
+}
+
+.mmm-empty {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink-3);
+  padding: 14px;
+  border: 2px dashed var(--ink);
+  text-align: center;
+  background: var(--paper-2);
+}
+
+.mmm-action-hint {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--oxblood, #c43a3a);
+  background: rgba(196, 58, 58, 0.06);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 13px;
+}
+.mmm-action-hint em {
+  font-weight: 900;
+  color: var(--oxblood, #c43a3a);
+}
+
+.mmm-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ink-btn.small {
+  font-size: 11px;
+  padding: 6px 10px;
+  letter-spacing: 0.06em;
+}
+
+/* ── Compact tweaks for narrow screens ────────────────── */
+@media (max-width: 560px) {
+  .mmm-slots { grid-template-columns: 1fr; }
+  .mmm-name { font-size: 20px; }
+  .mmm-card { padding: 18px 16px 14px; }
+}

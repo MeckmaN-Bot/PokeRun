@@ -27,14 +27,14 @@ const CHOICES: Array<{
     id: 'partial_plus_status',
     title: 'Quick Patch',
     hint: '+50% HP and clear all status effects across the team.',
-    icon: '🩹',
+    icon: '◇',
     accent: '#3a7a8a',
   },
   {
     id: 'risky_supply',
     title: 'Secret Supply',
     hint: 'Skip healing — receive 80 coins instead. Press your luck.',
-    icon: '💰',
+    icon: '◆',
     accent: '#c08a2c',
   },
 ];

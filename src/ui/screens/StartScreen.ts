@@ -1,5 +1,6 @@
 import type { GameState, TrainerGender } from '../../types';
 import { STARTERS } from '../../data/enemyPools';
+import { ALL_ITEMS } from '../../data/items';
 import { fetchPokemon } from '../../api/pokeapi';
 import { getStaticSprite } from '../../api/sprites';
 import { fadeIn } from '../animations';
@@ -10,6 +11,25 @@ import { mountAudioControls } from '../../audio/AudioSettingsPanel';
 import { escapeHtml, safeUrl } from '../../util/sanitize';
 import { hasSavedRun, loadRun, clearRun } from '../../systems/saveRun';
 import { loadSettings, saveSettings } from '../../systems/userSettings';
+import { getPersonalBest } from '../../systems/leaderboard';
+import {
+  getDiscoveredCount, getDiscoveredSet, TOTAL_SYNERGIES,
+  getDiscoveredBlindCount, getDiscoveredBlindSet, TOTAL_BLINDS,
+} from '../../systems/discoveries';
+import { SYNERGY_CATALOG } from '../../systems/synergies';
+import { BOSS_BLINDS } from '../../data/bossBlinds';
+import { ACHIEVEMENTS, getUnlockedSet, getUnlockedCount, TOTAL_ACHIEVEMENTS } from '../../systems/achievements';
+import { getChampionClears } from '../../systems/championClears';
+import {
+  DECKS, MONO_TYPE_OPTIONS, getUnlockedDecks, getLastDeck, saveLastDeck,
+  getLastMonoType, saveLastMonoType,
+} from '../../systems/decks';
+import {
+  STAKES, getUnlockedStakes, getLastStake, saveLastStake, getStakeMods,
+} from '../../systems/stakes';
+import { getNextGoal } from '../../systems/nextGoal';
+import type { PokemonType } from '../../types';
+import { formatAct, formatBadges } from '../../util/runProgress';
 import { BADGES } from '../../data/badges';
 import { badgeSprite, imgErrorFallback } from '../../data/sprites';
 import { wasSeen, markSeen, resetTutorial } from '../../systems/tutorial';
@@ -27,6 +47,16 @@ interface StarterDisplay {
   bst?: number;
 }
 
+/** Pinned type for each of the 5 default starter ids. Used by Mono-Type deck
+ *  to filter the carousel before async type-data has loaded. */
+const STARTER_PRIMARY_TYPE: Record<number, PokemonType> = {
+  1: 'grass',     // Bulbasaur
+  4: 'fire',      // Charmander
+  7: 'water',     // Squirtle
+  25: 'electric', // Pikachu
+  133: 'normal',  // Eevee
+};
+
 export class StartScreen {
   private container: HTMLElement;
   private onStart: (state: GameState) => void;
@@ -43,6 +73,9 @@ export class StartScreen {
   private isGuest = false;
   private trainerGender: TrainerGender = 'male';
   private destroyAudioBtn: (() => void) | null = null;
+  private selectedDeck: string = 'standard';
+  private selectedMonoType: PokemonType = 'grass';
+  private selectedStake: string = 'white';
 
   constructor(
     container: HTMLElement,
@@ -58,6 +91,9 @@ export class StartScreen {
     this.playerName = playerName;
     this.isGuest = isGuest;
     this.onResume = onResume;
+    this.selectedDeck = getLastDeck(playerName);
+    this.selectedMonoType = getLastMonoType(playerName);
+    this.selectedStake = getLastStake(playerName);
   }
 
   async mount(): Promise<void> {
@@ -66,6 +102,8 @@ export class StartScreen {
     document.body.classList.add('start-active');
     fadeIn(this.container);
     this.attachEvents();
+    // Apply mono-type starter filter on initial mount (deck remembered).
+    this.refreshStarterFilter();
     const audioSlot = this.container.querySelector<HTMLElement>('#settings-audio-slot');
     if (audioSlot) this.destroyAudioBtn = mountAudioControls(audioSlot);
     this.loadStarterData();
@@ -171,9 +209,77 @@ export class StartScreen {
             </div>
             <button class="ink-btn ghost sm" id="clear-name-btn" type="button">Clear Saved Name</button>
           </div>
+
+          <div class="settings-row" style="border-top:1.5px dashed var(--ink, #1a1a1a); padding-top:14px;">
+            <div class="settings-row-label">
+              <div class="srl-title">Legal &amp; Disclaimer</div>
+              <div class="srl-sub">Fan project · non-commercial · trademarks belong to their owners.</div>
+            </div>
+            <button class="ink-btn ghost sm" id="open-legal-btn" type="button">View →</button>
+          </div>
         </div>
       </div>
     `;
+  }
+
+  /** 3-cell Field Reference strip — sits between user-banner and starter
+   *  section per Take-3 final placement. Cells are dezent magazine style
+   *  (dashed border, ink color, mono eyebrows + small body); each click
+   *  opens its respective modal. Refresh-on-pick keeps values live. */
+  private renderThreeCellStrip(): string {
+    const synergies = getDiscoveredCount(this.playerName);
+    const blinds = getDiscoveredBlindCount(this.playerName);
+    const achievements = getUnlockedCount(this.playerName);
+    const codexProgress = synergies + blinds + achievements;
+    const codexTotal = TOTAL_SYNERGIES + TOTAL_BLINDS + TOTAL_ACHIEVEMENTS;
+
+    const selectedDeck = DECKS.find(d => d.id === this.selectedDeck) ?? DECKS[0];
+    const fieldKitShort = selectedDeck.name.replace(/ Field Kit$/, '');
+    const fieldKitLabel = selectedDeck.id === 'mono_type'
+      ? `${fieldKitShort} · ${this.selectedMonoType.toUpperCase()}`
+      : fieldKitShort;
+
+    const selectedStake = STAKES.find(s => s.id === this.selectedStake) ?? STAKES[0];
+
+    return `
+      <div class="ss-fr-strip">
+        <button type="button" class="ss-fr-cell" id="ss-fr-codex" aria-label="Open Codex hub">
+          <div class="ss-fr-eyebrow">CODEX</div>
+          <div class="ss-fr-value">${codexProgress} / ${codexTotal}</div>
+        </button>
+        <button type="button" class="ss-fr-cell" id="ss-fr-fieldkit" aria-label="Open Field Kit picker">
+          <div class="ss-fr-eyebrow">FIELD KIT</div>
+          <div class="ss-fr-value">${escapeHtml(fieldKitLabel)}</div>
+        </button>
+        <button type="button" class="ss-fr-cell" id="ss-fr-rank" aria-label="Open Trainer Rank picker">
+          <div class="ss-fr-eyebrow">TRAINER RANK</div>
+          <div class="ss-fr-value">${escapeHtml(selectedStake.name)}</div>
+        </button>
+      </div>
+    `;
+  }
+
+  /** Re-render the 3-cell strip in place. Called after modal picks so the
+   *  FIELD KIT / TRAINER RANK / CODEX values stay in sync. Re-binds click
+   *  handlers on the new buttons (closure-capture safe per Slice X lesson). */
+  private refreshThreeCellStrip(): void {
+    const strip = this.container.querySelector<HTMLElement>('.ss-fr-strip');
+    if (!strip) return;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = this.renderThreeCellStrip();
+    const next = wrap.firstElementChild as HTMLElement | null;
+    if (!next) return;
+    strip.replaceWith(next);
+    this.wireThreeCellStripEvents();
+  }
+
+  private wireThreeCellStripEvents(): void {
+    this.container.querySelector<HTMLButtonElement>('#ss-fr-codex')
+      ?.addEventListener('click', () => this.openCodexHub());
+    this.container.querySelector<HTMLButtonElement>('#ss-fr-fieldkit')
+      ?.addEventListener('click', () => this.openFieldKitDetail());
+    this.container.querySelector<HTMLButtonElement>('#ss-fr-rank')
+      ?.addEventListener('click', () => this.openTrainerRankDetail());
   }
 
   private renderBadgeTrophyStrip(): string {
@@ -219,6 +325,627 @@ export class StartScreen {
         </div>
       </div>
     `;
+  }
+
+  /** Trainer Rank Detail Modal — 3 pills + selected description + cascade
+   *  hint. Mirrors openFieldKitDetail pattern. Picking a pill updates state,
+   *  refreshes modal in-place, and refreshes the 3-cell strip behind it. */
+  private openTrainerRankDetail(): void {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay codex-overlay trainer-rank-detail-overlay';
+    overlay.innerHTML = `
+      <div class="modal trainer-rank-detail-modal">
+        <button class="modal-close" id="trd-close" type="button">✕</button>
+        <div class="codex-eyebrow">— Run difficulty —</div>
+        <h2 class="modal-title">Trainer <em>Rank</em></h2>
+        <p class="trd-modal-sub">Difficulty rank — earned by clearing Champion at lower tiers.</p>
+        ${this.renderTrainerRankBody()}
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#trd-close')?.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    this.wireTrainerRankPills(overlay);
+  }
+
+  private renderTrainerRankBody(): string {
+    const stakeUnlocked = getUnlockedStakes(this.playerName);
+    const firstLockedStake = STAKES.find(s => !stakeUnlocked.has(s.id));
+    const stakeHintHtml = firstLockedStake?.unlockAfter
+      ? `<div class="stake-picker-hint">Unlock ${escapeHtml(firstLockedStake.name)} rank by clearing Champion as ${escapeHtml(this.stakeNameForId(firstLockedStake.unlockAfter))}.</div>`
+      : '';
+    const pills = STAKES.map(s => {
+      const isUnlocked = stakeUnlocked.has(s.id);
+      const isSelected = this.selectedStake === s.id && isUnlocked;
+      const lockHint = !isUnlocked && s.unlockAfter
+        ? `Unlock: clear Champion on ${this.stakeNameForId(s.unlockAfter)}`
+        : s.description;
+      return `<button type="button"
+                      class="stake-pill stake-${s.id}${isSelected ? ' selected' : ''}${!isUnlocked ? ' locked' : ''}"
+                      data-stake-id="${s.id}"
+                      title="${escapeHtml(lockHint)}"
+                      ${!isUnlocked ? 'disabled' : ''}>
+                ${escapeHtml(isUnlocked ? s.name : '???')}
+              </button>`;
+    }).join('');
+    const sel = STAKES.find(s => s.id === this.selectedStake) ?? STAKES[0];
+    const desc = `<div class="trd-stake-desc"><b>${escapeHtml(sel.name)}</b> · ${escapeHtml(sel.description)}</div>`;
+    return `
+      <div class="trd-rank-body">
+        <div class="stake-picker-pills">${pills}</div>
+        ${desc}
+        ${stakeHintHtml}
+      </div>
+    `;
+  }
+
+  private wireTrainerRankPills(scope: HTMLElement): void {
+    scope.querySelectorAll<HTMLButtonElement>('[data-stake-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        const id = btn.dataset['stakeId'] ?? 'white';
+        this.selectedStake = id;
+        saveLastStake(this.playerName, id);
+        this.refreshTrainerRankBody(scope);
+        this.refreshThreeCellStrip();
+      });
+    });
+  }
+
+  private refreshTrainerRankBody(scope: HTMLElement): void {
+    const body = scope.querySelector<HTMLElement>('.trd-rank-body');
+    if (!body) return;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = this.renderTrainerRankBody();
+    const next = wrap.firstElementChild as HTMLElement;
+    if (next) {
+      body.replaceWith(next);
+      this.wireTrainerRankPills(scope);
+    }
+  }
+
+  private renderCodexHubButton(): string {
+    const synergies = getDiscoveredCount(this.playerName);
+    const blinds = getDiscoveredBlindCount(this.playerName);
+    const achievements = getUnlockedCount(this.playerName);
+    const total = TOTAL_SYNERGIES + TOTAL_BLINDS + TOTAL_ACHIEVEMENTS;
+    const progress = synergies + blinds + achievements;
+    const ratio = `${progress} / ${total}`;
+    return `
+      <button type="button" class="ss-codex-hub-button" id="ss-codex-hub-open"
+              aria-label="Open Codex hub">
+        <span class="ss-codex-hub-icon" aria-hidden="true">◆</span>
+        <span class="ss-codex-hub-label">Codex</span>
+        <span class="ss-codex-hub-progress">${ratio}</span>
+        <span class="ss-codex-hub-arrow" aria-hidden="true">›</span>
+      </button>
+    `;
+  }
+
+  /** Render a Personal Best stat block — used inside the Codex Hub modal. */
+  private renderPersonalBest(): string {
+    const pb = getPersonalBest(this.playerName);
+    if (!pb) {
+      return `
+        <div class="ss-personal-best" data-empty="true">
+          <div class="ss-pb-eyebrow">Best run</div>
+          <div class="ss-pb-empty">Not yet set — your first wipe writes the record.</div>
+        </div>
+      `;
+    }
+    const d = pb.score_details ?? {} as NonNullable<typeof pb.score_details>;
+    return `
+      <div class="ss-personal-best" data-empty="false">
+        <div class="ss-pb-eyebrow">Best run</div>
+        <div class="ss-pb-row">
+          <div class="ss-pb-stat"><span class="k">Waves</span><span class="v">${pb.score_waves}</span></div>
+          <div class="ss-pb-stat"><span class="v">${formatAct(d.actReached, d.endless)}</span></div>
+          <div class="ss-pb-stat"><span class="k">Badges</span><span class="v">${formatBadges(d.badgesEarned)}</span></div>
+          <div class="ss-pb-stat"><span class="k">Starter</span><span class="v">${escapeHtml(d.starterName ?? '—')}</span></div>
+        </div>
+      </div>
+    `;
+  }
+
+  /** Re-render the 4-card deck picker + Mono sub-picker. Targets the
+   *  ELEMENT scope passed in (the modal body) so we don't accidentally
+   *  match a stale .deck-picker-section in the document. */
+  private refreshDeckPicker(scope: HTMLElement): void {
+    const sec = scope.querySelector<HTMLElement>('.deck-picker-section');
+    if (!sec) return;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = this.renderDeckPicker();
+    const next = wrap.firstElementChild as HTMLElement;
+    if (next) {
+      sec.replaceWith(next);
+      // Re-wire from the OUTER scope (modal overlay), not from `next` itself.
+      // Passing `next` makes subsequent refreshes fail: scope.querySelector
+      // ('.deck-picker-section') inside refreshDeckPicker would be searching
+      // INSIDE the section for a section, returning null and early-returning.
+      this.wireDeckPickerEvents(scope);
+    }
+  }
+
+  private wireDeckPickerEvents(scope: HTMLElement): void {
+    scope.querySelectorAll<HTMLButtonElement>('[data-deck-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        const id = btn.dataset['deckId'] ?? 'standard';
+        this.selectedDeck = id;
+        saveLastDeck(this.playerName, id);
+        this.refreshDeckPicker(scope);
+        this.refreshStarterFilter();
+        this.refreshThreeCellStrip();
+      });
+    });
+    scope.querySelectorAll<HTMLButtonElement>('[data-mono-type]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const t = btn.dataset['monoType'] as PokemonType;
+        this.selectedMonoType = t;
+        saveLastMonoType(this.playerName, t);
+        this.refreshDeckPicker(scope);
+        this.refreshStarterFilter();
+        this.refreshThreeCellStrip();
+      });
+    });
+  }
+
+  /** Field Kit Detail modal — full 4-card picker + Mono-Type sub-picker
+   *  hosted inside an overlay. Picking a card mutates state, refreshes
+   *  the compact row on StartScreen behind the modal, and stays open
+   *  for further selection. ✕ or backdrop click dismisses. */
+  private openFieldKitDetail(): void {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay codex-overlay field-kit-detail-overlay';
+    overlay.innerHTML = `
+      <div class="modal field-kit-detail-modal">
+        <button class="modal-close" id="fk-close" type="button">✕</button>
+        <div class="codex-eyebrow">— Run configuration —</div>
+        <h2 class="modal-title">Field <em>Kit</em></h2>
+        <p class="fk-modal-sub">Field kits bend the rules — unlocked via achievements.</p>
+        ${this.renderDeckPicker()}
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#fk-close')?.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    this.wireDeckPickerEvents(overlay);
+  }
+
+  /** Mono-Type deck narrows the starter carousel to just the matching starter.
+   *  Other decks show all 5. Applied via inline display:none so we don't have
+   *  to fully re-render the starter section. Auto-selects the first visible. */
+  private refreshStarterFilter(): void {
+    const grid = this.container.querySelector<HTMLElement>('#starter-grid');
+    const dots = this.container.querySelector<HTMLElement>('#starter-dots');
+    const monoFilter = this.selectedDeck === 'mono_type' ? this.selectedMonoType : null;
+    let firstVisible = -1;
+    this.starterData.forEach((s, i) => {
+      const matches = monoFilter == null || STARTER_PRIMARY_TYPE[s.id] === monoFilter;
+      const card = grid?.querySelector<HTMLElement>(`[data-starter="${i}"]`);
+      const dot  = dots?.querySelector<HTMLElement>(`[data-dot="${i}"]`);
+      if (card) card.style.display = matches ? '' : 'none';
+      if (dot)  dot.style.display  = matches ? '' : 'none';
+      if (matches && firstVisible < 0) firstVisible = i;
+    });
+    if (firstVisible >= 0 && this.starterData[this.selectedStarterIndex] &&
+        monoFilter != null &&
+        STARTER_PRIMARY_TYPE[this.starterData[this.selectedStarterIndex].id] !== monoFilter) {
+      // Current selection is now hidden — move to first visible.
+      this.selectedStarterIndex = firstVisible;
+      this.container.querySelectorAll<HTMLElement>('[data-starter]').forEach((c, i) => {
+        c.classList.toggle('selected', i === firstVisible);
+      });
+      this.container.querySelectorAll<HTMLElement>('[data-dot]').forEach((d, i) => {
+        d.classList.toggle('active', i === firstVisible);
+      });
+    }
+  }
+
+  /** Compact row for default StartScreen — selected kit name + Change button.
+   *  Click 'Change ▾' opens openFieldKitDetail() with the full 4-card picker. */
+  private renderFieldKitCompactRow(): string {
+    const selected = DECKS.find(d => d.id === this.selectedDeck) ?? DECKS[0];
+    const monoChip = selected.id === 'mono_type'
+      ? `<span class="ss-fk-mono-chip type-chip type-${this.selectedMonoType}">${escapeHtml(this.selectedMonoType.toUpperCase())}</span>`
+      : '';
+    return `
+      <div class="ss-field-kit-row">
+        <span class="ss-fk-label">Field Kit</span>
+        <span class="ss-fk-selected">
+          <span class="ss-fk-icon" aria-hidden="true">${selected.icon}</span>
+          <span class="ss-fk-name">${escapeHtml(selected.name)}</span>
+          ${monoChip}
+        </span>
+        <button type="button" class="ss-fk-change-btn" id="ss-fk-change-open"
+                aria-label="Change Field Kit">Change ▾</button>
+      </div>
+    `;
+  }
+
+  /** Stake (Trainer Rank) pill row — sits beneath the compact Field Kit row
+   *  on default StartScreen. Lifted from the old renderDeckPicker section. */
+  private renderStakePickerRow(): string {
+    const stakeUnlocked = getUnlockedStakes(this.playerName);
+    const firstLockedStake = STAKES.find(s => !stakeUnlocked.has(s.id));
+    const stakeHintHtml = firstLockedStake?.unlockAfter
+      ? `<div class="stake-picker-hint">Unlock ${escapeHtml(firstLockedStake.name)} rank by clearing Champion as ${escapeHtml(this.stakeNameForId(firstLockedStake.unlockAfter))}.</div>`
+      : '';
+    const stakePills = STAKES.map(s => {
+      const isUnlocked = stakeUnlocked.has(s.id);
+      const isSelected = this.selectedStake === s.id && isUnlocked;
+      const lockHint = !isUnlocked && s.unlockAfter
+        ? `Unlock: clear Champion on ${this.stakeNameForId(s.unlockAfter)}`
+        : s.description;
+      return `<button type="button"
+                      class="stake-pill stake-${s.id}${isSelected ? ' selected' : ''}${!isUnlocked ? ' locked' : ''}"
+                      data-stake-id="${s.id}"
+                      title="${escapeHtml(lockHint)}"
+                      ${!isUnlocked ? 'disabled' : ''}>
+                ${escapeHtml(isUnlocked ? s.name.split(' ')[0] : '???')}
+              </button>`;
+    }).join('');
+    return `
+      <div class="ss-stake-row">
+        <span class="stake-picker-label">Trainer Rank</span>
+        <div class="stake-picker-pills">${stakePills}</div>
+        ${stakeHintHtml}
+      </div>
+    `;
+  }
+
+  /** 4-card picker grid + Mono-Type sub-picker — used inside the
+   *  Field Kit Detail modal. NO stake row inside (that lives on the
+   *  StartScreen below the compact row). */
+  private renderDeckPicker(): string {
+    const unlocked = getUnlockedDecks(this.playerName);
+    const cards = DECKS.map(d => {
+      const isUnlocked = unlocked.has(d.id);
+      const isSelected = this.selectedDeck === d.id && isUnlocked;
+      const lockHint = !isUnlocked
+        ? `<div class="deck-card-lock">Unlock: ${this.unlockHintFor(d.id)}</div>`
+        : '';
+      return `
+        <button type="button"
+                class="deck-card${isSelected ? ' selected' : ''}${!isUnlocked ? ' locked' : ''}"
+                data-deck-id="${d.id}"
+                ${!isUnlocked ? 'disabled' : ''}>
+          <div class="deck-card-icon" aria-hidden="true">${isUnlocked ? d.icon : '·'}</div>
+          <div class="deck-card-eyebrow">${escapeHtml(d.eyebrow)}</div>
+          <div class="deck-card-name">${escapeHtml(isUnlocked ? d.name : '???')}</div>
+          <div class="deck-card-desc">${escapeHtml(isUnlocked ? d.description : 'Locked. Keep playing to unlock.')}</div>
+          ${lockHint}
+        </button>
+      `;
+    }).join('');
+
+    const monoSubpicker = this.selectedDeck === 'mono_type' && unlocked.has('mono_type')
+      ? `<div class="deck-mono-subpicker">
+           <span class="deck-mono-label">Choose type:</span>
+           ${MONO_TYPE_OPTIONS.map(t => `
+             <button type="button"
+                     class="deck-mono-chip type-chip type-${t}${this.selectedMonoType === t ? ' selected' : ''}"
+                     data-mono-type="${t}">${escapeHtml(t.toUpperCase())}</button>
+           `).join('')}
+         </div>`
+      : '';
+
+    return `
+      <div class="deck-picker-section">
+        <div class="deck-picker-grid">${cards}</div>
+        ${monoSubpicker}
+      </div>
+    `;
+  }
+
+  private stakeNameForId(id: string): string {
+    return STAKES.find(s => s.id === id)?.name ?? id;
+  }
+
+  private renderNextGoal(): string {
+    const goal = getNextGoal(this.playerName);
+    if (!goal) return '';
+    return `
+      <div class="ss-next-goal">
+        <span class="ss-next-goal-eyebrow">Next:</span>
+        <span class="ss-next-goal-title">${escapeHtml(goal.title)}</span>
+      </div>
+    `;
+  }
+
+  private unlockHintFor(deckId: string): string {
+    switch (deckId) {
+      case 'speedrunner':  return 'Hall of Records — survive 30+ waves';
+      case 'iron_trainer': return 'Survivor — reach Act 5';
+      case 'mono_type':    return 'Mono Master — beat a gym with 2+ same-type alive';
+      default:             return '—';
+    }
+  }
+
+  /** Card-grid markup helpers — extracted so the Codex Hub modal can
+   *  render all three tabs from one source. Existing open*Codex methods
+   *  also call these. */
+  private renderSynergyGridHtml(): string {
+    const discovered = getDiscoveredSet(this.playerName);
+    return SYNERGY_CATALOG.map(entry => {
+      const found = discovered.has(entry.id);
+      if (found) {
+        return `
+          <div class="codex-card found syn-${entry.color}">
+            <div class="codex-card-head">
+              <span class="codex-card-icon">${entry.icon}</span>
+              <span class="codex-card-name">${escapeHtml(entry.name)}</span>
+            </div>
+            <p class="codex-card-desc">${escapeHtml(entry.description)}</p>
+          </div>
+        `;
+      }
+      return `
+        <div class="codex-card locked">
+          <div class="codex-card-head">
+            <span class="codex-card-icon">·</span>
+            <span class="codex-card-name">???</span>
+          </div>
+          <p class="codex-card-desc">Trigger this synergy to reveal.</p>
+        </div>
+      `;
+    }).join('');
+  }
+
+  private renderBlindGridHtml(): string {
+    const faced = getDiscoveredBlindSet(this.playerName);
+    return BOSS_BLINDS.map(b => {
+      const found = faced.has(b.id);
+      if (found) {
+        return `
+          <div class="codex-card found codex-blind" style="--blind-color:${b.color}">
+            <div class="codex-card-head">
+              <span class="codex-card-icon">${b.icon}</span>
+              <span class="codex-card-name">${escapeHtml(b.name)}</span>
+            </div>
+            <p class="codex-card-desc">${escapeHtml(b.description)}</p>
+            <p class="codex-card-hint">${escapeHtml(b.tacticalHint)}</p>
+          </div>
+        `;
+      }
+      return `
+        <div class="codex-card locked">
+          <div class="codex-card-head">
+            <span class="codex-card-icon">·</span>
+            <span class="codex-card-name">???</span>
+          </div>
+          <p class="codex-card-desc">Face this Field Effect in battle to reveal.</p>
+        </div>
+      `;
+    }).join('');
+  }
+
+  private renderAchievementsGridHtml(): string {
+    const unlocked = getUnlockedSet(this.playerName);
+    return ACHIEVEMENTS.map(a => {
+      const found = unlocked.has(a.id);
+      if (found) {
+        return `
+          <div class="codex-card found codex-achievement">
+            <div class="codex-card-head">
+              <span class="codex-card-icon">★</span>
+              <span class="codex-card-name">${escapeHtml(a.name)}</span>
+            </div>
+            <div class="codex-card-eyebrow">${escapeHtml(a.eyebrow)}</div>
+            <p class="codex-card-desc">${escapeHtml(a.description)}</p>
+          </div>
+        `;
+      }
+      return `
+        <div class="codex-card locked">
+          <div class="codex-card-head">
+            <span class="codex-card-icon">·</span>
+            <span class="codex-card-name">???</span>
+          </div>
+          <p class="codex-card-desc">Locked. Keep playing to unlock.</p>
+        </div>
+      `;
+    }).join('');
+  }
+
+  /** Codex Hub — consolidates all meta-progression onto one modal with
+   *  goal-hint, PB stats, champion clears, and 3 segmented sub-codex tabs. */
+  private openCodexHub(): void {
+    const goal = getNextGoal(this.playerName);
+    const synergies = getDiscoveredCount(this.playerName);
+    const blinds = getDiscoveredBlindCount(this.playerName);
+    const achievements = getUnlockedCount(this.playerName);
+    const champClears = getChampionClears(this.playerName);
+
+    const goalLine = goal
+      ? `<div class="codex-hub-goal"><span class="codex-hub-goal-eyebrow">Next:</span> ${escapeHtml(goal.title)}</div>`
+      : '';
+
+    const pbBlock = this.renderPersonalBest();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay codex-overlay codex-hub-overlay';
+    overlay.innerHTML = `
+      <div class="modal codex-modal codex-hub-modal">
+        <button class="modal-close" id="codex-close" type="button">✕</button>
+        <div class="codex-eyebrow">— Field Reference —</div>
+        <h2 class="modal-title">Codex <em>Hub</em></h2>
+        ${goalLine}
+        ${pbBlock}
+        <div class="codex-hub-clears">Champion clears · <b>${champClears}</b></div>
+        <div class="codex-hub-tabs" role="tablist">
+          <button type="button" class="codex-hub-tab active" data-hub-tab="synergies" role="tab">
+            <span class="cht-label">Synergies</span>
+            <span class="cht-count">${synergies}/${TOTAL_SYNERGIES}</span>
+          </button>
+          <button type="button" class="codex-hub-tab" data-hub-tab="blinds" role="tab">
+            <span class="cht-label">Field Effects</span>
+            <span class="cht-count">${blinds}/${TOTAL_BLINDS}</span>
+          </button>
+          <button type="button" class="codex-hub-tab" data-hub-tab="achievements" role="tab">
+            <span class="cht-label">Achievements</span>
+            <span class="cht-count">${achievements}/${TOTAL_ACHIEVEMENTS}</span>
+          </button>
+        </div>
+        <div class="codex-grid codex-hub-grid" data-hub-tab-content="synergies">${this.renderSynergyGridHtml()}</div>
+        <div class="codex-grid codex-hub-grid hidden" data-hub-tab-content="blinds">${this.renderBlindGridHtml()}</div>
+        <div class="codex-grid codex-hub-grid hidden" data-hub-tab-content="achievements">${this.renderAchievementsGridHtml()}</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#codex-close')?.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    overlay.querySelectorAll<HTMLButtonElement>('[data-hub-tab]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const id = tab.dataset['hubTab'] ?? 'synergies';
+        overlay.querySelectorAll<HTMLElement>('[data-hub-tab]').forEach(t => {
+          t.classList.toggle('active', t.dataset['hubTab'] === id);
+        });
+        overlay.querySelectorAll<HTMLElement>('[data-hub-tab-content]').forEach(g => {
+          g.classList.toggle('hidden', g.dataset['hubTabContent'] !== id);
+        });
+      });
+    });
+  }
+
+  private openSynergyCodex(): void {
+    const discovered = getDiscoveredSet(this.playerName);
+    const cards = SYNERGY_CATALOG.map(entry => {
+      const found = discovered.has(entry.id);
+      if (found) {
+        return `
+          <div class="codex-card found syn-${entry.color}">
+            <div class="codex-card-head">
+              <span class="codex-card-icon">${entry.icon}</span>
+              <span class="codex-card-name">${escapeHtml(entry.name)}</span>
+            </div>
+            <p class="codex-card-desc">${escapeHtml(entry.description)}</p>
+          </div>
+        `;
+      }
+      return `
+        <div class="codex-card locked">
+          <div class="codex-card-head">
+            <span class="codex-card-icon">·</span>
+            <span class="codex-card-name">???</span>
+          </div>
+          <p class="codex-card-desc">Trigger this synergy to reveal.</p>
+        </div>
+      `;
+    }).join('');
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay codex-overlay';
+    overlay.innerHTML = `
+      <div class="modal codex-modal">
+        <button class="modal-close" id="codex-close" type="button">✕</button>
+        <div class="codex-eyebrow">— Field Reference —</div>
+        <h2 class="modal-title">Synergy <em>Codex</em></h2>
+        <div class="codex-progress">${discovered.size} / ${SYNERGY_CATALOG.length} discovered</div>
+        <div class="codex-grid">${cards}</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#codex-close')?.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  }
+
+  private openBlindCodex(): void {
+    const faced = getDiscoveredBlindSet(this.playerName);
+    const cards = BOSS_BLINDS.map(b => {
+      const found = faced.has(b.id);
+      if (found) {
+        return `
+          <div class="codex-card found codex-blind" style="--blind-color:${b.color}">
+            <div class="codex-card-head">
+              <span class="codex-card-icon">${b.icon}</span>
+              <span class="codex-card-name">${escapeHtml(b.name)}</span>
+            </div>
+            <p class="codex-card-desc">${escapeHtml(b.description)}</p>
+            <p class="codex-card-hint">${escapeHtml(b.tacticalHint)}</p>
+          </div>
+        `;
+      }
+      return `
+        <div class="codex-card locked">
+          <div class="codex-card-head">
+            <span class="codex-card-icon">·</span>
+            <span class="codex-card-name">???</span>
+          </div>
+          <p class="codex-card-desc">Face this Field Effect in battle to reveal.</p>
+        </div>
+      `;
+    }).join('');
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay codex-overlay';
+    overlay.innerHTML = `
+      <div class="modal codex-modal">
+        <button class="modal-close" id="codex-close" type="button">✕</button>
+        <div class="codex-eyebrow">— Field Reference —</div>
+        <h2 class="modal-title">Field Effect <em>Codex</em></h2>
+        <div class="codex-progress">${faced.size} / ${BOSS_BLINDS.length} faced</div>
+        <div class="codex-grid">${cards}</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#codex-close')?.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  }
+
+  private openAchievementsCodex(): void {
+    const unlocked = getUnlockedSet(this.playerName);
+    const cards = ACHIEVEMENTS.map(a => {
+      const found = unlocked.has(a.id);
+      if (found) {
+        return `
+          <div class="codex-card found codex-achievement">
+            <div class="codex-card-head">
+              <span class="codex-card-icon">★</span>
+              <span class="codex-card-name">${escapeHtml(a.name)}</span>
+            </div>
+            <div class="codex-card-eyebrow">${escapeHtml(a.eyebrow)}</div>
+            <p class="codex-card-desc">${escapeHtml(a.description)}</p>
+          </div>
+        `;
+      }
+      return `
+        <div class="codex-card locked">
+          <div class="codex-card-head">
+            <span class="codex-card-icon">·</span>
+            <span class="codex-card-name">???</span>
+          </div>
+          <p class="codex-card-desc">Locked. Keep playing to unlock.</p>
+        </div>
+      `;
+    }).join('');
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay codex-overlay';
+    overlay.innerHTML = `
+      <div class="modal codex-modal">
+        <button class="modal-close" id="codex-close" type="button">✕</button>
+        <div class="codex-eyebrow">— Field Reference —</div>
+        <h2 class="modal-title">Achieve<em>ments</em></h2>
+        <div class="codex-progress">${unlocked.size} / ${ACHIEVEMENTS.length} unlocked</div>
+        <div class="codex-grid">${cards}</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector<HTMLButtonElement>('#codex-close')?.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   }
 
   private wireHtpPager(modalEl: HTMLElement): void {
@@ -301,6 +1028,9 @@ export class StartScreen {
 
           ${this.renderResumeBanner()}
           ${this.renderBadgeTrophyStrip()}
+
+          <!-- Field Reference strip (Take-3 Slice 3 final position) -->
+          ${this.renderThreeCellStrip()}
 
           <!-- Starter selection -->
           <div class="starter-section">
@@ -422,7 +1152,7 @@ export class StartScreen {
               <h3 class="htp-chapter-title">The <em>Run</em></h3>
               <p class="htp-lede">A run is a single life. Survive waves, clear three acts, capture badges. When your team faints — that's the run.</p>
               <ul class="htp-flow">
-                <li><b>Pick a starter.</b> One mon, level 5. Your seed.</li>
+                <li><b>Pick a starter.</b> One mon, level 8. Your seed.</li>
                 <li><b>Walk a path.</b> Each act branches: battles, shops, arenas, events.</li>
                 <li><b>Clear waves.</b> Win fights, earn coins &amp; rewards.</li>
                 <li><b>Beat arenas.</b> Eight gym leaders gate the acts. Win → badge.</li>
@@ -453,12 +1183,12 @@ export class StartScreen {
                 </div>
                 <div class="htp-block">
                   <div class="htp-label">Auto-Battle</div>
-                  <p>Toggle <kbd>A</kbd> in battle. AI picks moves &amp; items. Faster but blind to setups.</p>
+                  <p>Battles resolve automatically — your team picks moves based on type matchups, items, and HP. Toggle <kbd>A</kbd> to pause and read the log.</p>
                 </div>
               </div>
               <div class="htp-tips">
-                <div class="htp-label">Switching</div>
-                <p>You can switch on any turn. The incoming mon eats one hit before acting — switch on a resist.</p>
+                <div class="htp-label">Move roster</div>
+                <p>When a mon learns a new move with a full set, the picker pops up — choose what to forget or stash it in the move pool. The team-panel <b>☰</b> button opens the manager any time.</p>
               </div>
             </div>
 
@@ -511,7 +1241,7 @@ export class StartScreen {
                 </div>
                 <div class="htp-block">
                   <div class="htp-label">Held items</div>
-                  <p>Leftovers, Choice Band, Focus Sash, type plates. Equip via menu — one per mon.</p>
+                  <p>Leftovers, Choice Band, Focus Sash, type plates. Each mon has up to <b>5 slots</b> — slot 1 is free, the rest unlock with coins as you level.</p>
                 </div>
                 <div class="htp-block">
                   <div class="htp-label">Perks</div>
@@ -528,7 +1258,7 @@ export class StartScreen {
             <div class="htp-page" data-page="5" hidden>
               <div class="htp-eyebrow">Chapter 05</div>
               <h3 class="htp-chapter-title">Arenas &amp; <em>Badges</em></h3>
-              <p class="htp-lede">An arena is a four-stage gauntlet. Heal between fights, but coins are tight.</p>
+              <p class="htp-lede">An arena is a four-stage gauntlet. HP carries over — pack potions or grab a Pokémon Center node first.</p>
               <ol class="htp-gauntlet">
                 <li><b>Junior trainer</b> — warm-up</li>
                 <li><b>Restock shop</b> — discounted consumables</li>
@@ -551,7 +1281,7 @@ export class StartScreen {
                   <li>Type diversity beats raw stats — always have an answer</li>
                   <li>Held items stack with perks. Combine deliberately</li>
                   <li>Hoard Revives &amp; Full Restores for bosses</li>
-                  <li>Manual play unlocks Z-moves &amp; mid-fight switches</li>
+                  <li>Pause the auto-battle (<kbd>A</kbd>) to inspect the log between turns</li>
                   <li>Skip early waves for coins · spend before arenas</li>
                   <li>Read the leader's type before walking in — counter-build</li>
                   <li>Lose a mon? Don't panic. The bag is your second team</li>
@@ -588,7 +1318,7 @@ export class StartScreen {
     const closeHowtoplay = this.container.querySelector('#close-howtoplay')!;
     const logoutBtn      = this.container.querySelector('#logout-btn');
 
-    // Trainer chip — click cycles gender
+    // Trainer chip — click cycles gender. Restored from backup.
     const trainerChip = this.container.querySelector<HTMLButtonElement>('#trainer-chip');
     trainerChip?.addEventListener('click', () => {
       this.trainerGender = this.trainerGender === 'male' ? 'female' : 'male';
@@ -669,6 +1399,11 @@ export class StartScreen {
     howtoplayModal.addEventListener('click', e => {
       if (e.target === howtoplayModal) howtoplayModal.classList.add('hidden');
     });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !howtoplayModal.classList.contains('hidden')) {
+        howtoplayModal.classList.add('hidden');
+      }
+    });
     this.wireHtpPager(howtoplayModal as HTMLElement);
 
     // "Take the tour" CTA on the cover page → close modal, start tour
@@ -680,10 +1415,16 @@ export class StartScreen {
     });
 
     const legalBtn = this.container.querySelector('#legal-btn');
+    const legalBtnSettings = this.container.querySelector('#open-legal-btn');
     const legalModal = this.container.querySelector('#legal-modal');
+    const settingsModalForLegal = this.container.querySelector('#settings-modal');
     const closeLegal = this.container.querySelector('#close-legal');
     legalBtn?.addEventListener('click', e => {
       e.preventDefault();
+      legalModal?.classList.remove('hidden');
+    });
+    legalBtnSettings?.addEventListener('click', () => {
+      settingsModalForLegal?.classList.add('hidden');
       legalModal?.classList.remove('hidden');
     });
     closeLegal?.addEventListener('click', () => legalModal?.classList.add('hidden'));
@@ -696,7 +1437,7 @@ export class StartScreen {
       this.onLogout();
     });
 
-    // Settings modal
+    // Settings modal — opened via footer button.
     const settingsBtn = this.container.querySelector('#settings-btn');
     const settingsModal = this.container.querySelector('#settings-modal');
     const closeSettings = this.container.querySelector('#close-settings');
@@ -713,6 +1454,10 @@ export class StartScreen {
       settingsModalEl?.classList.add('hidden');
       howto?.classList.remove('hidden');
     });
+
+    // 3-cell Field Reference strip — wire initial click handlers.
+    // refreshThreeCellStrip rebinds these on each pick (closure-capture safe).
+    this.wireThreeCellStripEvents();
 
     const reduceMotionCb = this.container.querySelector<HTMLInputElement>('#setting-reduce-motion');
     reduceMotionCb?.addEventListener('change', () => {
@@ -754,16 +1499,44 @@ export class StartScreen {
 
       const battlePokemon = toBattlePokemon(pokemon, []);
 
+      // ── Resolve deck mods at run-start ────────────────────────────────
+      const deckMods: NonNullable<GameState['deckMods']> = {};
+      let bonusCoins = 0;
+      const bonusInventory: { itemId: string; qty: number }[] = [];
+      if (this.selectedDeck === 'speedrunner') {
+        bonusCoins = 100;
+        bonusInventory.push({ itemId: 'reroll_token', qty: 1 });
+        deckMods.stagesPerAct = 3;
+      } else if (this.selectedDeck === 'iron_trainer') {
+        deckMods.shopExcludeConsumables = true;
+        deckMods.startWithSlot2 = true;
+        // Apply slot-2 unlock to the chosen starter immediately so the player
+        // sees the benefit on wave 1.
+        if (battlePokemon.itemSlots?.[1]) {
+          battlePokemon.itemSlots[1].unlocked = true;
+        }
+      } else if (this.selectedDeck === 'mono_type') {
+        deckMods.monoType = this.selectedMonoType;
+        deckMods.monoDamageBoost = true;
+      }
+      // Build any starter-bonus inventory entries by looking up the items.
+      const startInventory = bonusInventory
+        .map(({ itemId, qty }) => {
+          const item = ALL_ITEMS.find(i => i.id === itemId);
+          return item ? { item, quantity: qty } : null;
+        })
+        .filter((x): x is NonNullable<typeof x> => x != null);
+
       const initialState: GameState = {
         phase: 'wave_intro',
         playerName: this.playerName,
         trainerGender: this.trainerGender,
         wave: 1,
-        coins: 100,
+        coins: 100 + bonusCoins,
         team: [battlePokemon],
         pc: [],
         pendingCatch: null,
-        inventory: [],
+        inventory: startInventory,
         activePerks: [],
         battleState: null,
         pendingRewards: [],
@@ -798,6 +1571,12 @@ export class StartScreen {
         generation: 'gen1',
         leagueStep: 0,
         pendingGenGate: false,
+        actBossBlind: null,
+        leagueBlinds: [],
+        deck: this.selectedDeck,
+        deckMods,
+        stake: this.selectedStake,
+        stakeMods: getStakeMods(this.selectedStake),
       };
 
       this.onStart(initialState);

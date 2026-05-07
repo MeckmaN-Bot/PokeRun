@@ -2,6 +2,9 @@ import type { LeaderboardEntry } from '../../types';
 import { getTopScores, getLeaderboardStatusMessage } from '../../systems/leaderboard';
 import { fadeIn } from '../animations';
 import { gsap } from 'gsap';
+import { formatAct, formatBadges } from '../../util/runProgress';
+import { getDeckName } from '../../systems/decks';
+import { getStakeName } from '../../systems/stakes';
 
 export class LeaderboardScreen {
   private container: HTMLElement;
@@ -60,6 +63,8 @@ export class LeaderboardScreen {
                 <span>Waves</span>
                 <span>Starter</span>
                 <span>KOs</span>
+                <span>Act</span>
+                <span>Badges</span>
                 <span>Date</span>
               </div>
               <div class="lb-list" id="lb-list">
@@ -115,16 +120,23 @@ export class LeaderboardScreen {
       ? new Date(entry.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
       : '—';
 
+    const deckName = getDeckName(entry.score_details?.deck);
+    const deckPill = deckName ? `<span class="lb-deck-pill">${escapeHtml(deckName)}</span>` : '';
+    const stakeId = entry.score_details?.stake;
+    const stakeName = getStakeName(stakeId);
+    const stakePill = stakeName ? `<span class="lb-stake-pill stake-${stakeId}">${escapeHtml(stakeName.split(' ')[0])}</span>` : '';
     return `
       <div class="lb-row lb-full-row${isMe ? ' me' : ''}">
         <div class="rank">${rank}.</div>
         <div>
-          <div class="n">${escapeHtml(entry.name)}</div>
+          <div class="n">${escapeHtml(entry.name)}${deckPill}${stakePill}</div>
           <div class="sub">Starter · ${escapeHtml(entry.score_details?.starterName ?? '—')}</div>
         </div>
-        <div class="wv">W${entry.score_waves}</div>
+        <div class="wv">W${entry.score_waves ?? 0}</div>
         <div class="lb-cell-starter">${escapeHtml(entry.score_details?.starterName ?? '—')}</div>
         <div class="lb-cell-kos">${entry.score_details?.totalKOs ?? 0}</div>
+        <div class="lb-cell-act">${formatAct(entry.score_details?.actReached, entry.score_details?.endless)}</div>
+        <div class="lb-cell-badges">${formatBadges(entry.score_details?.badgesEarned)}</div>
         <div class="lb-cell-date">${date}</div>
       </div>
     `;
@@ -160,3 +172,4 @@ function escapeHtml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
+

@@ -3,15 +3,16 @@ import { renderTypeBadges } from '../components/TypeBadge';
 import { getRarityClass, getRarityLabel } from '../../systems/rewards';
 import { fadeIn, staggerRevealCards } from '../animations';
 import { toBattlePokemon } from '../../systems/battle';
+import { imgErrorFallback } from '../../data/sprites';
 
 const ITEM_BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const POKEAPI_ITEMS = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/';
 function itemArt(item: Item): string {
   if (item.pokeapiName) {
-    return `<img src="${POKEAPI_ITEMS}${item.pokeapiName}.png" alt="${item.name}" class="item-sprite" draggable="false">`;
+    return `<img src="${POKEAPI_ITEMS}${item.pokeapiName}.png" alt="${item.name}" class="item-sprite" draggable="false" onerror="${imgErrorFallback(item.icon)}">`;
   }
   if (item.sprite) {
-    return `<img src="${ITEM_BASE}${item.sprite}" alt="${item.name}" class="item-sprite" draggable="false">`;
+    return `<img src="${ITEM_BASE}${item.sprite}" alt="${item.name}" class="item-sprite" draggable="false" onerror="${imgErrorFallback(item.icon)}">`;
   }
   return `<div class="glyph">${item.icon}</div>`;
 }
@@ -41,15 +42,26 @@ export class RewardScreen {
 
   private renderHTML(): string {
     const isBoss = this.state.battleState?.isBossWave ?? false;
+    const arena = this.state.arenaState;
     const skipAmount = isBoss ? 200 : 60;
     const skipLabel = isBoss
       ? `Skip for a <strong>${skipAmount}¢</strong> boss bounty · Stash it for the Shop.`
       : `Skip to continue with +${skipAmount}¢ in your pocket.`;
+    let badgeText: string;
+    if (arena) {
+      const total = arena.steps.length;
+      const cur = Math.min(arena.index, total);
+      badgeText = `Arena · Round ${cur}/${total} · Cleared`;
+    } else if (isBoss) {
+      badgeText = 'Boss Wave · Cleared';
+    } else {
+      badgeText = `Wave ${this.state.wave} · Cleared`;
+    }
     return `
       <div class="reward-screen screen">
         <div class="reward-header">
-          <div class="reward-wave-badge ${isBoss ? 'boss' : ''}">
-            ${isBoss ? 'Boss Wave · Cleared' : `Wave ${this.state.wave} · Cleared`}
+          <div class="reward-wave-badge ${isBoss ? 'boss' : ''}${arena ? ' arena' : ''}">
+            ${badgeText}
           </div>
           <h2 class="reward-title">Pick a <em>prize</em></h2>
           <p class="reward-subtitle">Three cards dealt · Choose one · Skip for +${skipAmount}¢</p>
@@ -90,7 +102,7 @@ export class RewardScreen {
     if (reward.type === 'pokemon') {
       const p = reward.pokemon as Pokemon;
       tag = 'NEW CREATURE';
-      artHtml = `<img src="${p.sprite}" alt="${p.displayName}" />`;
+      artHtml = `<img src="${p.sprite}" alt="${p.displayName}" onerror="${imgErrorFallback('◆')}" />`;
       nameHtml = p.displayName;
       typesHtml = renderTypeBadges(p.types);
       descHtml = `Lv.${p.level} · BST ${p.bst} · ${p.isFullyEvolved ? '★ Fully Evolved' : '◇ Can Evolve'}`;

@@ -6,6 +6,8 @@ import './styles/catch.css';
 import './styles/leaderboard.css';
 import './styles/auth.css';
 import './styles/evolution.css';
+import './styles/moveLearn.css';
+import './styles/moveManager.css';
 import './styles/audio.css';
 import './styles/path.css';
 import './styles/mobile.css';
@@ -18,10 +20,28 @@ import { registerAudioAssets } from './audio/registry';
 import type { GameState, BattlePokemon } from './types';
 import { prefetchStarters, fetchPokemon, fetchPokemonBatch } from './api/pokeapi';
 import { getWaveConfig, getEnemyLevel, selectEnemyIds, getWaveCoins } from './systems/scaling';
+import type { Generation } from './types';
+import { GENERATIONS, getGenById, getNextGen, unlockNextGen } from './data/generations';
+
+/** Validate state.generation against the registry — only 'live' gens are
+ *  accepted at runtime; 'endless' is a special non-region mode. Built once
+ *  at module load; future 'gen3' → 'live' promotion needs no edits here. */
+const VALID_GEN_IDS: Set<string> = new Set([
+  ...GENERATIONS.filter(g => g.status === 'live').map(g => g.id),
+  'endless',
+]);
+
+/** Resolve gameState.generation to a known Generation value — old saves
+ *  may have undefined; corrupt saves could carry a non-union string;
+ *  saves that picked a not-yet-live gen fall back to gen1. */
+function resolveGen(state: { generation?: string } | null | undefined): Generation {
+  const g = state?.generation;
+  return (g && VALID_GEN_IDS.has(g)) ? (g as Generation) : 'gen1';
+}
 import { generateRewards } from './systems/rewards';
 import { generateShop, generateShopPacks, generateShopVouchers } from './systems/shop';
 import { toBattlePokemon, monHasItem, getSlotItems } from './systems/battle';
-import { pickRandomBossBlind } from './data/bossBlinds';
+import { pickRandomBossBlind, pickDistinctBossBlinds } from './data/bossBlinds';
 import { pickRandomTag, getTagById } from './data/tags';
 import { ALL_ITEMS } from './data/items';
 
@@ -46,10 +66,15 @@ import { MysteryEventScreen } from './ui/screens/MysteryEventScreen';
 import { generateNodeOptions } from './data/nodes';
 import { getTrainerArchetype } from './data/trainerArchetypes';
 import { poolForTypes } from './data/typePools';
-import { getGymLeader, GYM_LEADERS } from './data/gymLeaders';
+import { getGymLeader, getGymForAct, GYM_LEADERS } from './data/gymLeaders';
 import { trainerSpriteUrl } from './data/trainerArchetypes';
 import { buildArena } from './data/arenas';
 import { saveRun, loadRun, clearRun } from './systems/saveRun';
+import { markBlindDiscovered } from './systems/discoveries';
+import { tryUnlock as tryUnlockAchievement } from './systems/achievements';
+import { bumpChampionClears } from './systems/championClears';
+import { unlockNextStake } from './systems/stakes';
+import { showChampionVictoryScreen } from './ui/screens/ChampionVictoryScreen';
 import { applySettings } from './systems/userSettings';
 import { getEliteStep } from './data/eliteFour';
 import { getBadge } from './data/badges';
@@ -281,12 +306,26 @@ async function startNewWave(): Promise<void> {
   const node = gameState.currentNode;
   const isStoryBoss = node?.kind === 'gym' || node?.kind === 'elite_four' || node?.kind === 'champion';
   const isBossWave = isStoryBoss || wave === gameState.nextBossWave;
-  const config = getWaveConfig(wave, isBossWave);
+  const config = getWaveConfig(wave, isBossWave, resolveGen(gameState));
 
   clearScreen();
 
-  // Pre-roll boss blind so we can preview it in the warning + reuse it later
-  const preRolledBlind = config.isBossWave ? pickRandomBossBlind().id : null;
+  // Pre-roll boss blind so we can preview it in the warning + reuse it later.
+  // Gym/E4/Champion consume the previewed blind so the player saw it on the path;
+  // mid-act surprise boss waves still roll fresh at battle entry.
+  // Arena gauntlet sub-steps (Junior/Senior trainer + Restock shop) are NOT story bosses
+  // — only the final 'Leader' sub-step (kind === 'gym') uses actBossBlind.
+  let preRolledBlind: import('./data/bossBlinds').BossBlindId | null = null;
+  if (config.isBossWave) {
+    if (node?.kind === 'gym') {
+      preRolledBlind = gameState.actBossBlind ?? pickRandomBossBlind().id;
+    } else if (node?.kind === 'elite_four' || node?.kind === 'champion') {
+      const idx = gameState.leagueStep ?? 0;
+      preRolledBlind = gameState.leagueBlinds?.[idx] ?? pickRandomBossBlind().id;
+    } else {
+      preRolledBlind = pickRandomBossBlind().id;
+    }
+  }
 
   // Pre-roll wave tag — consume queued first, else low-chance roll on non-boss waves
   let preRolledTag: import('./data/tags').WaveTagId | null = null;
@@ -358,9 +397,16 @@ async function startNewWave(): Promise<void> {
     introSub = trainerArchetypeForIntro.flavour;
     extraClass = ' trainer';
   } else {
-    introEyebrow = config.isBossWave ? 'Boss encounter' : 'Incoming wave';
+    const isEndless = resolveGen(gameState) === 'endless';
+    introEyebrow = config.isBossWave
+      ? 'Boss encounter'
+      : isEndless
+        ? `Endless${wave > 30 ? ' · Deep run' : ''}`
+        : 'Incoming wave';
     introMain = `<div class="wn">WAVE <em>${String(wave).padStart(2, '0')}</em></div>`;
-    introSub = config.isBossWave ? 'A monstrous challenger blocks the route.' : 'Wild creatures ahead.';
+    introSub = config.isBossWave
+      ? 'A monstrous challenger blocks the route.'
+      : isEndless ? 'No retreat. The waves keep coming.' : 'Wild creatures ahead.';
   }
 
   // Arena progress banner — only when inside a gauntlet.
@@ -385,13 +431,15 @@ async function startNewWave(): Promise<void> {
   // the player always knows how many stops until the next gym.
   const waveAct = gameState.currentAct;
   const waveStep = gameState.actStep;
-  const stageLeaderForIntro = !arena && waveAct >= 1 && waveAct <= 8 ? GYM_LEADERS[waveAct - 1] : undefined;
+  const stageLeaderForIntro = !arena && resolveGen(gameState) !== 'endless' && waveAct >= 1 && waveAct <= 8
+    ? GYM_LEADERS[waveAct - 1] : undefined;
   const stageProgressIntroHtml = stageLeaderForIntro
     ? (() => {
         const accent = stageLeaderForIntro.accent;
-        const stopsLeft = Math.max(0, 4 - waveStep);
-        const pips = [0, 1, 2, 3].map(i => {
-          const isGym = i === 3;
+        const stagesPerAct = gameState.deckMods?.stagesPerAct ?? 4;
+        const stopsLeft = Math.max(0, stagesPerAct - waveStep);
+        const pips = Array.from({ length: stagesPerAct }, (_, i) => i).map(i => {
+          const isGym = i === stagesPerAct - 1;
           const isDone = i < waveStep;
           const isCurrent = i === waveStep;
           const cls = ['stage-pip', isGym ? 'gym' : '', isDone ? 'done' : '', isCurrent ? 'current' : '']
@@ -444,7 +492,7 @@ async function startNewWave(): Promise<void> {
     showCoachmark('first_arena', {
       eyebrow: 'Field manual · Arena',
       title: 'You\'re at a gym leader',
-      body: 'Arenas are <b>multi-step gauntlets</b>: junior trainer → restock shop → senior trainer → leader. Your team heals between fights but coins are tight. Spend wisely on items that counter the gym\'s type.',
+      body: 'Arenas are <b>multi-step gauntlets</b>: junior trainer → restock shop → senior trainer → leader. HP carries over between fights, so spend coins on healing items or counter the gym\'s type.',
       cta: 'Got it →',
     });
   }
@@ -493,7 +541,9 @@ async function startNewWave(): Promise<void> {
       enemyIds = [...fillers, gymLeader.acePokemonId];
       levelDelta = gymLeader.levelDelta;
     } else if (trainerArchetype) {
-      const biased = poolForTypes(trainerArchetype.typeBias);
+      const allowed = new Set(config.enemyPool);
+      const biasedRaw = poolForTypes(node?.rosterTypeBias ?? trainerArchetype.typeBias);
+      const biased = biasedRaw.filter(id => allowed.has(id));
       teamSize = node?.teamSizeOverride ?? trainerArchetype.teamSize ?? config.enemyCount;
       enemyIds = biased.length > 0
         ? Array.from({ length: teamSize }, () => biased[Math.floor(Math.random() * biased.length)])
@@ -504,8 +554,13 @@ async function startNewWave(): Promise<void> {
         levelDelta = Math.min(levelDelta, 0);
       }
     } else if (node?.kind === 'grass' && node.habitatBias) {
-      // Habitat-biased grass: bias type pool by node hint.
-      const biased = poolForTypes([node.habitatBias]);
+      // Habitat-biased grass: bias type pool by node hint, but never break
+      // out of the wave's allowed dex range — keeps fossils/legendaries
+      // (Aerodactyl, Articuno, etc.) out of early waves where they'd be
+      // pure type-traps with no counter-play.
+      const allowed = new Set(config.enemyPool);
+      const biasedRaw = poolForTypes([node.habitatBias]);
+      const biased = biasedRaw.filter(id => allowed.has(id));
       enemyIds = biased.length > 0
         ? Array.from({ length: config.enemyCount }, () => biased[Math.floor(Math.random() * biased.length)])
         : selectEnemyIds(config);
@@ -522,8 +577,16 @@ async function startNewWave(): Promise<void> {
       fetched = done;
     });
 
-    // Scale each enemy to its specific level + apply threat multiplier for late-game
-    const threatMult = config.threatMultiplier ?? 1;
+    // Scale each enemy to its specific level + apply threat multiplier for late-game.
+    // Early-arena easing: the act-1/2 gym leader is a hard wall otherwise — first
+    // arena leader fight lands on a boss-flagged wave 6, compounding wave threat
+    // ramp × boss bonus × leader levelDelta into a one-shot wipe.
+    let threatMult = config.threatMultiplier ?? 1;
+    if (gymLeader && (gameState.currentAct ?? 1) <= 2) {
+      threatMult = Math.min(threatMult, 1.0);
+    } else if (gymLeader && (gameState.currentAct ?? 1) <= 4) {
+      threatMult = Math.min(threatMult, 1.0 + (threatMult - 1.0) * 0.6);
+    }
     // Elite pool: only meaningful held items (skip healing berries — not very threatening)
     const ELITE_ITEM_POOL = ALL_ITEMS.filter(i =>
       i.itemType === 'held' && (i.rarity === 'rare' || i.rarity === 'epic') &&
@@ -619,10 +682,28 @@ async function startNewWave(): Promise<void> {
         e.battleHp = e.maxBattleHp;
       });
     }
+    // Stake — boss-blind HP multiplier (Red+Black). Applies in addition to
+    // The Wall (so a Red-Stake Wall = 1.5 × 2 = 3× HP). Stake mods only fire
+    // on actual boss waves where a blind is in play.
+    const blindHpMult = gameState.stakeMods?.bossBlindHpMult;
+    if (blindHpMult && blindHpMult !== 1 && bossBlind && config.isBossWave) {
+      enemyTeam.forEach(e => {
+        e.maxBattleHp = Math.floor(e.maxBattleHp * blindHpMult);
+        e.battleHp = e.maxBattleHp;
+      });
+    }
 
     // Reset boss-insurance flag at start of each boss wave
     if (config.isBossWave) {
       (gameState as { _bossInsuranceUsed?: boolean })._bossInsuranceUsed = false;
+    }
+
+    // Mark this battle's blind as discovered (only fires when a blind is in play,
+    // i.e. boss waves — gym/E4/champion + mid-act surprise. Reroll-via-Blind-Lens
+    // does NOT count the abandoned blind because the lens path replaces actBossBlind
+    // before any battle is entered).
+    if (preRolledBlind) {
+      markBlindDiscovered(gameState.playerName, [preRolledBlind]);
     }
 
     // Setup battle state
@@ -678,11 +759,18 @@ function showBattleScreen(): void {
     const bs = state.battleState;
 
     if (bs?.winner === 'player') {
+      // First Step — fires once per username, idempotent.
+      tryUnlockAchievement(state.playerName, 'first_step');
+      // Hall of Records fires whenever wavesCleared >= 30 (BattleScreen has just
+      // updated runStats.wavesCleared with this win's wave number).
+      if ((state.runStats.wavesCleared ?? 0) >= 30) {
+        tryUnlockAchievement(state.playerName, 'hall_of_records');
+      }
       // Victory — award coins
       const isBossVictory = bs.isBossWave;
       void Audio.playMusic('music.victory', { fadeMs: 200, loop: false, volume: 0.95 });
-      const config = getWaveConfig(state.wave, isBossVictory);
-      const coinEarned = getWaveCoins(state.wave, isBossVictory, state.activePerks);
+      const config = getWaveConfig(state.wave, isBossVictory, resolveGen(state));
+      const coinEarned = getWaveCoins(state.wave, isBossVictory, state.activePerks, resolveGen(state));
 
       // After a boss wave, schedule the next boss wave randomly 4–7 waves away
       if (isBossVictory) {
@@ -731,8 +819,9 @@ function showBattleScreen(): void {
         eliteStepWin?.coinMultiplier ??
         gymLeaderWin?.coinMultiplier ??
         trainerArchetypeWin?.coinMultiplier ?? 1;
+      const stakeCoinMult = state.stakeMods?.coinRewardMult ?? 1;
       const totalCoins = Math.floor(
-        coinEarned * (1 + amuletBonus + eliteBonus) * coinMultiplier * trainerCoinMult
+        coinEarned * (1 + amuletBonus + eliteBonus) * coinMultiplier * trainerCoinMult * stakeCoinMult
       ) + tagBonus + investmentPayout;
 
       // Gym victory → award badge + matching perk if not yet held.
@@ -745,21 +834,49 @@ function showBattleScreen(): void {
           }
           showBadgeAward(badge, gymLeaderWin.name);
         }
+        if (gymLeaderWin.id === 'brock') {
+          tryUnlockAchievement(state.playerName, 'boulder_master');
+        }
+        // Mono Master — at least 2 alive teammates sharing primary type at victory.
+        // 1-mon survivors are trivially mono and would cheapen the unlock.
+        const aliveMons = state.team.filter(m => m.battleHp > 0);
+        if (aliveMons.length >= 2 && aliveMons.every(m => m.types[0] === aliveMons[0].types[0])) {
+          tryUnlockAchievement(state.playerName, 'mono_master');
+        }
       }
       // Leader fight ends the arena gauntlet — clear it so normal flow resumes.
+      // Also clear the previewed blind and advance the act counter (deferred
+      // from the path-click handler so buildArena saw the correct act).
       if (gymLeaderWin) {
         state.arenaState = null;
+        state.actBossBlind = null;
+        state.actStep = 0;
+        state.currentAct += 1;
+        // Survivor — reaching act 5 means Erika just got cleared.
+        if (state.currentAct >= 5) {
+          tryUnlockAchievement(state.playerName, 'survivor');
+        }
       }
       // Elite Four / Champion → advance league progression.
       if (eliteStepWin) {
         state.leagueStep = (state.leagueStep ?? 0) + 1;
         if (eliteStepWin.isChampion) {
           state.pendingGenGate = true;
+          tryUnlockAchievement(state.playerName, 'champion');
+          state.pendingChampionClears = bumpChampionClears(state.playerName);
+          state.pendingChampionVictoryScreen = true;
+          unlockNextStake(state.playerName, state.stake);
+          // Cascade-unlock the next live gen (e.g. clearing Champion in Kanto
+          // unlocks Johto). Coming-Soon gens are skipped — not playable yet.
+          unlockNextGen(state.playerName, resolveGen(state));
         }
       }
 
       const oldCoins = state.coins;
       state.coins += totalCoins;
+      if (state.coins >= 500) {
+        tryUnlockAchievement(state.playerName, 'rich_trainer');
+      }
 
       // Investment resets on boss clear
       if (isBossVictory && state.investmentCoins) {
@@ -809,8 +926,13 @@ function showRewardScreen(): void {
   });
   screenContainer.appendChild(div);
 
+  // Save the post-battle state so a refresh inside the reward step doesn't
+  // rewind you back across the battle you already won.
+  saveRun(gameState);
+
   rewardScreen = new RewardScreen(div, gameState, (state) => {
     gameState = state;
+    saveRun(gameState);
     if (state.pendingCatch) {
       showCatchScreen();
     } else if (state.arenaState) {
@@ -845,10 +967,18 @@ function showCatchScreen(): void {
     cta: 'Got it →',
   });
 
+  saveRun(gameState);
+
   catchScreen = new CatchScreen(div, gameState, gameState.pendingCatch, (state) => {
     gameState = state;
+    saveRun(gameState);
     Audio.duckMusic(1, 400);
-    showShopScreen();
+    if (state.arenaState) {
+      // Inside an arena gauntlet — skip the standard post-wave shop and march on.
+      showPathSelect();
+    } else {
+      showShopScreen();
+    }
   });
   catchScreen.mount();
 }
@@ -868,8 +998,9 @@ function showShopScreen(): void {
     const teamHpRatio = totalHp / totalMaxHp;
     const healingPity = (gameState.shopsWithoutHealing ?? 0) >= 3;
     const epicPity = (gameState.shopsWithoutEpic ?? 0) >= 3;
+    const excludeConsumables = !!gameState.deckMods?.shopExcludeConsumables;
     gameState.shopItems = generateShop(gameState.wave, [], ownedVouchers, {
-      teamHpRatio, healingPity, epicPity,
+      teamHpRatio, healingPity, epicPity, excludeConsumables,
     });
     // Update pity counters based on what showed up
     const HEALING_IDS = ['potion', 'super_potion', 'hyper_potion', 'full_restore', 'pokemon_food', 'max_potion'];
@@ -880,13 +1011,24 @@ function showShopScreen(): void {
   }
   if (!gameState.shopPacks || gameState.shopPacks.length === 0) {
     const freeMega = !!gameState.pendingCharmPack;
-    gameState.shopPacks = generateShopPacks(gameState.wave, freeMega, ownedVouchers);
+    gameState.shopPacks = generateShopPacks(gameState.wave, freeMega, ownedVouchers, {
+      excludeConsumables: !!gameState.deckMods?.shopExcludeConsumables,
+    });
     gameState.pendingCharmPack = false;
   }
   if (!gameState.shopVouchers || gameState.shopVouchers.length === 0) {
     const guaranteed = !!gameState.pendingVoucherSlot;
     gameState.shopVouchers = generateShopVouchers(gameState.wave, ownedVouchers, guaranteed);
     gameState.pendingVoucherSlot = false;
+  }
+
+  // Stake — Black bumps shop prices +50%. Apply post-generation across items,
+  // packs (skip free ones from Charm tag), and vouchers.
+  const priceMult = gameState.stakeMods?.shopPriceMult ?? 1;
+  if (priceMult !== 1) {
+    for (const si of gameState.shopItems) si.price = Math.floor(si.price * priceMult);
+    for (const sp of gameState.shopPacks) if (!sp.free) sp.price = Math.floor(sp.price * priceMult);
+    for (const sv of gameState.shopVouchers) sv.price = Math.floor(sv.price * priceMult);
   }
   gameState.freeRerollUsed = false;
   // Master Ball Luck perk: +1 free reroll per shop
@@ -906,6 +1048,10 @@ function showShopScreen(): void {
     cta: 'Got it →',
   });
 
+  // Save the freshly-rolled shop so refresh inside the shop returns the same
+  // inventory + post-battle team, not the stale state from the prior path.
+  saveRun(gameState);
+
   shopScreen = new ShopScreen(div, gameState, (state) => {
     gameState = state;
 
@@ -918,7 +1064,9 @@ function showShopScreen(): void {
     gameState.freeRerollsLeft = 0;
     gameState.battleState = null;
 
-    // Restore team HP between waves (Nurse's Blessing perk = full heal)
+    // HP persists across waves. Only Nurse's Blessing perk auto-heals;
+    // everyone else must rely on items, Pokémon Center nodes, or surviving
+    // injured. Damage carrying forward is core roguelike attrition tension.
     const hasNurse = gameState.activePerks.some(p => p.id === 'nurses_blessing');
     gameState.team.forEach(mon => {
       // Momentum Badge: gain 1 stack per wave won (max 10)
@@ -929,13 +1077,8 @@ function showShopScreen(): void {
       mon.resetPulseUsedThisWave = false;
       mon.turnsInBattle = 0;
 
-      if (mon.battleHp > 0) {
-        if (hasNurse) {
-          mon.battleHp = mon.maxBattleHp; // full heal
-        } else {
-          const heal = Math.floor(mon.maxBattleHp * 0.6);
-          mon.battleHp = Math.min(mon.maxBattleHp, mon.battleHp + heal);
-        }
+      if (mon.battleHp > 0 && hasNurse) {
+        mon.battleHp = mon.maxBattleHp;
       }
     });
 
@@ -948,10 +1091,103 @@ function showShopScreen(): void {
 // Path Select Screen — choose one of 3 nodes before each wave
 // ============================================================
 
+/**
+ * Re-roll the upcoming gym arena's previewed Boss Blind by consuming a
+ * Blind Lens from the player's inventory. The new blind is guaranteed
+ * different from the current one (via excludeIds). League blinds are
+ * intentionally NOT rerollable here.
+ */
+function showRerollBlindModal(): void {
+  if (!gameState) return;
+  const oldBlindId = gameState.actBossBlind;
+  if (!oldBlindId) return;
+  const lensInv = gameState.inventory.find(inv => inv.item.id === 'blind_lens');
+  if (!lensInv || lensInv.quantity <= 0) return;
+  const oldBlind = getBossBlindById(oldBlindId);
+  if (!oldBlind) return;
+  const gymLeader = getGymForAct(gameState.currentAct);
+  const gymName = gymLeader?.name ?? 'the gym arena';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'path-overlay';
+  overlay.innerHTML = `
+    <div class="path-modal-card" style="--blind-color:${oldBlind.color}">
+      <div class="path-eyebrow">— Use Blind Lens —</div>
+      <h2 class="path-title">Re-roll <em>${gymName}'s</em> Field Effect</h2>
+      <div class="po-blind-modal-current">
+        <span class="po-blind-modal-label">Current:</span>
+        <span class="po-blind-modal-name" style="color:${oldBlind.color}">
+          ${oldBlind.icon} ${oldBlind.name}
+        </span>
+      </div>
+      <p class="path-sub">Cost: 1× Blind Lens. The new blind will differ from the current one.</p>
+      <div class="path-modal-actions">
+        <button class="ink-btn ghost" data-cancel type="button">Cancel</button>
+        <button class="ink-btn primary" data-confirm type="button">Re-roll →</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector<HTMLButtonElement>('[data-cancel]')?.addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.querySelector<HTMLButtonElement>('[data-confirm]')?.addEventListener('click', () => {
+    if (!gameState) { close(); return; }
+    const inv = gameState.inventory.find(i => i.item.id === 'blind_lens');
+    if (!inv || inv.quantity <= 0) { close(); return; }
+    inv.quantity -= 1;
+    if (inv.quantity <= 0) {
+      gameState.inventory = gameState.inventory.filter(i => i !== inv);
+    }
+    const next = pickRandomBossBlind([oldBlindId]);
+    gameState.actBossBlind = next.id;
+    Audio.play('ui.coin');
+    showToast(`Field Effect re-rolled: ${next.name}`, 'success');
+    saveRun(gameState);
+    close();
+    showPathSelect(); // re-render so the chip refreshes + the pill count updates
+    // Pulse the freshly re-rendered chip via the existing .shimmer keyframe.
+    const chip = document.querySelector<HTMLElement>('.stage-progress .po-blind-chip');
+    if (chip) {
+      chip.classList.add('shimmer');
+      window.setTimeout(() => chip.classList.remove('shimmer'), 800);
+    }
+  });
+}
+
+/**
+ * Ensure boss-blind previews are populated for the current path screen.
+ * - Acts 1..8: roll one blind per act (re-rolled when act increments).
+ * - League: roll all 5 blinds (E4 x4 + Champion) once on league entry.
+ */
+function ensureBlindsRolled(state: GameState): void {
+  const inLeague = (state.badges?.length ?? 0) >= 8 && (state.leagueStep ?? 0) < 5;
+  if (inLeague) {
+    if (!state.leagueBlinds || state.leagueBlinds.length < 5) {
+      state.leagueBlinds = pickDistinctBossBlinds(5);
+    }
+    return;
+  }
+  if (state.currentAct >= 1 && state.currentAct <= 8 && !state.actBossBlind) {
+    state.actBossBlind = pickRandomBossBlind().id;
+  }
+}
+
 function showPathSelect(): void {
   if (!gameState) return;
 
-  // Champion just defeated → show generation gate before any new path.
+  // Champion just defeated → fanfare overlay first, then the gen-gate.
+  if (gameState.pendingChampionVictoryScreen) {
+    const clears = gameState.pendingChampionClears ?? 0;
+    showChampionVictoryScreen(gameState, clears, () => {
+      if (!gameState) return;
+      gameState.pendingChampionVictoryScreen = false;
+      gameState.pendingChampionClears = 0;
+      saveRun(gameState);
+      showPathSelect(); // re-enter — gen-gate fires next.
+    });
+    return;
+  }
   if (gameState.pendingGenGate) {
     showGenerationGate();
     return;
@@ -963,6 +1199,8 @@ function showPathSelect(): void {
     return;
   }
 
+  ensureBlindsRolled(gameState);
+
   // Generate options if not already present (e.g. after a load)
   if (!gameState.nodeOptions || gameState.nodeOptions.length === 0) {
     gameState.nodeOptions = generateNodeOptions(
@@ -970,6 +1208,7 @@ function showPathSelect(): void {
       gameState.actStep,
       gameState.badges?.length ?? 0,
       gameState.leagueStep ?? 0,
+      gameState.deckMods?.stagesPerAct ?? 4,
     );
   }
   gameState.phase = 'path_select';
@@ -987,9 +1226,13 @@ function showPathSelect(): void {
     const consumesStep =
       node.kind === 'grass' || node.kind === 'trainer' || node.kind === 'gym' ||
       node.kind === 'elite_four' || node.kind === 'champion' || node.kind === 'forage';
-    if (consumesStep) {
+    // Gym arena entry defers the act advance to the post-victory handler,
+    // so the gauntlet (incl. buildArena's act parameter and any mid-arena
+    // currentAct readers) sees the act the player is actually fighting in.
+    if (consumesStep && node.kind !== 'gym') {
       gameState.actStep += 1;
-      if (gameState.actStep >= 4) {
+      const stagesPerAct = gameState.deckMods?.stagesPerAct ?? 4;
+      if (gameState.actStep >= stagesPerAct) {
         gameState.actStep = 0;
         gameState.currentAct += 1;
       }
@@ -1018,6 +1261,8 @@ function showPathSelect(): void {
       // grass + trainer + gym + elite_four + champion → combat wave
       startNewWave();
     }
+  }, () => {
+    showRerollBlindModal();
   });
   pathSelectScreen.mount();
 }
@@ -1100,8 +1345,8 @@ function showForageEvent(): void {
   overlay.className = 'path-overlay';
   const slug = pick.pokeapiName;
   const iconHtml = slug
-    ? `<div class="forage-sprite-wrap"><img src="${itemSprite(slug)}" alt="" class="forage-sprite" onerror="${imgErrorFallback(pick.icon ?? '🌿')}" /></div>`
-    : `<div class="path-card-icon px-emoji" aria-hidden="true">${pick.icon ?? '🌿'}</div>`;
+    ? `<div class="forage-sprite-wrap"><img src="${itemSprite(slug)}" alt="" class="forage-sprite" onerror="${imgErrorFallback(pick.icon ?? '◇')}" /></div>`
+    : `<div class="path-card-icon px-emoji" aria-hidden="true">${pick.icon ?? '◇'}</div>`;
   overlay.innerHTML = `
     <div class="path-modal-card forage-modal">
       <div class="path-eyebrow">Forage</div>
@@ -1159,6 +1404,58 @@ function showGenerationGate(): void {
   if (!gameState) return;
   gameState.pendingGenGate = false;
 
+  // Resolve which gen is next from the registry. nextGen may be 'live' (player
+  // can pick it), 'coming_soon' (visible teaser), or undefined (no next gen).
+  const currentGenId = resolveGen(gameState);
+  const nextGen = getNextGen(currentGenId);
+
+  // Sprite picker per region — the registry doesn't carry sprites yet.
+  const cardSpriteId: Record<string, number> = {
+    gen2: 249, // Lugia
+    gen3: 384, // Rayquaza
+    gen4: 483, // Dialga
+    gen5: 644, // Zekrom
+    gen6: 716, // Xerneas
+    gen7: 791, // Solgaleo
+    gen8: 888, // Zacian
+    gen9: 1007, // Koraidon
+  };
+
+  const renderNextCard = () => {
+    if (!nextGen) return '';
+    const accent = nextGen.themeAccent;
+    const sprite = pokemonSprite(cardSpriteId[nextGen.id] ?? 151);
+    if (nextGen.status === 'live') {
+      return `
+        <button class="path-card gen-gate-card has-sprite" data-gen="${nextGen.id}" type="button" style="--card-accent:${accent}">
+          <span class="path-card-corner tl"></span><span class="path-card-corner tr"></span>
+          <span class="path-card-corner bl"></span><span class="path-card-corner br"></span>
+          <div class="path-card-eyebrow">New Generation</div>
+          <div class="path-card-portrait">
+            <img src="${sprite}" alt="" class="path-card-sprite" onerror="${imgErrorFallback('◇')}" />
+          </div>
+          <h3 class="path-card-title">${nextGen.region} · Gen ${nextGen.ordinal}</h3>
+          <p class="path-card-hint">Reset acts, badges fade — Pokémon roster expands to ${nextGen.region}.</p>
+          <div class="path-card-foot"><span class="path-card-tag">Continue</span><span class="path-card-cta">Choose →</span></div>
+        </button>
+      `;
+    }
+    // Coming-soon: visible-but-disabled teaser card.
+    return `
+      <button class="path-card gen-gate-card gen-gate-coming-soon has-sprite" data-coming-soon="${nextGen.id}" type="button" style="--card-accent:${accent}">
+        <span class="path-card-corner tl"></span><span class="path-card-corner tr"></span>
+        <span class="path-card-corner bl"></span><span class="path-card-corner br"></span>
+        <div class="path-card-eyebrow">Coming soon</div>
+        <div class="path-card-portrait">
+          <img src="${sprite}" alt="" class="path-card-sprite" onerror="${imgErrorFallback('◇')}" />
+        </div>
+        <h3 class="path-card-title">${nextGen.region} · Gen ${nextGen.ordinal}</h3>
+        <p class="path-card-hint">${nextGen.flavorText ?? 'In development.'}</p>
+        <div class="path-card-foot"><span class="path-card-tag">Planned</span><span class="path-card-cta">Tap for info</span></div>
+      </button>
+    `;
+  };
+
   const overlay = document.createElement('div');
   overlay.className = 'path-overlay gen-gate-overlay';
   overlay.innerHTML = `
@@ -1167,17 +1464,7 @@ function showGenerationGate(): void {
       <h2 class="gen-gate-title">Where to <em>next</em>?</h2>
       <p class="gen-gate-sub">You stand atop the Indigo Plateau. A new generation calls — or you press deeper into Endless.</p>
       <div class="gen-gate-cards">
-        <button class="path-card gen-gate-card has-sprite" data-gen="gen2" type="button" style="--card-accent:#6c8a3a">
-          <span class="path-card-corner tl"></span><span class="path-card-corner tr"></span>
-          <span class="path-card-corner bl"></span><span class="path-card-corner br"></span>
-          <div class="path-card-eyebrow">New Generation</div>
-          <div class="path-card-portrait">
-            <img src="${pokemonSprite(249)}" alt="" class="path-card-sprite" onerror="${imgErrorFallback('🌳')}" />
-          </div>
-          <h3 class="path-card-title">Johto · Gen 2</h3>
-          <p class="path-card-hint">Reset acts, badges fade — but Pokémon roster expands to Gen 1+2 (IDs 1–251).</p>
-          <div class="path-card-foot"><span class="path-card-tag">Continue</span><span class="path-card-cta">Choose →</span></div>
-        </button>
+        ${renderNextCard()}
         <button class="path-card gen-gate-card has-sprite" data-gen="endless" type="button" style="--card-accent:#7a3f8a">
           <span class="path-card-corner tl"></span><span class="path-card-corner tr"></span>
           <span class="path-card-corner bl"></span><span class="path-card-corner br"></span>
@@ -1196,25 +1483,36 @@ function showGenerationGate(): void {
 
   overlay.querySelectorAll<HTMLButtonElement>('[data-gen]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const gen = btn.dataset['gen'] as 'gen2' | 'endless';
+      const gen = btn.dataset['gen'] ?? 'endless';
       if (!gameState) return;
       Audio.play('ui.confirm');
-      if (gen === 'gen2') {
-        gameState.generation = 'gen2';
-        // Reset run-graph for the second tour but keep team/items/badges visible as legacy
-        gameState.currentAct = 1;
-        gameState.actStep = 0;
-        gameState.leagueStep = 0;
-        // Badges array kept as historical record; passive perks remain in activePerks.
-        showToast('Welcome to Johto.', 'success');
-      } else {
+      const picked = getGenById(gen);
+      if (gen === 'endless') {
         gameState.generation = 'endless';
         gameState.leagueStep = 5; // skip generator's league branch
         showToast('Endless mode engaged.', 'success');
+      } else if (picked && picked.status === 'live') {
+        gameState.generation = picked.id as typeof gameState.generation;
+        gameState.currentAct = 1;
+        gameState.actStep = 0;
+        gameState.leagueStep = 0;
+        gameState.actBossBlind = null;
+        gameState.leagueBlinds = [];
+        gameState.badges = [];
+        showToast(`Welcome to ${picked.region}.`, 'success');
       }
       gameState.nodeOptions = [];
       overlay.remove();
       showPathSelect();
+    });
+  });
+  // Coming-soon click → flavor toast, no state mutation.
+  overlay.querySelectorAll<HTMLButtonElement>('[data-coming-soon]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset['comingSoon'] ?? '';
+      const g = getGenById(id);
+      const msg = g?.flavorText ?? `${g?.region ?? 'That region'} is in development.`;
+      showToast(msg, 'info');
     });
   });
 }
